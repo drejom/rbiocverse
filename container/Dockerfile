@@ -14,9 +14,9 @@ ARG USERNAME=rstudio
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 USER root
-COPY assets/*.sh /tmp/assets/
+COPY assets/*.sh /tmp/
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && /bin/bash /tmp/assets/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
+    && /bin/bash /tmp/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
     && usermod -a -G staff ${USERNAME} \
     && apt-get -y install \
     python3-pip \
