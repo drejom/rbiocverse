@@ -3,7 +3,7 @@
 This repository provides a `Dockerfile` that extends the official [Bioconductor Docker](https://bioconductor.org/help/docker/) image by adding some packages including the HPC job scheduler SLURM. GitHub actions build the image and push it to GitHub Packages.
 
 ## Additionally supported packages
-[Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies that are required to support Bioconductor R libraries. We extend the container further by adding: 
+[Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies required to support Bioconductor R libraries. We extend the container further by adding: 
 
 - System dependencies to support `fnmate` and `datapasta`
 - System dependencies to support `monocle3`
@@ -23,5 +23,5 @@ singularity pull /opt/singularity-images/rbioc/vscode-rbioc.img docker://ghcr.io
 And launch on the HPC:
 
 ```sh
-sbatch /opt/singularity-images/rbioc/rstudio.job
+sbatch /opt/singularity-images/rbioc/rbioc.job
 ```
