@@ -15,7 +15,7 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 Build the container for the HPC:
 
 ```sh
-module load singualrity   
+module load singularity
 singularity pull /opt/singularity-images/rbioc/vscode-rbioc.img docker://ghcr.io/drejom/vscode-rbioc:main
 ```
 
