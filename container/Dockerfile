@@ -27,7 +27,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libxt-dev \
     libfontconfig1-dev \
     libcairo2-dev \
-    libjq-dev \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
     && install2.r --error --skipinstalled --ncpus -1 \
     devtools \
@@ -48,12 +47,14 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # fnmate and datapasta: ripgrep xsel
 # vscode jupyter: libzmq3-dev
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
+# ctrdata: libjq-dev, php, php-xm, php-json
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
     xsel ripgrep \
     libzmq3-dev \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
+    libjq-dev php php-xml php-json \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Instally Python packages
