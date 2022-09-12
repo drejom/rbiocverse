@@ -16,7 +16,7 @@ Build the container for the HPC:
 
 ```sh
 module load singularity
-singularity pull /opt/singularity-images/rbioc/vscode-rbioc.img docker://ghcr.io/drejom/vscode-rbioc:main
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.15.sif docker://ghcr.io/drejom/vscode-rbioc:latest
 ```
 
 And launch on the HPC:
