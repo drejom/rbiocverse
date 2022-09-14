@@ -48,6 +48,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # vscode jupyter: libzmq3-dev
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
 # ctrdata: libjq-dev, php, php-xm, php-json
+# oh-my-bash: fonts-powerline
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
@@ -55,6 +56,7 @@ RUN apt-get update \
     libzmq3-dev \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libjq-dev php php-xml php-json \
+    fonts-powerline \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Instally Python packages
