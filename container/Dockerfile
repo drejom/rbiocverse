@@ -58,7 +58,7 @@ RUN apt-get update \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libjq-dev php php-xml php-json \
     fonts-powerline \
-    bcftools tabix bedtools bedopts vcftools \
+    bcftools tabix bedtools bedops vcftools \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Instally Python packages
