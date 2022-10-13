@@ -49,6 +49,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
 # ctrdata: libjq-dev, php, php-xm, php-json
 # bedr: bedtools bedopts
+# genomics: bcftools vcftools samtools tabix picard-tools    
 # oh-my-bash: fonts-powerline
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
@@ -58,7 +59,8 @@ RUN apt-get update \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libjq-dev php php-xml php-json \
     fonts-powerline \
-    bcftools tabix bedtools bedops vcftools \
+    bedtools bedopts \
+    bcftools vcftools samtools tabix picard-tools \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Instally Python packages
