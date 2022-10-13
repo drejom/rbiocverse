@@ -5,8 +5,8 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 ## Additionally supported packages
 [Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies required to support Bioconductor R libraries. We extend the container further by adding: 
 
-- System dependencies to support `ctrdata`, `monocle3`, `fnmate` and `datapasta`
-- tools for working with interval files like `tabix` and `bedops`
+- System dependencies to support `bedr`, `ctrdata`, `monocle3`, `fnmate` and `datapasta`
+- genomics tools like `bcftools` and `bedops`
 - DNANexus support (DX toolkit, dxfuse)
 - SLURM
 - VSCode LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json)
