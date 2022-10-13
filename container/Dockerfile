@@ -48,7 +48,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # vscode jupyter: libzmq3-dev
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
 # ctrdata: libjq-dev, php, php-xm, php-json
-# bedr: bedtools bedopts
+# bedr: bedtools bedops
 # genomics: bcftools vcftools samtools tabix picard-tools    
 # oh-my-bash: fonts-powerline
 RUN apt-get update \
@@ -59,7 +59,7 @@ RUN apt-get update \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libjq-dev php php-xml php-json \
     fonts-powerline \
-    bedtools bedopts \
+    bedtools bedops \
     bcftools vcftools samtools tabix picard-tools \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
