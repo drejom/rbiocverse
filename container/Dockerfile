@@ -34,6 +34,18 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     httpgd \
     && rm -rf /tmp/downloaded_packages
 
+# Install VSCode
+RUN apt-get -y install gpg \
+    && wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg \
+    && install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg \
+    && sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' \
+    && rm -f packages.microsoft.gpg \
+    && apt-get -y install apt-transport-https \
+    && apt-get update \
+    && apt-get -y install code \
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+
+
 # VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
 # See https://github.com/microsoft/vscode-dev-containers/issues/1032
 RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://github.com/ManuelHentschel/vscDebugger v\* | tail -n 1 | cut --delimiter='/' --fields=3) \
@@ -77,10 +89,16 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 
 # VSCode live share dependencies. 
 # See https://docs.microsoft.com/en-us/visualstudio/liveshare/reference/linux#install-linux-prerequisites
-RUN wget -O ~/vsls-reqs https://aka.ms/vsls-linux-prereq-script \
+RUN apt-get update \
+    && apt-get -y install software-properties-common \
+    && add-apt-repository ppa:nrbrtx/libssl1 \
+    && apt-get update \
+    && wget -O ~/vsls-reqs https://aka.ms/vsls-linux-prereq-script \
     && chmod +x ~/vsls-reqs \
     && ~/vsls-reqs \
-    && rm ~/vsls-reqs 
+    && rm ~/vsls-reqs \
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+
 
 # Install SLURM
 ADD assets/slurm-21.08.7.tar.bz2 /tmp/slurm
