@@ -87,19 +87,6 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
     && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
 
-# VSCode live share dependencies. 
-# See https://docs.microsoft.com/en-us/visualstudio/liveshare/reference/linux#install-linux-prerequisites
-# RUN apt-get update \
-#     && apt-get -y install software-properties-common \
-#     && add-apt-repository ppa:nrbrtx/libssl1 \
-#     && apt-get update \
-#     && wget -O ~/vsls-reqs https://aka.ms/vsls-linux-prereq-script \
-#     && chmod +x ~/vsls-reqs \
-#     && ~/vsls-reqs \
-#     && rm ~/vsls-reqs \
-#     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
-
-
 # Install SLURM
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
@@ -108,28 +95,6 @@ RUN apt-get update \
     && apt-get autoremove -y && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
-#****************************************************
-#ADD assets/slurm-21.08.7.tar.bz2 /tmp/slurm
-
-# RUN apt-get update \
-#     && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends \
-#     libmunge-dev libmunge2 munge libtool m4 automake \
-#     && apt-get autoremove -y && apt-get clean -y \
-#     && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
-#     && update-alternatives --install /usr/bin/python python /usr/bin/python3 1 \
-#     && cd /tmp/slurm/slurm-21.08.7 \
-#     && ./configure --prefix=/usr/local --sysconfdir=/etc/slurm && make -j2 && make install \
-#     && rm -rf /tmp/slurm/slurm-21.08.7 \
-#     && useradd slurm \
-#     && mkdir -p /etc/slurm \
-#     /var/spool/slurm/ctld \
-#     /var/spool/slurm/d \
-#     /var/log/slurm \
-#     && chown slurm /var/spool/slurm/ctld /var/spool/slurm/d /var/log/slurm
-
-# RUN rm -rf /tmp/slurm/slurm*
-#****************************************************
 
 # Init command for s6-overlay
 CMD ["/init"]
