@@ -1,5 +1,5 @@
 # Set ARG defaults
-ARG VARIANT="RELEASE_3_15"
+ARG VARIANT="RELEASE_3_16"
 
 FROM bioconductor/bioconductor_docker:${VARIANT}
 
@@ -33,6 +33,18 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     languageserver \
     httpgd \
     && rm -rf /tmp/downloaded_packages
+
+# Install VSCode
+RUN apt-get -y install gpg \
+    && wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg \
+    && install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg \
+    && sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' \
+    && rm -f packages.microsoft.gpg \
+    && apt-get -y install apt-transport-https \
+    && apt-get update \
+    && apt-get -y install code \
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+
 
 # VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
 # See https://github.com/microsoft/vscode-dev-containers/issues/1032
@@ -77,32 +89,47 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 
 # VSCode live share dependencies. 
 # See https://docs.microsoft.com/en-us/visualstudio/liveshare/reference/linux#install-linux-prerequisites
-RUN wget -O ~/vsls-reqs https://aka.ms/vsls-linux-prereq-script \
-    && chmod +x ~/vsls-reqs \
-    && ~/vsls-reqs \
-    && rm ~/vsls-reqs 
+# RUN apt-get update \
+#     && apt-get -y install software-properties-common \
+#     && add-apt-repository ppa:nrbrtx/libssl1 \
+#     && apt-get update \
+#     && wget -O ~/vsls-reqs https://aka.ms/vsls-linux-prereq-script \
+#     && chmod +x ~/vsls-reqs \
+#     && ~/vsls-reqs \
+#     && rm ~/vsls-reqs \
+#     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+
 
 # Install SLURM
-ADD assets/slurm-21.08.7.tar.bz2 /tmp/slurm
-
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
-    libmunge-dev libmunge2 munge libtool m4 automake \
+    slurm-wlm libmunge-dev libmunge2 munge \
     && apt-get autoremove -y && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
-    && update-alternatives --install /usr/bin/python python /usr/bin/python3 1 \
-    && cd /tmp/slurm/slurm-21.08.7 \
-    && ./configure --prefix=/usr/local --sysconfdir=/etc/slurm && make -j2 && make install \
-    && rm -rf /tmp/slurm/slurm-21.08.7 \
-    && useradd slurm \
-    && mkdir -p /etc/slurm \
-    /var/spool/slurm/ctld \
-    /var/spool/slurm/d \
-    /var/log/slurm \
-    && chown slurm /var/spool/slurm/ctld /var/spool/slurm/d /var/log/slurm
+    && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
-RUN rm -rf /tmp/slurm/slurm*
+#****************************************************
+#ADD assets/slurm-21.08.7.tar.bz2 /tmp/slurm
+
+# RUN apt-get update \
+#     && export DEBIAN_FRONTEND=noninteractive \
+#     && apt-get -y install --no-install-recommends \
+#     libmunge-dev libmunge2 munge libtool m4 automake \
+#     && apt-get autoremove -y && apt-get clean -y \
+#     && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
+#     && update-alternatives --install /usr/bin/python python /usr/bin/python3 1 \
+#     && cd /tmp/slurm/slurm-21.08.7 \
+#     && ./configure --prefix=/usr/local --sysconfdir=/etc/slurm && make -j2 && make install \
+#     && rm -rf /tmp/slurm/slurm-21.08.7 \
+#     && useradd slurm \
+#     && mkdir -p /etc/slurm \
+#     /var/spool/slurm/ctld \
+#     /var/spool/slurm/d \
+#     /var/log/slurm \
+#     && chown slurm /var/spool/slurm/ctld /var/spool/slurm/d /var/log/slurm
+
+# RUN rm -rf /tmp/slurm/slurm*
+#****************************************************
 
 # Init command for s6-overlay
 CMD ["/init"]
