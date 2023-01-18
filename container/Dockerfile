@@ -100,45 +100,45 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
 # https://groups.google.com/a/lbl.gov/g/singularity/c/syLcsIWWzdo/m/NZvF2Ud2AAAJ
 RUN echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sacct "$@"' >> /usr/local/bin/sacct && \
+ssh $USER@$HOSTNAME sacct $1' >> /usr/local/bin/sacct && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sacctmgr "$@"' >> /usr/local/bin/sacctmgr && \
+ssh $USER@$HOSTNAME sacctmgr $1' >> /usr/local/bin/sacctmgr && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME salloc "$@"' >> /usr/local/bin/salloc && \
+ssh $USER@$HOSTNAME salloc $1' >> /usr/local/bin/salloc && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sattach "$@"' >> /usr/local/bin/sattach && \
+ssh $USER@$HOSTNAME sattach $1' >> /usr/local/bin/sattach && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sbatch "$@"' >> /usr/local/bin/sbatch && \
+ssh $USER@$HOSTNAME sbatch $1' >> /usr/local/bin/sbatch && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sbcast "$@"' >> /usr/local/bin/sbcast && \
+ssh $USER@$HOSTNAME sbcast $1' >> /usr/local/bin/sbcast && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME scancel "$@"' >> /usr/local/bin/scancel && \
+ssh $USER@$HOSTNAME scancel $1' >> /usr/local/bin/scancel && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME scontrol "$@"' >> /usr/local/bin/scontrol && \
+ssh $USER@$HOSTNAME scontrol $1' >> /usr/local/bin/scontrol && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sdiag "$@"' >> /usr/local/bin/sdiag && \
+ssh $USER@$HOSTNAME sdiag $1' >> /usr/local/bin/sdiag && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sgather "$@"' >> /usr/local/bin/sgather && \
+ssh $USER@$HOSTNAME sgather $1' >> /usr/local/bin/sgather && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sinfo "$@"' >> /usr/local/bin/sinfo && \
+ssh $USER@$HOSTNAME sinfo $1' >> /usr/local/bin/sinfo && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME smap "$@"' >> /usr/local/bin/smap && \
+ssh $USER@$HOSTNAME smap $1' >> /usr/local/bin/smap && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sprio "$@"' >> /usr/local/bin/sprio && \
+ssh $USER@$HOSTNAME sprio $1' >> /usr/local/bin/sprio && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME squeue "$@"' >> /usr/local/bin/squeue && \
+ssh $USER@$HOSTNAME squeue $1' >> /usr/local/bin/squeue && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sreport "$@"' >> /usr/local/bin/sreport && \
+ssh $USER@$HOSTNAME sreport $1' >> /usr/local/bin/sreport && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME srun "$@"' >> /usr/local/bin/srun && \
+ssh $USER@$HOSTNAME srun $1' >> /usr/local/bin/srun && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sshare "$@"' >> /usr/local/bin/sshare && \
+ssh $USER@$HOSTNAME sshare $1' >> /usr/local/bin/sshare && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sstat "$@"' >> /usr/local/bin/sstat && \
+ssh $USER@$HOSTNAME sstat $1' >> /usr/local/bin/sstat && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME strigger "$@"' >> /usr/local/bin/strigger && \
+ssh $USER@$HOSTNAME strigger $1' >> /usr/local/bin/strigger && \
     echo '#!/bin/bash \n\
-ssh $USER@$HOSTNAME sview "$@"' >> /usr/local/bin/sview && \
+ssh $USER@$HOSTNAME sview $1' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
         chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview    
 
