@@ -1,5 +1,5 @@
 # Set ARG defaults
-ARG VARIANT="RELEASE_3_16"
+ARG VARIANT="RELEASE_3_17"
 
 FROM bioconductor/bioconductor_docker:${VARIANT}
 
@@ -10,6 +10,7 @@ ARG INSTALL_ZSH="true"
 ARG UPGRADE_PACKAGES="false"
 
 # Install needed packages and setup non-root user. Use a separate RUN statement to add your own dependencies.
+ARG CONDA_DIR=/opt/conda
 ARG USERNAME=rstudio
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -33,7 +34,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     devtools \
     languageserver \
     httpgd \
-    && rm -rf /tmp/downloaded_packages
+    && rm -rf /tmp/downloaded_packages \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install VSCode
 RUN apt-get -y install gpg \
@@ -45,7 +47,6 @@ RUN apt-get -y install gpg \
     && apt-get update \
     && apt-get -y install code \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
-
 
 # VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
 # See https://github.com/microsoft/vscode-dev-containers/issues/1032
@@ -59,6 +60,8 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 ### Install additional OS packages 
 # fnmate and datapasta: ripgrep xsel
 # vscode jupyter: libzmq3-dev
+# jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
+# jupyter-scikit-learn: build-essential cm-super dvipng ffmpeg
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
 # ctrdata: libjq-dev, php, php-xm, php-json
 # bedr: bedtools bedops
@@ -68,7 +71,8 @@ RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
     xsel ripgrep \
-    libzmq3-dev \
+    run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
+    libzmq3-dev build-essential cm-super dvipng ffmpeg \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libjq-dev php php-xml php-json \
     fonts-powerline \
@@ -76,10 +80,10 @@ RUN apt-get update \
     bcftools vcftools samtools tabix picard-tools libvcflib-tools libvcflib-dev freebayes \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
-### Instally Python packages
+### Install Python packages
 # radian, DNAnexus DX toolkit
 RUN pip3 install --no-cache-dir \
-    dxpy radian \
+    dxpy radian mamba jupyter_core jupyterlab \
     && rm -rf /tmp/downloaded_packages
 
 ### Install other software
@@ -87,14 +91,6 @@ RUN pip3 install --no-cache-dir \
 RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-linux -P /usr/local/bin/ \
     && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
-
-# # Install SLURM
-# RUN apt-get update \
-#     && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends \
-#     slurm-wlm libmunge-dev libmunge2 munge \
-#     && apt-get autoremove -y && apt-get clean -y \
-#     && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
@@ -142,6 +138,5 @@ ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
         chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview    
 
-
 # Init command for s6-overlay
-CMD ["/init"]
+CMD [ "/init" ]

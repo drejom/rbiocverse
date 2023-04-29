@@ -9,7 +9,23 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 - genomics tools like `bcftools` and `bedops`
 - DNANexus support (DX toolkit, dxfuse)
 - SLURM
-- VSCode LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json)
+- Jupyter Lab & VSCode
+- LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json)
+
+## Bioconductor version **3.17**
+
+Build the container for the HPC:
+
+```sh
+module load singularity
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:latest
+```
+
+And launch on the HPC:
+
+```sh
+sbatch /opt/singularity-images/rbioc/rbioc317.job
+```
 
 ## Bioconductor version **3.16**
 
@@ -39,4 +55,18 @@ And launch on the HPC:
 
 ```sh
 sbatch /opt/singularity-images/rbioc/rbioc.job
+```
+
+# Docker
+
+Build the Docker container locally:
+
+```sh
+docker build . -t ghcr.io/drejom/vscode-rbioc:latest
+```
+
+Get a shell locally:
+
+```sh
+docker run -it --user $(id -u):$(id -g) ghcr.io/drejom/vscode-rbioc:latest /bin/bash
 ```
