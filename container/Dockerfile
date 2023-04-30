@@ -34,6 +34,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     devtools \
     languageserver \
     httpgd \
+    IRkernel \
     && rm -rf /tmp/downloaded_packages \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -81,10 +82,13 @@ RUN apt-get update \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Install Python packages
-# radian, DNAnexus DX toolkit
+# radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
-    dxpy radian mamba jupyter_core jupyterlab \
+    dxpy radian mamba \
+    jupyter_core jupyterlab nodejs npm \
     && rm -rf /tmp/downloaded_packages
+
+RUN R -e "IRkernel::installspec(user = FALSE)"
 
 ### Install other software
 # Install dxfuse
