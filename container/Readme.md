@@ -20,13 +20,11 @@ Build the container for the HPC:
 module load singularity
 singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:latest
 ```
-
 And launch on the HPC:
 
 ```sh
 sbatch /opt/singularity-images/rbioc/rbioc317.job
 ```
-
 ## Bioconductor version **3.16**
 
 Build the container for the HPC:
