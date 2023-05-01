@@ -88,7 +88,7 @@ RUN pip3 install --no-cache-dir \
     jupyter_core jupyterlab nodejs npm \
     && rm -rf /tmp/downloaded_packages
 
-RUN R -e "IRkernel::installspec(user = FALSE)"
+RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
 
 ### Install other software
 # Install dxfuse
