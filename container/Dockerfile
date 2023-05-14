@@ -97,10 +97,12 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
     && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
 
-# Install sra-tools
-RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/3.0.5/sratoolkit.3.0.5-ubuntu64.tar.gz && \
-    tar -xzf sratoolkit.3.0.5-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
-    rm sratoolkit.3.0.5-ubuntu64.tar.gz
+# Install mamba and sra-tools
+RUN apt-get update && apt-get install -y wget bzip2 \
+    && wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba \
+    && mv bin/micromamba /usr/local/bin/ \
+    && /usr/local/bin/micromamba shell init -s bash -p /usr/local/bin \
+    && mamba install -y sra-tool
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
