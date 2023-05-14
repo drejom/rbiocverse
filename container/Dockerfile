@@ -85,7 +85,7 @@ RUN apt-get update \
 ### Install Python packages
 # radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
-    dxpy radian mamba \
+    dxpy radian \
     jupyter_core jupyterlab nodejs npm \
     && rm -rf /tmp/downloaded_packages
 
@@ -99,7 +99,7 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 
 # Install sra-tools
 RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/3.0.5/sratoolkit.3.0.5-ubuntu64.tar.gz && \
-    tar -xzf sratoolkit.3.0.5-ubuntu64.tar.gz -C /usr/local/bin --strip-components=1 && \
+    tar -xzf sratoolkit.3.0.5-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
     rm sratoolkit.3.0.5-ubuntu64.tar.gz
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
