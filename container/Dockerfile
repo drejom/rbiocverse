@@ -71,6 +71,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
+    libxml-libxml-perl \
     xsel ripgrep \
     run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
     libzmq3-dev build-essential cm-super dvipng ffmpeg \
@@ -95,6 +96,11 @@ RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
 RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-linux -P /usr/local/bin/ \
     && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
+
+# Install sra-tools
+RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/3.0.5/sratoolkit.3.0.5-ubuntu64.tar.gz && \
+    tar -xzf sratoolkit.3.0.5-ubuntu64.tar.gz -C /usr/local/bin --strip-components=1 && \
+    rm sratoolkit.3.0.5-ubuntu64.tar.gz
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
