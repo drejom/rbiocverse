@@ -101,9 +101,9 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 RUN apt-get update && apt-get install -y wget bzip2 \
     && wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba \
     && mv bin/micromamba /usr/local/bin/ \
-    && /usr/local/bin/micromamba shell init -s bash -p /usr/local/bin \
-    && mamba install -y sra-tool
-
+    && /usr/local/bin/micromamba shell init -s bash -p /usr/local \
+    && /usr/local/bin/micromamba install -y sra-tools
+    
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
 # https://groups.google.com/a/lbl.gov/g/singularity/c/syLcsIWWzdo/m/NZvF2Ud2AAAJ
