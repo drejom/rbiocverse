@@ -3,10 +3,11 @@
 This repository provides a Dockerfile that extends the official [Bioconductor Docker](https://bioconductor.org/help/docker/) image by adding some packages including the HPC job scheduler SLURM. GitHub actions build the image and push it to GitHub Packages.
 
 ## Additionally supported packages
-[Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies required to support Bioconductor R libraries. We extend the container further by adding: 
+
+[Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies required to support Bioconductor R libraries. We extend the container further by adding:
 
 - System dependencies to support `bedr`, `ctrdata`, `monocle3`, `fnmate` and `datapasta`
-- genomics tools like `bcftools` and `bedops`
+- genomics tools like `sra-tools`, `bcftools` and `bedops`
 - DNANexus support (DX toolkit, dxfuse)
 - SLURM
 - Jupyter Lab & VSCode
@@ -14,7 +15,7 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 
 ## Bioconductor version **3.17**
 
-Build the container for the HPC:
+Build the container image for the HPC:
 
 ```sh
 module load singularity
@@ -25,6 +26,7 @@ And launch on the HPC:
 ```sh
 sbatch /opt/singularity-images/rbioc/rbioc317.job
 ```
+
 ## Bioconductor version **3.16**
 
 Build the container for the HPC:

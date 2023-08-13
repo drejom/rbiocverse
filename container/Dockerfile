@@ -1,5 +1,6 @@
 # Set ARG defaults
 ARG VARIANT="RELEASE_3_17"
+ARG HUB_VERSION="4.0.2"
 
 FROM bioconductor/bioconductor_docker:${VARIANT}
 
@@ -10,7 +11,6 @@ ARG INSTALL_ZSH="true"
 ARG UPGRADE_PACKAGES="false"
 
 # Install needed packages and setup non-root user. Use a separate RUN statement to add your own dependencies.
-ARG CONDA_DIR=/opt/conda
 ARG USERNAME=rstudio
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -35,6 +35,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     languageserver \
     httpgd \
     IRkernel \
+    pak \
     && rm -rf /tmp/downloaded_packages \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -86,21 +87,21 @@ RUN apt-get update \
 # radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
     dxpy radian \
-    jupyter_core jupyterlab nodejs npm \
+    jupyter_core jupyterlab jupyterhub=="${HUB_VERSION}" jupyterlab-spellchecker nodejs npm \
     && rm -rf /tmp/downloaded_packages
 
 RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
 
 ### Install other software
 # Install dxfuse
-RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-linux -P /usr/local/bin/ \
+RUN wget https://github.com/dnanexus/dxfuse/releases/latest/download/dxfuse-linux -P /usr/local/bin/ \
     && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
 
 # Install sra-tools
-RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/3.0.5/sratoolkit.3.0.5-ubuntu64.tar.gz && \
-    tar -xzf sratoolkit.3.0.5-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
-    rm sratoolkit.3.0.5-ubuntu64.tar.gz
+RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && \
+    tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
+    rm sratoolkit.current-ubuntu64.tar.gz
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
