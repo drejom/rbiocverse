@@ -1,6 +1,6 @@
 # Set ARG defaults
 ARG VARIANT="RELEASE_3_17"
-ARG HUB_VERSION="4.0.2"
+ARG HUB_VERSION=4.0.2
 
 FROM bioconductor/bioconductor_docker:${VARIANT}
 
@@ -87,7 +87,7 @@ RUN apt-get update \
 # radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
     dxpy radian \
-    jupyter_core jupyterlab jupyterhub=="${HUB_VERSION}" jupyterlab-spellchecker nodejs npm \
+    jupyter_core jupyterlab jupyterhub==4.0.2 jupyterlab-spellchecker nodejs npm \
     && rm -rf /tmp/downloaded_packages
 
 RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
