@@ -149,5 +149,20 @@ ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
         chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview    
 
+# Stuff for jupyterhub
+ENV JUPYTER_PORT=8888
+EXPOSE $JUPYTER_PORT
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD /etc/jupyter/docker_healthcheck.py || exit 1
+# Copy local files as late as possible to avoid cache busting
+RUN wget -P /usr/local/bin/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/start-notebook.sh \
+    && wget -P /usr/local/bin/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/start-singleuser.sh \
+    && wget -P /etc/jupyter/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/docker_healthcheck.py \
+    && wget -P /etc/jupyter/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/jupyter_server_config.py
+
+# Set the permissions
+RUN chmod a+x /usr/local/bin/start-notebook.sh /usr/local/bin/start-singleuser.sh
+RUN chmod a+r /etc/jupyter/docker_healthcheck.py /etc/jupyter/jupyter_server_config.py
+
 # Init command for s6-overlay
 CMD [ "/init" ]
