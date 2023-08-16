@@ -1,0 +1,29 @@
+name: base
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - jupyterhub=4.0.2 
+  - saspy
+  - sas_kernel
+  - feather-format
+  - jupyterlab
+  - notebook
+  - ipympl
+  - ipywidgets
+  - jupyterlab-git
+  - jupyterlab_code_formatter
+
+# Pip packages
+  - pip:
+      - rpy2
+      - radian
+      - sos
+      - sos-notebook
+      - sos-pbs
+      - sos-sas
+      - sos-python
+      - sos-r
+      - sos-bash
+      

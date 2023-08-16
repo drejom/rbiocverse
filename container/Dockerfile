@@ -2,11 +2,11 @@
 ARG VARIANT="RELEASE_3_17"
 ARG HUB_VERSION=4.0.2
 
-FROM bioconductor/bioconductor_docker:${VARIANT}
+FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
 
 ### Install vscode stuff
 # [Option] Install zsh
-ARG INSTALL_ZSH="true"
+ARG INSTALL_ZSH="false"
 # [Option] Upgrade OS packages to their latest versions
 ARG UPGRADE_PACKAGES="false"
 
@@ -16,62 +16,31 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 USER root
 ADD assets/common-debian.sh /tmp/
+ENV CONDA_DIR=/opt/conda
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+# Install common dependencies
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && /bin/bash /tmp/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
     && usermod -a -G staff ${USERNAME} \
     && apt-get -y install \
-    python3-pip \
     libgit2-dev \
-    libcurl4-openssl-dev \
     libssl-dev \
     libxml2-dev \
     libxt-dev \
     libfontconfig1-dev \
     libcairo2-dev \
     squashfs-tools \
-    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
-    && install2.r --error --skipinstalled --ncpus -1 \
-    devtools \
-    languageserver \
-    httpgd \
-    IRkernel \
-    pak \
-    && rm -rf /tmp/downloaded_packages \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Install VSCode
-RUN apt-get -y install gpg \
-    && wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg \
-    && install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg \
-    && sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' \
-    && rm -f packages.microsoft.gpg \
-    && apt-get -y install apt-transport-https \
-    && apt-get update \
-    && apt-get -y install code \
-    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
-
-# VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
-# See https://github.com/microsoft/vscode-dev-containers/issues/1032
-RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://github.com/ManuelHentschel/vscDebugger v\* | tail -n 1 | cut --delimiter='/' --fields=3) \
-    && Rscript -e "remotes::install_git('https://github.com/ManuelHentschel/vscDebugger.git', ref = '"${TAG}"', dependencies = FALSE)"
-
-# R Session watcher settings.
-# See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
-RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
-
-### Install additional OS packages 
-# fnmate and datapasta: ripgrep xsel
-# vscode jupyter: libzmq3-dev
-# jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
-# jupyter-scikit-learn: build-essential cm-super dvipng ffmpeg
-# monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
-# ctrdata: libjq-dev, php, php-xm, php-json
-# bedr: bedtools bedops
-# genomics: bcftools vcftools samtools tabix picard-tools libvcflib-tools libvcflib-dev freebayes   
-# oh-my-bash: fonts-powerline
-RUN apt-get update \
-    && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends \
+    ### Install additional OS packages 
+    # fnmate and datapasta: ripgrep xsel
+    # vscode jupyter: libzmq3-dev
+    # jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
+    # jupyter-scikit-learn: build-essential cm-super dvipng ffmpeg
+    # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
+    # ctrdata: libjq-dev, php, php-xm, php-json
+    # bedr: bedtools bedops
+    # genomics: bcftools vcftools samtools tabix picard-tools libvcflib-tools libvcflib-dev freebayes   
+    # oh-my-bash: fonts-powerline
     libxml-libxml-perl \
     xsel ripgrep \
     run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
@@ -81,15 +50,53 @@ RUN apt-get update \
     fonts-powerline \
     bedtools bedops \
     bcftools vcftools samtools tabix picard-tools libvcflib-tools libvcflib-dev freebayes \
-    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts \
+    && install2.r --error --skipinstalled --ncpus -1 \
+    devtools \
+    languageserver \
+    httpgd \
+    IRkernel \
+    pak \
+    arrow \
+    && rm -rf /tmp/downloaded_packages \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-### Install Python packages
-# radian, DNAnexus DX toolkit, jupyterlab
-RUN pip3 install --no-cache-dir \
-    dxpy radian \
-    jupyter_core jupyterlab jupyterhub==4.0.2 jupyterlab-spellchecker nodejs npm \
-    && rm -rf /tmp/downloaded_packages
+# # Install VSCode
+# RUN apt-get -y install gpg \
+#     && wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg \
+#     && install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg \
+#     && sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' \
+#     && rm -f packages.microsoft.gpg \
+#     && apt-get -y install apt-transport-https \
+#     && apt-get update \
+#     && apt-get -y install code \
+#     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
+# VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
+# See https://github.com/microsoft/vscode-dev-containers/issues/1032
+RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://github.com/ManuelHentschel/vscDebugger v\* | tail -n 1 | cut --delimiter='/' --fields=3) \
+    && Rscript -e "remotes::install_git('https://github.com/ManuelHentschel/vscDebugger.git', ref = '"${TAG}"', dependencies = FALSE)"
+
+# R Session watcher settings.
+# See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
+RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
+    
+## Install microMamba
+# Install micromamba
+RUN wget https://micromamba.snakepit.net/api/micromamba/linux-64/latest -O /usr/local/bin/micromamba
+RUN chmod +x /usr/local/bin/micromamba
+SHELL ["/usr/local/bin/micromamba", "run", "-n", "base"]  
+
+## Install Python & conda-forge packages
+ADD assets/environment.yml /tmp/
+
+# Use mamba to update the base environment
+RUN micromamba install -y -f /tmp/environment.yml && \
+    micromamba clean --all --yes
+
+# Install R packages
+# COPY assets/packages.R /tmp/
+# RUN Rscript /tmp/packages.R
 RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
 
 ### Install other software
@@ -152,17 +159,11 @@ ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
 # Stuff for jupyterhub
 ENV JUPYTER_PORT=8888
 EXPOSE $JUPYTER_PORT
-HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
-    CMD /etc/jupyter/docker_healthcheck.py || exit 1
-# Copy local files as late as possible to avoid cache busting
-RUN wget -P /usr/local/bin/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/start-notebook.sh \
-    && wget -P /usr/local/bin/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/start-singleuser.sh \
-    && wget -P /etc/jupyter/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/docker_healthcheck.py \
-    && wget -P /etc/jupyter/ https://raw.githubusercontent.com/jupyter/docker-stacks/main/base-notebook/jupyter_server_config.py
-
-# Set the permissions
-RUN chmod a+x /usr/local/bin/start-notebook.sh /usr/local/bin/start-singleuser.sh
-RUN chmod a+r /etc/jupyter/docker_healthcheck.py /etc/jupyter/jupyter_server_config.py
+# create a user, since we don't want to run as root
+RUN useradd -m jovyan
+ENV HOME=/home/jovyan
+WORKDIR $HOME
+USER jovyan
 
 # Init command for s6-overlay
 CMD [ "/init" ]
