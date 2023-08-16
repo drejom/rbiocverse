@@ -10,7 +10,7 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 - ML libraries for transformers and convolutional neural networks
 - System dependencies to support `bedr`, `ctrdata`, `monocle3`, `fnmate` and `datapasta`
 - genomics tools like `sra-tools`, `bcftools` and `bedops`
-- DNANexus support (DX toolkit, dxfuse)
+- DNAnexus support (DX toolkit, dxfuse)
 - SLURM
 - JupyterLab & VSCode
 - LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json), micromamba
@@ -64,7 +64,7 @@ sbatch /opt/singularity-images/rbioc/rbioc.job
 Build the Docker container locally:
 
 ```sh
-docker buildx build --cpuset-cpus="0-7" -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
+docker buildx build -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
 ```
 
 Get a shell locally:
