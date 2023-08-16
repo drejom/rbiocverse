@@ -17,6 +17,7 @@ ARG USER_GID=$USER_UID
 USER root
 ADD assets/common-debian.sh /tmp/
 ENV CONDA_DIR=/opt/conda
+ENV MAMBA_ROOT_PREFIX=$CONDA_DIR
 ENV PATH=$CONDA_DIR/bin:$PATH
 
 # Install common dependencies
@@ -58,7 +59,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     IRkernel \
     pak \
     arrow \
-    && rm -rf /tmp/downloaded_packages \
+    && rm -rf /tmp/common-debian.sh \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # # Install VSCode
@@ -81,18 +82,25 @@ RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://gi
 # See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
     
-## Install microMamba
 # Install micromamba
-RUN wget https://micromamba.snakepit.net/api/micromamba/linux-64/latest -O /usr/local/bin/micromamba
-RUN chmod +x /usr/local/bin/micromamba
-SHELL ["/usr/local/bin/micromamba", "run", "-n", "base"]  
+RUN mkdir -p ${CONDA_DIR} && \
+    curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-64/latest && \
+    tar -xvjf latest -C ${CONDA_DIR} && \
+    rm latest
 
 ## Install Python & conda-forge packages
 ADD assets/environment.yml /tmp/
 
 # Use mamba to update the base environment
-RUN micromamba install -y -f /tmp/environment.yml && \
-    micromamba clean --all --yes
+RUN /opt/conda/bin/micromamba shell init -s bash -p /opt/conda && \
+    echo "micromamba activate" >> ~/.bashrc && \
+    /bin/bash -c "source ~/.bashrc && micromamba install -y -n base -f /tmp/environment.yml" && \
+    rm /tmp/environment.yml
+
+# Set up the environment so that all users have access to the binaries
+RUN echo "export MAMBA_ROOT_PREFIX=/opt/conda" >> /etc/profile.d/micromamba.sh && \
+    echo ". /opt/conda/etc/profile.d/mamba.sh" >> /etc/profile.d/micromamba.sh && \
+    chmod +x /etc/profile.d/micromamba.sh
 
 # Install R packages
 # COPY assets/packages.R /tmp/
