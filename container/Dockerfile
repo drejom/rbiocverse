@@ -1,24 +1,35 @@
 # Set ARG defaults
-ARG VARIANT="RELEASE_3_17"
+ARG VARIANT=RELEASE_3_17
+FROM bioconductor/bioconductor_docker:${VARIANT}
+
 ARG HUB_VERSION=4.0.2
 
 FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
 
 ### Install vscode stuff
 # [Option] Install zsh
-ARG INSTALL_ZSH="false"
+ARG INSTALL_ZSH=FALSE
 # [Option] Upgrade OS packages to their latest versions
-ARG UPGRADE_PACKAGES="false"
+ARG UPGRADE_PACKAGES=FALSE
+ARG USERNAME=jovyan
+ARG USER_UID=automatic
+ARG USER_GID=automatic
+ARG NB_USER=jovyan
+ARG NB_UID=1000
+ARG NB_GID=100
 
-# Install needed packages and setup non-root user. Use a separate RUN statement to add your own dependencies.
-ARG USERNAME=rstudio
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
 USER root
 ADD assets/common-debian.sh /tmp/
-ENV CONDA_DIR=/opt/conda
-ENV MAMBA_ROOT_PREFIX=$CONDA_DIR
-ENV PATH=$CONDA_DIR/bin:$PATH
+
+ENV CONDA_DIR=/opt/conda \
+    MAMBA_ROOT_PREFIX=${CONDA_DIR} \
+    PATH=${CONDA_DIR}/bin:${PATH} \
+    SHELL=/bin/bash \
+    NB_USER=${NB_USER} \
+    NB_UID=${NB_UID} \
+    NB_GID=${NB_GID} 
+
+#&& /bin/bash /tmp/common-debian.sh ${INSTALL_ZSH} ${USERNAME} ${USER_UID} ${USER_GID} ${UPGRADE_PACKAGES} true true && \
 
 # Install common dependencies
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -32,7 +43,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libfontconfig1-dev \
     libcairo2-dev \
     squashfs-tools \
-    ### Install additional OS packages 
+    ### Install additional OS packages
     # fnmate and datapasta: ripgrep xsel
     # vscode jupyter: libzmq3-dev
     # jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
@@ -57,8 +68,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     languageserver \
     httpgd \
     IRkernel \
-    pak \
-    arrow \
     && rm -rf /tmp/common-debian.sh \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -71,7 +80,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 #     && apt-get -y install apt-transport-https \
 #     && apt-get update \
 #     && apt-get -y install code \
-#     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+#     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts
 
 # VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
 # See https://github.com/microsoft/vscode-dev-containers/issues/1032
@@ -80,27 +89,40 @@ RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://gi
 
 # R Session watcher settings.
 # See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
-RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
-    
+RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
+
 # Install micromamba
-RUN mkdir -p ${CONDA_DIR} && \
-    curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-64/latest && \
-    tar -xvjf latest -C ${CONDA_DIR} && \
-    rm latest
+# RUN if [ "$(uname -m)" = "x86_64" ]; then \
+#     curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-64/latest; \
+#     elif [ "$(uname -m)" = "aarch64" ]; then \
+#     curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-aarch64/latest; \
+#     fi && \
+#     mkdir -p /opt/conda && \
+#     tar -xvjf latest -C /opt/conda && \
+#     rm latest
 
-## Install Python & conda-forge packages
-ADD assets/environment.yml /tmp/
+# ## Install Python & conda-forge packages
+# ADD assets/environment.yml /tmp/
 
-# Use mamba to update the base environment
-RUN /opt/conda/bin/micromamba shell init -s bash -p /opt/conda && \
-    echo "micromamba activate" >> ~/.bashrc && \
-    /bin/bash -c "source ~/.bashrc && micromamba install -y -n base -f /tmp/environment.yml" && \
-    rm /tmp/environment.yml
+# # Use mamba to update the base environment
+# RUN /opt/conda/bin/micromamba shell init -s bash -p /opt/conda && \
+#     echo "micromamba activate" >> ~/.bashrc && \
+#     /bin/bash -c "source ~/.bashrc && micromamba install -y -n base -f /tmp/environment.yml" && \
+#     rm /tmp/environment.yml
 
-# Set up the environment so that all users have access to the binaries
-RUN echo "export MAMBA_ROOT_PREFIX=/opt/conda" >> /etc/profile.d/micromamba.sh && \
-    echo ". /opt/conda/etc/profile.d/mamba.sh" >> /etc/profile.d/micromamba.sh && \
-    chmod +x /etc/profile.d/micromamba.sh
+# # Set up the environment so that all users have access to the binaries
+# RUN echo "export MAMBA_ROOT_PREFIX=/opt/conda" >> /etc/profile.d/micromamba.sh && \
+#     echo ". /opt/conda/etc/profile.d/mamba.sh" >> /etc/profile.d/micromamba.sh && \
+#   #  echo 'eval "$(starship init bash)"' >> /etc/profile.d/starship.sh && \
+#     chmod +x /etc/profile.d/micromamba.sh
+
+
+# radian, DNAnexus DX toolkit, jupyterlab
+RUN pip3 install --no-cache-dir \
+    dxpy radian \
+    jupyterlab jupyterhub==${HUB_VERSION} jupyterlab-ai \
+    nodejs npm \
+    && rm -rf /tmp/downloaded_packages
 
 # Install R packages
 # COPY assets/packages.R /tmp/
@@ -162,16 +184,15 @@ ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/strigger && \
     echo '#!/bin/bash \n\
 ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
-        chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview    
+        chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview
 
 # Stuff for jupyterhub
 ENV JUPYTER_PORT=8888
 EXPOSE $JUPYTER_PORT
-# create a user, since we don't want to run as root
-RUN useradd -m jovyan
-ENV HOME=/home/jovyan
-WORKDIR $HOME
-USER jovyan
+# # create a user, since we don't want to run as root
+# ENV HOME=/home/jovyan
+# WORKDIR $HOME
+# USER jovyan
 
 # Init command for s6-overlay
 CMD [ "/init" ]

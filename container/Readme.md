@@ -64,11 +64,13 @@ sbatch /opt/singularity-images/rbioc/rbioc.job
 Build the Docker container locally:
 
 ```sh
-docker buildx build -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
+docker buildx create --use
+docker buildx build --load --platform linux/amd64,linux/arm64 -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
+docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
 ```
 
 Get a shell locally:
 
 ```sh
-docker run -it ghcr.io/drejom/vscode-rbioc:latest /bin/bash
+docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
 ```
