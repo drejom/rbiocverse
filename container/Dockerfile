@@ -2,7 +2,7 @@
 ARG VARIANT=RELEASE_3_17
 FROM bioconductor/bioconductor_docker:${VARIANT}
 
-ARG HUB_VERSION=4.0.2
+ARG HUB_VERSION=4.0.6
 
 FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
 
@@ -11,7 +11,7 @@ FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT}
 ARG INSTALL_ZSH=FALSE
 # [Option] Upgrade OS packages to their latest versions
 ARG UPGRADE_PACKAGES=FALSE
-ARG USERNAME=jovyan
+ARG USERNAME=rstudio
 ARG USER_UID=automatic
 ARG USER_GID=automatic
 ARG NB_USER=jovyan
@@ -43,6 +43,10 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libfontconfig1-dev \
     libcairo2-dev \
     squashfs-tools \
+    gdal-bin \
+    libcurl4-openssl-dev \
+    pandoc \
+    pandoc-citeproc \
     ### Install additional OS packages
     # fnmate and datapasta: ripgrep xsel
     # vscode jupyter: libzmq3-dev
@@ -186,13 +190,6 @@ ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
         chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview
 
-# Stuff for jupyterhub
-ENV JUPYTER_PORT=8888
-EXPOSE $JUPYTER_PORT
-# # create a user, since we don't want to run as root
-# ENV HOME=/home/jovyan
-# WORKDIR $HOME
-# USER jovyan
 
 # Init command for s6-overlay
 CMD [ "/init" ]
