@@ -35,7 +35,7 @@ ENV CONDA_DIR=/opt/conda \
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && /bin/bash /tmp/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
     && usermod -a -G staff ${USERNAME} \
-    && apt-get -y install \
+    && apt-get update && apt-get -y install \
     libgit2-dev \
     libssl-dev \
     libxml2-dev \
@@ -44,7 +44,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libcairo2-dev \
     squashfs-tools \
     gdal-bin \
-    libcurl4-openssl-dev \
+    #libcurl4-openssl-dev \
     pandoc \
     pandoc-citeproc \
     ### Install additional OS packages
