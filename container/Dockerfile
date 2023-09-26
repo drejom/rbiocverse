@@ -1,8 +1,6 @@
 # Set ARG defaults
-ARG VARIANT=RELEASE_3_17
+ARG VARIANT=RELEASE_3_17-R-4.3.1
 FROM bioconductor/bioconductor_docker:${VARIANT}
-
-ARG HUB_VERSION=4.0.6
 
 FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
 
@@ -14,22 +12,12 @@ ARG UPGRADE_PACKAGES=FALSE
 ARG USERNAME=rstudio
 ARG USER_UID=automatic
 ARG USER_GID=automatic
-ARG NB_USER=jovyan
-ARG NB_UID=1000
-ARG NB_GID=100
+
 
 USER root
 ADD assets/common-debian.sh /tmp/
 
-ENV CONDA_DIR=/opt/conda \
-    MAMBA_ROOT_PREFIX=${CONDA_DIR} \
-    PATH=${CONDA_DIR}/bin:${PATH} \
-    SHELL=/bin/bash \
-    NB_USER=${NB_USER} \
-    NB_UID=${NB_UID} \
-    NB_GID=${NB_GID} 
-
-#&& /bin/bash /tmp/common-debian.sh ${INSTALL_ZSH} ${USERNAME} ${USER_UID} ${USER_GID} ${UPGRADE_PACKAGES} true true && \
+ENV SHELL=/bin/bash 
 
 # Install common dependencies
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -95,43 +83,9 @@ RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://gi
 # See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
 
-# Install micromamba
-# RUN if [ "$(uname -m)" = "x86_64" ]; then \
-#     curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-64/latest; \
-#     elif [ "$(uname -m)" = "aarch64" ]; then \
-#     curl -L -O https://micromamba.snakepit.net/api/micromamba/linux-aarch64/latest; \
-#     fi && \
-#     mkdir -p /opt/conda && \
-#     tar -xvjf latest -C /opt/conda && \
-#     rm latest
-
-# ## Install Python & conda-forge packages
-# ADD assets/environment.yml /tmp/
-
-# # Use mamba to update the base environment
-# RUN /opt/conda/bin/micromamba shell init -s bash -p /opt/conda && \
-#     echo "micromamba activate" >> ~/.bashrc && \
-#     /bin/bash -c "source ~/.bashrc && micromamba install -y -n base -f /tmp/environment.yml" && \
-#     rm /tmp/environment.yml
-
-# # Set up the environment so that all users have access to the binaries
-# RUN echo "export MAMBA_ROOT_PREFIX=/opt/conda" >> /etc/profile.d/micromamba.sh && \
-#     echo ". /opt/conda/etc/profile.d/mamba.sh" >> /etc/profile.d/micromamba.sh && \
-#   #  echo 'eval "$(starship init bash)"' >> /etc/profile.d/starship.sh && \
-#     chmod +x /etc/profile.d/micromamba.sh
-
-
 # radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
-    dxpy radian \
-    jupyterlab jupyterhub==${HUB_VERSION} jupyterlab-ai \
-    nodejs npm \
-    && rm -rf /tmp/downloaded_packages
-
-# Install R packages
-# COPY assets/packages.R /tmp/
-# RUN Rscript /tmp/packages.R
-RUN /usr/local/bin/R -e "IRkernel::installspec(user = FALSE)"
+    jupyterlab dxpy radian 
 
 ### Install other software
 # Install dxfuse
@@ -189,7 +143,6 @@ ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/strigger && \
 ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
     cd /usr/local/bin && \
         chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview
-
 
 # Init command for s6-overlay
 CMD [ "/init" ]
