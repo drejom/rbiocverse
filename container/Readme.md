@@ -21,7 +21,7 @@ Build the container image for the HPC:
 
 ```sh
 module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:latest
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-9-26
 ```
 And launch on the HPC:
 
@@ -35,7 +35,7 @@ Build the container for the HPC:
 
 ```sh
 module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.16.sif docker://ghcr.io/drejom/vscode-rbioc:latest
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.16.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-1-8
 ```
 
 And launch on the HPC:
