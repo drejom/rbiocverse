@@ -72,7 +72,8 @@ RUN apt-get update \
 # radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
     dxpy radian \
-    nodejs npm 
+    nodejs npm \
+    jupyterlab 
 
 ### Install other software
 # Install dxfuse
@@ -84,6 +85,15 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
 RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && \
     tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
     rm sratoolkit.current-ubuntu64.tar.gz
+
+# Install starship
+RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep "browser_download_url" | grep "FiraCode.zip" | cut -d '"' -f 4) && \
+    curl -L -o FiraCode.zip $latest_url && \
+    unzip FiraCode.zip -d /usr/share/fonts && \
+    fc-cache -fv && \
+    rm FiraCode.zip && \
+    curl -sS https://starship.rs/install.sh | sh -s -- --yes && \
+    echo 'eval "$(starship init bash)"' >> /etc/profile
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general

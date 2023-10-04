@@ -80,7 +80,7 @@ Build the Docker container locally:
 
 ```sh
 docker buildx create --use
-docker buildx build --load --platform linux/amd64,linux/arm64 -t ghcr.io/drejom/vscode-rbioc:latest
+#docker buildx build --load --platform linux/amd64,linux/arm64 -t ghcr.io/drejom/vscode-rbioc:latest
 docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
 ```
 
