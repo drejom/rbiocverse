@@ -17,6 +17,9 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 
 ## Bioconductor version **3.17**
 
+
+### Apollo
+
 Build the container image for the HPC:
 
 ```sh
@@ -27,6 +30,18 @@ And launch on the HPC:
 
 ```sh
 sbatch /opt/singularity-images/rbioc/rbioc317.job
+```
+### Gemini
+
+Build the container image for the HPC:
+
+```sh
+singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-9-26
+```
+And launch on the HPC:
+
+```sh
+#sbatch /opt/singularity-images/rbioc/rbioc317.job
 ```
 
 ## Bioconductor version **3.16**
