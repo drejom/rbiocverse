@@ -138,8 +138,10 @@ ssh $(whoami)@$(hostname) sstat $@' >> /usr/local/bin/sstat && \
 ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/strigger && \
     echo '#!/bin/bash \n\
 ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
+    echo '#!/bin/bash \n\
+ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/seff && \
     cd /usr/local/bin && \
-    chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview    
+    chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview seff   
 
 # Init command for s6-overlay
 CMD [ "/init" ]
