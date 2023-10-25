@@ -95,14 +95,14 @@ RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-u
     && tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 \
     && rm sratoolkit.current-ubuntu64.tar.gz
 
-# Install starship
-RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep "browser_download_url" | grep "FiraCode.zip" | cut -d '"' -f 4) && \
-    curl -L -o FiraCode.zip $latest_url && \
-    unzip FiraCode.zip -d /usr/share/fonts && \
-    fc-cache -fv && \
-    rm FiraCode.zip && \
-    curl -sS https://starship.rs/install.sh | sh -s -- --yes && \
-    echo 'eval "$(starship init bash)"' >> /etc/profile
+# Install FiraCode (no starship for now)
+RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep "browser_download_url" | grep "FiraCode.zip" | cut -d '"' -f 4) \
+    && curl -L -o FiraCode.zip $latest_url \
+    && unzip FiraCode.zip -d /usr/share/fonts \
+    && fc-cache -fv \
+    && rm FiraCode.zip 
+    # && curl -sS https://starship.rs/install.sh | sh -s -- --yes \
+    # && echo 'eval "$(starship init bash)"' >> /etc/profile
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
