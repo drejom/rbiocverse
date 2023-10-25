@@ -54,7 +54,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # ctrdata: libjq-dev, php, php-xm, php-json
 # bedr: bedtools bedops
 # genomics: bcftools vcftools samtools tabix picard-tools freebayes   
-# reticulate: python3-venv
+# reticulate: python3-venv python3-dev
 # proffer: golang-go
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
@@ -68,7 +68,7 @@ RUN apt-get update \
     fonts-powerline \
     bedtools bedops \
     bcftools vcftools samtools tabix picard-tools freebayes \
-    python3-venv \
+    python3-venv python3-dev \
     golang-go \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
