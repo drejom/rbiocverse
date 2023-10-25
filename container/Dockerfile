@@ -45,6 +45,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
 
 ### Install additional OS packages 
+# Seurat v5: libhdf5-dev
 # fnmate and datapasta: ripgrep xsel
 # vscode jupyter: libzmq3-dev
 # jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
@@ -53,11 +54,12 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # ctrdata: libjq-dev, php, php-xm, php-json
 # bedr: bedtools bedops
 # genomics: bcftools vcftools samtools tabix picard-tools freebayes   
-# oh-my-bash: fonts-powerline
+# reticulate: python3-venv
+# proffer: golang-go
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
-    libxml-libxml-perl \
+    libhdf5-dev libxml-libxml-perl \
     xsel ripgrep \
     run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
     libzmq3-dev build-essential cm-super dvipng ffmpeg \
@@ -66,7 +68,14 @@ RUN apt-get update \
     fonts-powerline \
     bedtools bedops \
     bcftools vcftools samtools tabix picard-tools freebayes \
+    python3-venv \
+    golang-go \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+
+### Install miniconda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh \
+    && bash miniconda.sh -b -u -p /usr/local/bin \
+    && rm -rf miniconda.sh
 
 ### Install Python packages
 # radian, DNAnexus DX toolkit, jupyterlab
@@ -82,9 +91,9 @@ RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-lin
     && chmod +x /usr/local/bin/dxfuse
 
 # Install sra-tools
-RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && \
-    tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 && \
-    rm sratoolkit.current-ubuntu64.tar.gz
+RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz  \
+    && tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 \
+    && rm sratoolkit.current-ubuntu64.tar.gz
 
 # Install starship
 RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep "browser_download_url" | grep "FiraCode.zip" | cut -d '"' -f 4) && \

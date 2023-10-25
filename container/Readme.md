@@ -12,8 +12,8 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 - genomics tools like `sra-tools`, `bcftools` and `bedops`
 - DNAnexus support (DX toolkit, dxfuse)
 - SLURM
-- JupyterLab & VSCode
-- LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json), micromamba
+- JupyterLab
+- VSCode LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json), miniconda
 
 ## Bioconductor version **3.17**
 
