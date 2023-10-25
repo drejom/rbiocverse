@@ -36,7 +36,7 @@ sbatch /opt/singularity-images/rbioc/rbioc317.job
 Build the container image for the HPC:
 
 ```sh
-singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-9-26
+singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-10-24
 ```
 And launch on the HPC:
 
