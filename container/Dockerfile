@@ -101,8 +101,15 @@ RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/relea
     && unzip FiraCode.zip -d /usr/share/fonts \
     && fc-cache -fv \
     && rm FiraCode.zip 
-    # && curl -sS https://starship.rs/install.sh | sh -s -- --yes \
-    # && echo 'eval "$(starship init bash)"' >> /etc/profile
+    && curl -sS https://starship.rs/install.sh | sh -s -- --yes \
+    && echo 'eval "$(starship init bash)"' >> /etc/profile
+
+# Install VSCode-cli
+RUN curl -LJO "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64" \
+&& tar -xvf vscode_cli_alpine_x64_cli.tar.gz \
+&& chmod +x code \
+&& mv code /usr/local/bin \
+&& rm vscode_cli_alpine_x64_cli.tar.gz
 
 ### SLURM FROM WITHIN THE CONTAINER VIA SSH
 # https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
