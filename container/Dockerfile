@@ -100,7 +100,7 @@ RUN latest_url=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/relea
     && curl -L -o FiraCode.zip $latest_url \
     && unzip FiraCode.zip -d /usr/share/fonts \
     && fc-cache -fv \
-    && rm FiraCode.zip 
+    && rm FiraCode.zip \
     && curl -sS https://starship.rs/install.sh | sh -s -- --yes \
     && echo 'eval "$(starship init bash)"' >> /etc/profile
 
