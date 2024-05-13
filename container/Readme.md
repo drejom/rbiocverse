@@ -15,6 +15,37 @@ This repository provides a Dockerfile that extends the official [Bioconductor Do
 - JupyterLab
 - VSCode LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json), miniconda
 
+## Bioconductor version **3.19**
+
+### Apollo
+
+Build the container image for the HPC:
+
+```sh
+module load singularity
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.19.sif docker://ghcr.io/drejom/vscode-rbioc:v2024-5-13
+```
+And launch on the HPC:
+
+```sh
+sbatch /opt/singularity-images/rbioc/rbioc319.job
+```
+### Gemini
+
+Build the container image for the HPC:
+
+```sh
+module load singularity
+singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif docker://ghcr.io/drejom/vscode-rbioc:v2024-5-13
+```
+And launch on the HPC:
+
+```sh
+# RStudio not supported on Gemini
+#sbatch /packages/singularity/shared_cache/rbioc/rbioc319.job
+# Use vscode tunnels
+```
+
 ## Bioconductor version **3.18**
 
 ### Apollo
@@ -41,7 +72,7 @@ singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.18.s
 And launch on the HPC:
 
 ```sh
-#sbatch /opt/singularity-images/rbioc/rbioc318.job
+#sbatch /packages/singularity/shared_cache/rbioc/rbioc318.job
 ```
 
 ## Bioconductor version **3.17**

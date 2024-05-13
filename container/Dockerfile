@@ -1,5 +1,5 @@
 # Set ARG defaults
-ARG VARIANT=RELEASE_3_18
+ARG VARIANT=RELEASE_3_19
 
 FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
 
