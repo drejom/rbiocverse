@@ -67,7 +67,7 @@ RUN apt-get update \
     libzmq3-dev build-essential cm-super dvipng ffmpeg \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
     libboost-all-dev libomp-dev \
-    libpng \
+    libpng-dev \
     libjq-dev php php-xml php-json \
     fonts-powerline \
     bedtools bedops \
