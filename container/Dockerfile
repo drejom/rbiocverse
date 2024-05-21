@@ -51,6 +51,8 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
 # jupyter-scikit-learn: build-essential cm-super dvipng ffmpeg
 # monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
+# velocyto.R: libboost-all-dev libomp-dev
+# velociraptor: libpng
 # ctrdata: libjq-dev, php, php-xm, php-json
 # bedr: bedtools bedops
 # genomics: bcftools vcftools samtools tabix picard-tools freebayes   
@@ -64,6 +66,8 @@ RUN apt-get update \
     run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
     libzmq3-dev build-essential cm-super dvipng ffmpeg \
     libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
+    libboost-all-dev libomp-dev \
+    libpng \
     libjq-dev php php-xml php-json \
     fonts-powerline \
     bedtools bedops \
