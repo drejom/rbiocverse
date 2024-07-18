@@ -58,6 +58,7 @@ RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(fi
 # genomics: bcftools vcftools samtools tabix picard-tools freebayes   
 # reticulate: python3-venv python3-dev
 # proffer: golang-go
+# b64: cargo
 RUN apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
@@ -74,6 +75,7 @@ RUN apt-get update \
     bcftools vcftools samtools tabix picard-tools freebayes \
     python3-venv python3-dev \
     golang-go \
+    cargo \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
 
 ### Install miniconda
