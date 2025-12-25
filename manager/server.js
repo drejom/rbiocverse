@@ -980,6 +980,14 @@ app.get('/', (req, res) => {
   res.send(renderLauncherPage());
 });
 
+// Proxy VS Code asset paths directly (stable-*, vscode-*, etc.)
+app.use(['/stable-*', '/vscode-*', '/oss-dev'], (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  proxy.web(req, res);
+});
+
 // Proxy /code/* to code-server when running, with floating menu
 app.use('/code', (req, res, next) => {
   if (!hasRunningSession()) {
