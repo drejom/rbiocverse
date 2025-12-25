@@ -1,0 +1,14 @@
+{
+  "name": "hpc-code-server-manager",
+  "version": "1.0.0",
+  "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "http-proxy": "^1.18.1"
+  }
+}
