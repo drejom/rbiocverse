@@ -8,13 +8,31 @@ app.use(express.json());
 // Configuration from environment
 const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
-  geminiHost: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
-  apolloHost: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
   defaultHpc: process.env.DEFAULT_HPC || 'gemini',
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT) || 8000,
   defaultCpus: process.env.DEFAULT_CPUS || '4',
   defaultMem: process.env.DEFAULT_MEM || '40G',
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
+};
+
+// Per-cluster configuration
+const clusters = {
+  gemini: {
+    host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
+    partition: 'compute',
+    singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
+    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
+    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
+    bindPaths: '/packages,/run,/scratch,/ref_genomes',
+  },
+  apollo: {
+    host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
+    partition: 'all',
+    singularityBin: '/opt/singularity-images/singularity/bin/singularity',
+    singularityImage: '/opt/singularity-images/rbioc/rbioc_3.18.sif',
+    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
+    bindPaths: '/opt,/labs,/run,/ref_genome',
+  },
 };
 
 // Multi-session state - track sessions per HPC
@@ -57,9 +75,9 @@ proxy.on('error', (err, req, res) => {
 
 // Helper: run SSH command
 function sshExec(hpc, command) {
-  const host = hpc === 'apollo' ? config.apolloHost : config.geminiHost;
+  const cluster = clusters[hpc] || clusters.gemini;
   return new Promise((resolve, reject) => {
-    exec(`ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${host} "${command}"`,
+    exec(`ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${cluster.host} "${command}"`,
       { timeout: 30000 },
       (error, stdout, stderr) => {
         if (error) reject(new Error(stderr || error.message));
@@ -86,17 +104,17 @@ async function getJobInfo(hpc) {
 
 // Helper: start SSH tunnel
 function startTunnel(hpc, node) {
-  const host = hpc === 'apollo' ? config.apolloHost : config.geminiHost;
+  const cluster = clusters[hpc] || clusters.gemini;
   const port = config.codeServerPort;
 
-  console.log(`Starting tunnel: localhost:${port} -> ${node}:${port} via ${host}`);
+  console.log(`Starting tunnel: localhost:${port} -> ${node}:${port} via ${cluster.host}`);
 
   const tunnel = spawn('ssh', [
     '-o', 'StrictHostKeyChecking=no',
     '-o', 'ServerAliveInterval=30',
     '-N',
     '-L', `${port}:${node}:${port}`,
-    `${config.hpcUser}@${host}`
+    `${config.hpcUser}@${cluster.host}`
   ]);
 
   tunnel.on('error', (err) => {
@@ -238,21 +256,9 @@ app.post('/api/launch', async (req, res) => {
     if (!jobInfo) {
       // Submit new job
       console.log(`Submitting new job on ${hpc}...`);
+      const cluster = clusters[hpc] || clusters.gemini;
 
-      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=compute --time=${time} --output=$HOME/code-server_%j.log --error=$HOME/code-server_%j.err --wrap='
-        if [[ -d "/packages/singularity" ]]; then
-          SINGULARITY_BIN=/packages/easy-build/software/singularity/3.7.0/bin/singularity
-          SINGULARITY_IMAGE=/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif
-          R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19
-          BIND_PATHS=/packages,/run,/scratch,/ref_genomes
-        else
-          SINGULARITY_BIN=/opt/singularity-images/singularity/bin/singularity
-          SINGULARITY_IMAGE=/opt/singularity-images/rbioc/rbioc_3.18.sif
-          R_LIBS_SITE=/opt/singularity-images/rbioc/rlibs/bioc-3.18
-          BIND_PATHS=/opt,/labs,/run,/ref_genome
-        fi
-        $SINGULARITY_BIN exec --env TERM=xterm-256color --env R_LIBS_SITE=$R_LIBS_SITE -B $BIND_PATHS $SINGULARITY_IMAGE code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-data-dir $HOME/.vscode-slurm/.vscode-server --extensions-dir $HOME/.vscode-slurm/.vscode-server/extensions
-      '`;
+      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=$HOME/code-server_%j.log --error=$HOME/code-server_%j.err --wrap='${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-data-dir $HOME/.vscode-slurm/.vscode-server --extensions-dir $HOME/.vscode-slurm/.vscode-server/extensions'`;
 
       const output = await sshExec(hpc, submitCmd);
       const match = output.match(/Submitted batch job (\d+)/);
