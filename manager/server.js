@@ -980,8 +980,9 @@ app.get('/', (req, res) => {
   res.send(renderLauncherPage());
 });
 
-// Proxy VS Code asset paths directly (stable-*, vscode-*, etc.)
-app.use(['/stable-*', '/vscode-*', '/oss-dev'], (req, res, next) => {
+// Proxy VS Code asset paths directly (stable-xxx, vscode-xxx, etc.)
+// Use regex to match paths starting with these prefixes
+app.use(/^\/(stable-|vscode-|oss-dev)/, (req, res, next) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
