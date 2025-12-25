@@ -6,7 +6,7 @@ RUN apk add --no-cache openssh-client curl
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 COPY . .
 
