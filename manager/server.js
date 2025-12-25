@@ -67,7 +67,8 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on('error', (err, req, res) => {
   console.error('Proxy error:', err.message);
-  if (res.writeHead) {
+  // Check if headers already sent (from response wrapper)
+  if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Code server not available</h1><p><a href="/">Back to launcher</a></p>');
   }
@@ -102,23 +103,53 @@ async function getJobInfo(hpc) {
   }
 }
 
-// Helper: start SSH tunnel
-function startTunnel(hpc, node) {
+// Helper: check if port is open
+function checkPort(port, timeout = 1000) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const socket = new net.Socket();
+    socket.setTimeout(timeout);
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.on('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.connect(port, '127.0.0.1');
+  });
+}
+
+// Helper: start SSH tunnel and wait for it to establish
+async function startTunnel(hpc, node) {
   const cluster = clusters[hpc] || clusters.gemini;
   const port = config.codeServerPort;
 
   console.log(`Starting tunnel: localhost:${port} -> ${node}:${port} via ${cluster.host}`);
 
   const tunnel = spawn('ssh', [
+    '-v',  // Verbose for debugging
     '-o', 'StrictHostKeyChecking=no',
     '-o', 'ServerAliveInterval=30',
+    '-o', 'ExitOnForwardFailure=yes',
     '-N',
     '-L', `${port}:${node}:${port}`,
     `${config.hpcUser}@${cluster.host}`
   ]);
 
+  // Log stderr for debugging
+  tunnel.stderr.on('data', (data) => {
+    const line = data.toString().trim();
+    if (line) console.log(`SSH: ${line}`);
+  });
+
   tunnel.on('error', (err) => {
-    console.error('Tunnel error:', err);
+    console.error('Tunnel spawn error:', err);
     const session = state.sessions[hpc];
     if (session) {
       session.status = 'idle';
@@ -135,7 +166,26 @@ function startTunnel(hpc, node) {
     if (session) session.tunnelProcess = null;
   });
 
-  return tunnel;
+  // Wait for tunnel to establish (check port becomes available)
+  console.log('Waiting for tunnel to establish...');
+  for (let i = 0; i < 30; i++) {  // 30 seconds max
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Check if tunnel process died
+    if (tunnel.exitCode !== null) {
+      throw new Error(`Tunnel exited with code ${tunnel.exitCode}`);
+    }
+
+    // Check if port is open
+    if (await checkPort(port)) {
+      console.log(`Tunnel established on port ${port}`);
+      return tunnel;
+    }
+  }
+
+  // Timeout - kill tunnel and throw
+  tunnel.kill();
+  throw new Error('Tunnel failed to establish after 30 seconds');
 }
 
 // Helper: stop tunnel for an HPC
@@ -304,8 +354,8 @@ app.post('/api/launch', async (req, res) => {
       stopTunnel(state.activeHpc);
     }
 
-    // Start tunnel
-    session.tunnelProcess = startTunnel(hpc, session.node);
+    // Start tunnel and wait for it to establish
+    session.tunnelProcess = await startTunnel(hpc, session.node);
     session.status = 'running';
     session.startedAt = new Date().toISOString();
     state.activeHpc = hpc;
@@ -321,7 +371,9 @@ app.post('/api/launch', async (req, res) => {
     console.error('Launch error:', error);
     session.status = 'idle';
     session.error = error.message;
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -339,13 +391,17 @@ app.post('/api/switch/:hpc', async (req, res) => {
   }
 
   // Start tunnel to the requested HPC
-  if (!session.tunnelProcess) {
-    session.tunnelProcess = startTunnel(hpc, session.node);
+  try {
+    if (!session.tunnelProcess) {
+      session.tunnelProcess = await startTunnel(hpc, session.node);
+    }
+
+    state.activeHpc = hpc;
+    res.json({ status: 'switched', hpc });
+  } catch (error) {
+    console.error('Switch error:', error);
+    res.status(500).json({ error: error.message });
   }
-
-  state.activeHpc = hpc;
-
-  res.json({ status: 'switched', hpc });
 });
 
 app.post('/api/stop/:hpc?', async (req, res) => {
@@ -943,6 +999,11 @@ app.use('/code', (req, res, next) => {
     };
 
     res.end = function(chunk) {
+      // If headers already sent (e.g., proxy error), just call original end
+      if (res.headersSent) {
+        return originalEnd.call(res, chunk);
+      }
+
       if (chunk) body.push(chunk);
 
       let html = Buffer.concat(body.map(b => Buffer.isBuffer(b) ? b : Buffer.from(b))).toString('utf8');
@@ -952,7 +1013,9 @@ app.use('/code', (req, res, next) => {
         html = html.replace('</body>', renderFloatingMenu() + '</body>');
       }
 
-      res.setHeader('Content-Length', Buffer.byteLength(html));
+      if (!res.headersSent) {
+        res.setHeader('Content-Length', Buffer.byteLength(html));
+      }
       originalWrite.call(res, html);
       originalEnd.call(res);
     };
