@@ -1046,8 +1046,19 @@ const server = app.listen(PORT, () => {
 
 // Handle WebSocket upgrades for code-server
 server.on('upgrade', (req, socket, head) => {
-  if (hasRunningSession() && req.url.startsWith('/code')) {
-    proxy.ws(req, socket, head);
+  if (hasRunningSession()) {
+    // Proxy WebSocket for /code, /stable-, /vscode-, or root paths
+    if (req.url.startsWith('/code') ||
+        req.url.startsWith('/stable-') ||
+        req.url.startsWith('/vscode-') ||
+        req.url === '/' ||
+        req.url.startsWith('/?')) {
+      console.log(`WebSocket upgrade: ${req.url}`);
+      proxy.ws(req, socket, head);
+    } else {
+      console.log(`WebSocket rejected: ${req.url}`);
+      socket.destroy();
+    }
   } else {
     socket.destroy();
   }
