@@ -23,8 +23,8 @@ services:
       - DEFAULT_TIME=${DEFAULT_TIME:-12:00:00}
 
     volumes:
-      # SSH keys copied from studio to TrueNAS
-      - /mnt/ssd/docker/hpc-ssh:/root/.ssh:ro
+      # SSH keys copied from studio to TrueNAS (mount to apps user home)
+      - /mnt/ssd/docker/hpc-ssh:/home/apps/.ssh:ro
 
     expose:
       - 3000   # Manager UI/API (Traefik routes here)
