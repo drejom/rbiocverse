@@ -308,7 +308,7 @@ app.post('/api/launch', async (req, res) => {
       console.log(`Submitting new job on ${hpc}...`);
       const cluster = clusters[hpc] || clusters.gemini;
 
-      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=~/vscode-slurm-logs/code-server_%j.log --error=~/vscode-slurm-logs/code-server_%j.err --wrap='mkdir -p ~/vscode-slurm-logs && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions'`;
+      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=~/vscode-slurm-logs/code-server_%j.log --error=~/vscode-slurm-logs/code-server_%j.err --wrap='mkdir -p ~/vscode-slurm-logs && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-base-path /code --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions'`;
 
       const output = await sshExec(hpc, submitCmd);
       const match = output.match(/Submitted batch job (\d+)/);
@@ -1046,20 +1046,24 @@ const server = app.listen(PORT, () => {
 
 // Handle WebSocket upgrades for code-server
 server.on('upgrade', (req, socket, head) => {
+  console.log(`WebSocket upgrade request: url=${req.url} headers=${JSON.stringify(req.headers)}`);
+
   if (hasRunningSession()) {
-    // Proxy WebSocket for /code, /stable-, /vscode-, or root paths
+    // Proxy WebSocket for /code, /stable-, /vscode-, /oss-dev, or root paths
     if (req.url.startsWith('/code') ||
         req.url.startsWith('/stable-') ||
         req.url.startsWith('/vscode-') ||
+        req.url.startsWith('/oss-dev') ||
         req.url === '/' ||
         req.url.startsWith('/?')) {
-      console.log(`WebSocket upgrade: ${req.url}`);
+      console.log(`WebSocket proxying: ${req.url}`);
       proxy.ws(req, socket, head);
     } else {
-      console.log(`WebSocket rejected: ${req.url}`);
+      console.log(`WebSocket rejected (no match): ${req.url}`);
       socket.destroy();
     }
   } else {
+    console.log(`WebSocket rejected (no session): ${req.url}`);
     socket.destroy();
   }
 });
