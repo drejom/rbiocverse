@@ -10,7 +10,7 @@ const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
   defaultHpc: process.env.DEFAULT_HPC || 'gemini',
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT) || 8000,
-  defaultCpus: process.env.DEFAULT_CPUS || '4',
+  defaultCpus: process.env.DEFAULT_CPUS || '2',
   defaultMem: process.env.DEFAULT_MEM || '40G',
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
 };
@@ -27,11 +27,11 @@ const clusters = {
   },
   apollo: {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
-    partition: 'all',
-    singularityBin: '/opt/singularity-images/singularity/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/rbioc_3.18.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
-    bindPaths: '/opt,/labs,/run,/ref_genome',
+    partition: 'fast,all',
+    singularityBin: '/opt/singularity/3.7.0/bin/singularity',
+    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
+    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
+    bindPaths: '/opt,/run,/labs',
   },
 };
 
