@@ -1023,7 +1023,9 @@ app.get('/hpc-drag.js', (req, res) => {
     }
 
     window.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'hpc-menu-drag') {
+      if (!e.data) return;
+
+      if (e.data.type === 'hpc-menu-drag') {
         const rect = frame.getBoundingClientRect();
         let newTop = rect.top + e.data.dy;
         let newRight = (window.innerWidth - rect.right) - e.data.dx;
@@ -1033,6 +1035,10 @@ app.get('/hpc-drag.js', (req, res) => {
 
         frame.style.top = newTop + 'px';
         frame.style.right = newRight + 'px';
+      }
+
+      if (e.data.type === 'hpc-menu-navigate') {
+        window.location.href = e.data.url;
       }
     });
   }
@@ -1366,7 +1372,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<button onclick="window.top.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
+        '<button onclick="window.parent.postMessage({type:\\'hpc-menu-navigate\\',url:\\'/?menu=1\\'},\\'*\\')">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1422,7 +1428,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({cancelJob: true})
       });
-      window.top.location.href = '/?menu=1';
+      window.parent.postMessage({type:'hpc-menu-navigate',url:'/?menu=1'},'*');
     }
 
     fetchStatus();
