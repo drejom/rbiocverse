@@ -730,54 +730,60 @@ function renderFloatingMenu() {
   return `
     <div id="hpc-menu-overlay">
       <style>
+        /* Use !important to override VS Code styles */
         #hpc-menu-overlay {
-          position: fixed;
-          top: 10px;
-          right: 10px;
-          z-index: 999999;
-          font-family: system-ui, -apple-system, sans-serif;
+          position: fixed !important;
+          top: 10px !important;
+          right: 10px !important;
+          left: auto !important;
+          bottom: auto !important;
+          z-index: 2147483647 !important; /* Max z-index */
+          font-family: system-ui, -apple-system, sans-serif !important;
+          pointer-events: auto !important;
           cursor: move;
           user-select: none;
+          isolation: isolate;
         }
         #hpc-menu-toggle {
-          width: 44px;
-          height: 44px;
-          border-radius: 10px;
-          background: rgba(30,30,40,0.95);
-          border: 2px solid rgba(255,255,255,0.2);
-          color: #fff;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-          transition: transform 0.2s, box-shadow 0.2s;
-          pointer-events: auto;
+          width: 44px !important;
+          height: 44px !important;
+          border-radius: 10px !important;
+          background: rgba(30,30,40,0.95) !important;
+          border: 2px solid rgba(255,255,255,0.2) !important;
+          color: #fff !important;
+          cursor: pointer !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-size: 20px !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+          pointer-events: auto !important;
+          -webkit-appearance: none !important;
+          appearance: none !important;
         }
         #hpc-menu-toggle:hover {
           transform: scale(1.05);
-          box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.6) !important;
         }
-        #hpc-menu-toggle.running { border-color: #4ade80; }
-        #hpc-menu-toggle.starting { border-color: #fbbf24; }
-        #hpc-menu-toggle.dragging { cursor: move; opacity: 0.8; }
+        #hpc-menu-toggle.running { border-color: #4ade80 !important; }
+        #hpc-menu-toggle.starting { border-color: #fbbf24 !important; }
 
         #hpc-menu-panel {
           display: none;
-          position: absolute;
-          top: 50px;
-          right: 0;
-          background: rgba(30,30,40,0.98);
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px;
-          padding: 15px;
-          min-width: 260px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-          color: #fff;
-          pointer-events: auto;
+          position: absolute !important;
+          top: 50px !important;
+          right: 0 !important;
+          background: rgba(30,30,40,0.98) !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          border-radius: 12px !important;
+          padding: 15px !important;
+          min-width: 260px !important;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4) !important;
+          color: #fff !important;
+          pointer-events: auto !important;
+          z-index: 2147483647 !important;
         }
-        #hpc-menu-panel.open { display: block; }
+        #hpc-menu-panel.open { display: block !important; }
 
         .session-card {
           background: rgba(255,255,255,0.05);
