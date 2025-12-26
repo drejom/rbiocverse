@@ -893,95 +893,43 @@ function renderFloatingMenu() {
           const panel = document.getElementById('hpc-menu-panel');
 
           if (!overlay || !toggle || !panel) {
-            console.error('HPC Menu: Elements not found, retrying...');
             setTimeout(initHpcMenu, 500);
             return;
           }
 
-          console.log('HPC Menu: Initialized');
+          // DEBUG: Visual indicator that JS loaded - change emoji to checkmark
+          toggle.textContent = '✓';
+          toggle.style.fontSize = '24px';
 
           let menuOpen = false;
-          let isDragging = false;
-          let wasDragged = false;
-          let dragStartX, dragStartY, startLeft, startTop;
 
-          // Toggle menu panel
-          function toggleMenu() {
-            if (wasDragged) {
-              wasDragged = false;
-              return;
-            }
+          // Simple click handler for touch devices
+          function handleInteraction(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            // DEBUG: Alert to confirm click is received
+            // alert('Menu clicked!');
+
             menuOpen = !menuOpen;
             panel.classList.toggle('open', menuOpen);
-            console.log('HPC Menu: toggled to', menuOpen);
+
+            // Visual feedback
+            toggle.style.background = menuOpen ? 'rgba(74,222,128,0.8)' : 'rgba(30,30,40,0.95)';
           }
 
-          // Drag handlers
-          function onMouseDown(e) {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            isDragging = true;
-            wasDragged = false;
-
-            const rect = overlay.getBoundingClientRect();
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-            startLeft = rect.left;
-            startTop = rect.top;
-
-            document.addEventListener('mousemove', onMouseMove, true);
-            document.addEventListener('mouseup', onMouseUp, true);
-          }
-
-          function onMouseMove(e) {
-            if (!isDragging) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            const dx = e.clientX - dragStartX;
-            const dy = e.clientY - dragStartY;
-
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-              wasDragged = true;
-            }
-
-            const newLeft = Math.max(0, Math.min(startLeft + dx, window.innerWidth - 60));
-            const newTop = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
-
-            overlay.style.left = newLeft + 'px';
-            overlay.style.top = newTop + 'px';
-            overlay.style.right = 'auto';
-          }
-
-          function onMouseUp(e) {
-            document.removeEventListener('mousemove', onMouseMove, true);
-            document.removeEventListener('mouseup', onMouseUp, true);
-            isDragging = false;
-
-            if (!wasDragged) {
-              toggleMenu();
-            }
-          }
-
-          function onClick(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!isDragging && !wasDragged) {
-              toggleMenu();
-            }
-          }
-
-          // Attach event listeners with capture to beat VS Code
-          toggle.addEventListener('mousedown', onMouseDown, true);
-          toggle.addEventListener('click', onClick, true);
+          // Use multiple event types for maximum compatibility
+          toggle.addEventListener('click', handleInteraction, true);
+          toggle.addEventListener('touchend', handleInteraction, true);
+          toggle.addEventListener('pointerup', handleInteraction, true);
 
           // Close when clicking outside
           document.addEventListener('click', function(e) {
             if (menuOpen && !overlay.contains(e.target)) {
               menuOpen = false;
               panel.classList.remove('open');
+              toggle.style.background = 'rgba(30,30,40,0.95)';
             }
           }, true);
 
