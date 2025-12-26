@@ -884,143 +884,131 @@ function renderFloatingMenu() {
       </div>
     </div>
 
-    <script>
-      (function() {
-        // Wait for DOM to be ready
-        setTimeout(function initHpcMenu() {
-          const overlay = document.getElementById('hpc-menu-overlay');
-          const toggle = document.getElementById('hpc-menu-toggle');
-          const panel = document.getElementById('hpc-menu-panel');
-
-          if (!overlay || !toggle || !panel) {
-            setTimeout(initHpcMenu, 500);
-            return;
-          }
-
-          // DEBUG: Visual indicator that JS loaded - change emoji to checkmark
-          toggle.textContent = '✓';
-          toggle.style.fontSize = '24px';
-
-          let menuOpen = false;
-
-          // Simple click handler for touch devices
-          function handleInteraction(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            // DEBUG: Alert to confirm click is received
-            // alert('Menu clicked!');
-
-            menuOpen = !menuOpen;
-            panel.classList.toggle('open', menuOpen);
-
-            // Visual feedback
-            toggle.style.background = menuOpen ? 'rgba(74,222,128,0.8)' : 'rgba(30,30,40,0.95)';
-          }
-
-          // Use multiple event types for maximum compatibility
-          toggle.addEventListener('click', handleInteraction, true);
-          toggle.addEventListener('touchend', handleInteraction, true);
-          toggle.addEventListener('pointerup', handleInteraction, true);
-
-          // Close when clicking outside
-          document.addEventListener('click', function(e) {
-            if (menuOpen && !overlay.contains(e.target)) {
-              menuOpen = false;
-              panel.classList.remove('open');
-              toggle.style.background = 'rgba(30,30,40,0.95)';
-            }
-          }, true);
-
-          // Expose for status updates
-          window.hpcMenuState = { menuOpen: false, sessions: {}, activeHpc: null };
-        }, 100);
-      })();
-
-      // Session management functions (called by updateMenu)
-      let sessions = {};
-      let activeHpc = null;
-
-      async function updateMenu() {
-        try {
-          const res = await fetch('/api/status');
-          const data = await res.json();
-          sessions = data.sessions || {};
-          activeHpc = data.activeHpc;
-
-          const container = document.getElementById('sessions-container');
-          container.innerHTML = '';
-
-          let hasRunning = false;
-
-          for (const [hpc, session] of Object.entries(sessions)) {
-            if (session && (session.status === 'running' || session.status === 'starting')) {
-              hasRunning = true;
-              const isActive = hpc === activeHpc;
-
-              const card = document.createElement('div');
-              card.className = 'session-card' + (isActive ? ' active' : '');
-              card.innerHTML = \`
-                <div class="session-header">
-                  <div class="session-name">
-                    <span class="dot"></span>
-                    \${hpc.charAt(0).toUpperCase() + hpc.slice(1)}
-                  </div>
-                  <div class="session-node">\${session.node || 'pending...'}</div>
-                </div>
-                <div class="session-stats">
-                  <div class="stat">⏱️ <span class="stat-value">\${session.remainingTime || session.walltime || '--'}</span></div>
-                  <div class="stat">🖥️ <span class="stat-value">\${session.cpus || '--'} cores</span></div>
-                  <div class="stat">🧠 <span class="stat-value">\${session.memory || '--'}</span></div>
-                </div>
-                <div class="session-actions">
-                  \${!isActive ? '<button onclick="switchSession(\\'' + hpc + '\\')">Switch</button>' : ''}
-                  <button onclick="stopSession(\\'\${hpc}\\', false)">Disconnect</button>
-                  <button class="danger" onclick="stopSession(\\'\${hpc}\\', true)">Kill Job</button>
-                </div>
-              \`;
-              container.appendChild(card);
-            }
-          }
-
-          // Update toggle button status
-          const toggle = document.getElementById('hpc-menu-toggle');
-          toggle.className = hasRunning ? 'running' : '';
-
-          // If no running sessions, redirect to launcher
-          if (!hasRunning) {
-            window.location.href = '/';
-          }
-
-        } catch (e) {
-          console.error('Menu update error:', e);
-        }
-      }
-
-      async function switchSession(hpc) {
-        await fetch('/api/switch/' + hpc, { method: 'POST' });
-        window.location.reload();
-      }
-
-      async function stopSession(hpc, cancelJob) {
-        if (cancelJob && !confirm('Cancel SLURM job on ' + hpc + '?')) return;
-
-        await fetch('/api/stop/' + hpc, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cancelJob })
-        });
-
-        updateMenu();
-      }
-
-      // Poll for updates
-      updateMenu();
-      setInterval(updateMenu, 30000); // Update every 30 seconds
-    </script>
+    <script src="/hpc-menu.js"></script>
   `;
 }
+
+// External menu script (bypasses CSP inline restrictions)
+function getMenuScript() {
+  return `
+(function() {
+  // Wait for DOM to be ready
+  setTimeout(function initHpcMenu() {
+    const overlay = document.getElementById('hpc-menu-overlay');
+    const toggle = document.getElementById('hpc-menu-toggle');
+    const panel = document.getElementById('hpc-menu-panel');
+
+    if (!overlay || !toggle || !panel) {
+      setTimeout(initHpcMenu, 500);
+      return;
+    }
+
+    // DEBUG: Visual indicator that JS loaded
+    toggle.textContent = '✓';
+    toggle.style.fontSize = '24px';
+
+    let menuOpen = false;
+
+    function handleInteraction(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      menuOpen = !menuOpen;
+      panel.classList.toggle('open', menuOpen);
+      toggle.style.background = menuOpen ? 'rgba(74,222,128,0.8)' : 'rgba(30,30,40,0.95)';
+    }
+
+    toggle.addEventListener('click', handleInteraction, true);
+    toggle.addEventListener('touchend', handleInteraction, true);
+    toggle.addEventListener('pointerup', handleInteraction, true);
+
+    document.addEventListener('click', function(e) {
+      if (menuOpen && !overlay.contains(e.target)) {
+        menuOpen = false;
+        panel.classList.remove('open');
+        toggle.style.background = 'rgba(30,30,40,0.95)';
+      }
+    }, true);
+
+    window.hpcMenuState = { menuOpen: false, sessions: {}, activeHpc: null };
+  }, 100);
+})();
+
+let sessions = {};
+let activeHpc = null;
+
+async function updateMenu() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    sessions = data.sessions || {};
+    activeHpc = data.activeHpc;
+
+    const container = document.getElementById('sessions-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    let hasRunning = false;
+
+    for (const [hpc, session] of Object.entries(sessions)) {
+      if (session && (session.status === 'running' || session.status === 'starting')) {
+        hasRunning = true;
+        const isActive = hpc === activeHpc;
+
+        const card = document.createElement('div');
+        card.className = 'session-card' + (isActive ? ' active' : '');
+        card.innerHTML = '<div class="session-header"><div class="session-name"><span class="dot"></span>' +
+          hpc.charAt(0).toUpperCase() + hpc.slice(1) +
+          '</div><div class="session-node">' + (session.node || 'pending...') + '</div></div>' +
+          '<div class="session-stats">' +
+          '<div class="stat">⏱️ <span class="stat-value">' + (session.remainingTime || session.walltime || '--') + '</span></div>' +
+          '<div class="stat">🖥️ <span class="stat-value">' + (session.cpus || '--') + ' cores</span></div>' +
+          '<div class="stat">🧠 <span class="stat-value">' + (session.memory || '--') + '</span></div></div>' +
+          '<div class="session-actions">' +
+          (!isActive ? '<button onclick="switchSession(\\'' + hpc + '\\')">Switch</button>' : '') +
+          '<button onclick="stopSession(\\'' + hpc + '\\', false)">Disconnect</button>' +
+          '<button class="danger" onclick="stopSession(\\'' + hpc + '\\', true)">Kill Job</button></div>';
+        container.appendChild(card);
+      }
+    }
+
+    const toggle = document.getElementById('hpc-menu-toggle');
+    if (toggle) toggle.className = hasRunning ? 'running' : '';
+
+    if (!hasRunning) {
+      window.location.href = '/';
+    }
+  } catch (e) {
+    console.error('Menu update error:', e);
+  }
+}
+
+async function switchSession(hpc) {
+  await fetch('/api/switch/' + hpc, { method: 'POST' });
+  window.location.reload();
+}
+
+async function stopSession(hpc, cancelJob) {
+  if (cancelJob && !confirm('Cancel SLURM job on ' + hpc + '?')) return;
+  await fetch('/api/stop/' + hpc, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cancelJob })
+  });
+  updateMenu();
+}
+
+updateMenu();
+setInterval(updateMenu, 30000);
+`;
+}
+
+// Serve menu JavaScript as external file (bypasses CSP)
+app.get('/hpc-menu.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(getMenuScript());
+});
 
 // Landing page / UI
 app.get('/', (req, res) => {
