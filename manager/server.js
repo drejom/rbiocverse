@@ -725,166 +725,20 @@ function renderLauncherPage() {
 </html>`;
 }
 
-// Floating menu overlay for code-server
+// Floating menu - use iframe to isolate from VS Code's event handling
 function renderFloatingMenu() {
   return `
-    <div id="hpc-menu-overlay">
-      <style>
-        /* Use !important to override VS Code styles */
-        #hpc-menu-overlay {
-          position: fixed !important;
-          top: 10px !important;
-          right: 10px !important;
-          left: auto !important;
-          bottom: auto !important;
-          z-index: 2147483647 !important; /* Max z-index */
-          font-family: system-ui, -apple-system, sans-serif !important;
-          pointer-events: auto !important;
-          cursor: move;
-          user-select: none;
-          isolation: isolate;
-        }
-        #hpc-menu-toggle {
-          width: 44px !important;
-          height: 44px !important;
-          border-radius: 10px !important;
-          background: rgba(30,30,40,0.95) !important;
-          border: 2px solid rgba(255,255,255,0.2) !important;
-          color: #fff !important;
-          cursor: pointer !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          font-size: 20px !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-          pointer-events: auto !important;
-          -webkit-appearance: none !important;
-          appearance: none !important;
-        }
-        #hpc-menu-toggle:hover {
-          transform: scale(1.05);
-          box-shadow: 0 6px 16px rgba(0,0,0,0.6) !important;
-        }
-        #hpc-menu-toggle.running { border-color: #4ade80 !important; }
-        #hpc-menu-toggle.starting { border-color: #fbbf24 !important; }
-
-        #hpc-menu-panel {
-          display: none;
-          position: absolute !important;
-          top: 50px !important;
-          right: 0 !important;
-          background: rgba(30,30,40,0.98) !important;
-          border: 1px solid rgba(255,255,255,0.1) !important;
-          border-radius: 12px !important;
-          padding: 15px !important;
-          min-width: 260px !important;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.4) !important;
-          color: #fff !important;
-          pointer-events: auto !important;
-          z-index: 2147483647 !important;
-        }
-        #hpc-menu-panel.open { display: block !important; }
-
-        .session-card {
-          background: rgba(255,255,255,0.05);
-          border-radius: 8px;
-          padding: 12px;
-          margin-bottom: 10px;
-        }
-        .session-card.active {
-          border: 1px solid #3b82f6;
-          background: rgba(59,130,246,0.1);
-        }
-        .session-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        .session-name {
-          font-weight: 600;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .session-name .dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #4ade80;
-        }
-        .session-node {
-          font-size: 0.8rem;
-          color: rgba(255,255,255,0.5);
-        }
-        .session-stats {
-          display: flex;
-          gap: 12px;
-          font-size: 0.9rem;
-          margin-bottom: 10px;
-        }
-        .stat {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-        .stat-value {
-          color: rgba(255,255,255,0.8);
-        }
-        .session-actions {
-          display: flex;
-          gap: 6px;
-        }
-        .session-actions button {
-          flex: 1;
-          padding: 8px;
-          border: 1px solid rgba(255,255,255,0.2);
-          border-radius: 6px;
-          background: rgba(255,255,255,0.05);
-          color: #fff;
-          cursor: pointer;
-          font-size: 0.85rem;
-          transition: background 0.2s;
-        }
-        .session-actions button:hover {
-          background: rgba(255,255,255,0.1);
-        }
-        .session-actions button.danger:hover {
-          background: rgba(239,68,68,0.3);
-          border-color: rgba(239,68,68,0.5);
-        }
-
-        .menu-footer {
-          border-top: 1px solid rgba(255,255,255,0.1);
-          padding-top: 10px;
-          margin-top: 5px;
-        }
-        .menu-footer button {
-          width: 100%;
-          padding: 10px;
-          border: 1px solid rgba(255,255,255,0.2);
-          border-radius: 8px;
-          background: rgba(255,255,255,0.05);
-          color: #fff;
-          cursor: pointer;
-          font-size: 0.9rem;
-        }
-        .menu-footer button:hover {
-          background: rgba(255,255,255,0.1);
-        }
-      </style>
-
-      <button id="hpc-menu-toggle" class="running">🖥️</button>
-
-      <div id="hpc-menu-panel">
-        <div id="sessions-container"></div>
-        <div class="menu-footer">
-          <button onclick="window.location.href='/'">➕ New Session</button>
-        </div>
-      </div>
-    </div>
-
-    <script src="/hpc-menu.js"></script>
+    <iframe id="hpc-menu-frame" src="/hpc-menu-frame" style="
+      position: fixed !important;
+      top: 10px !important;
+      right: 10px !important;
+      width: 320px !important;
+      height: 400px !important;
+      border: none !important;
+      z-index: 2147483647 !important;
+      pointer-events: auto !important;
+      background: transparent !important;
+    "></iframe>
   `;
 }
 
@@ -1008,6 +862,159 @@ setInterval(updateMenu, 30000);
 app.get('/hpc-menu.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(getMenuScript());
+});
+
+// Serve the menu iframe content
+app.get('/hpc-menu-frame', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+    #toggle {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(30,30,40,0.95);
+      border: 2px solid #4ade80;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: absolute;
+      top: 0;
+      right: 0;
+    }
+    #toggle:hover { transform: scale(1.05); }
+    #toggle.open { background: rgba(74,222,128,0.8); }
+    #panel {
+      display: none;
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 280px;
+      background: rgba(30,30,40,0.98);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      color: #fff;
+    }
+    #panel.open { display: block; }
+    .session {
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .session.active { border: 1px solid #3b82f6; }
+    .session-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .session-name { font-weight: 600; }
+    .session-node { font-size: 0.8rem; color: rgba(255,255,255,0.5); }
+    .stats { display: flex; gap: 10px; font-size: 0.85rem; margin-bottom: 10px; color: rgba(255,255,255,0.7); }
+    .actions { display: flex; gap: 6px; }
+    .actions button {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .actions button:hover { background: rgba(255,255,255,0.1); }
+    .actions button.danger:hover { background: rgba(239,68,68,0.3); }
+    .footer { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px; }
+    .footer button {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+    }
+    .footer button:hover { background: rgba(255,255,255,0.1); }
+  </style>
+</head>
+<body>
+  <button id="toggle">🖥️</button>
+  <div id="panel">
+    <div id="sessions"></div>
+    <div class="footer">
+      <button onclick="parent.location.href='/'">➕ New Session</button>
+    </div>
+  </div>
+
+  <script>
+    const toggle = document.getElementById('toggle');
+    const panel = document.getElementById('panel');
+    let open = false;
+
+    toggle.addEventListener('click', () => {
+      open = !open;
+      toggle.classList.toggle('open', open);
+      panel.classList.toggle('open', open);
+    });
+
+    async function update() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const sessions = data.sessions || {};
+        const active = data.activeHpc;
+        const container = document.getElementById('sessions');
+        container.innerHTML = '';
+
+        for (const [hpc, s] of Object.entries(sessions)) {
+          if (s && (s.status === 'running' || s.status === 'starting')) {
+            const div = document.createElement('div');
+            div.className = 'session' + (hpc === active ? ' active' : '');
+            div.innerHTML = '<div class="session-header"><span class="session-name">' +
+              hpc.charAt(0).toUpperCase() + hpc.slice(1) + '</span>' +
+              '<span class="session-node">' + (s.node || '...') + '</span></div>' +
+              '<div class="stats">⏱️' + (s.remainingTime || s.walltime || '--') +
+              ' 🖥️' + (s.cpus || '-') + ' 🧠' + (s.memory || '-') + '</div>' +
+              '<div class="actions">' +
+              (hpc !== active ? '<button onclick="sw(\\'' + hpc + '\\')">Switch</button>' : '') +
+              '<button onclick="stop(\\'' + hpc + '\\',0)">Disconnect</button>' +
+              '<button class="danger" onclick="stop(\\'' + hpc + '\\',1)">Kill</button></div>';
+            container.appendChild(div);
+          }
+        }
+      } catch(e) {}
+    }
+
+    async function sw(hpc) {
+      await fetch('/api/switch/' + hpc, {method:'POST'});
+      parent.location.reload();
+    }
+
+    async function stop(hpc, kill) {
+      if (kill && !confirm('Kill job?')) return;
+      await fetch('/api/stop/' + hpc, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({cancelJob: !!kill})
+      });
+      update();
+    }
+
+    update();
+    setInterval(update, 30000);
+  </script>
+</body>
+</html>`);
 });
 
 // Landing page / UI
