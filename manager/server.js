@@ -1006,6 +1006,28 @@ function renderFloatingMenu() {
       pointer-events: auto !important;
       background: transparent !important;
     "></iframe>
+    <script>
+      (function() {
+        const frame = document.getElementById('hpc-menu-frame');
+        if (!frame) return;
+
+        // Listen for drag messages from iframe
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'hpc-menu-drag') {
+            const rect = frame.getBoundingClientRect();
+            let newTop = rect.top + e.data.dy;
+            let newRight = (window.innerWidth - rect.right) - e.data.dx;
+
+            // Keep within viewport
+            newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
+            newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
+
+            frame.style.top = newTop + 'px';
+            frame.style.right = newRight + 'px';
+          }
+        });
+      })();
+    </script>
   `;
 }
 
@@ -1151,7 +1173,7 @@ app.get('/hpc-menu-frame', (req, res) => {
       background: rgba(30,30,40,0.95);
       border: 2px solid #4ade80;
       color: #fff;
-      cursor: pointer;
+      cursor: grab;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1160,8 +1182,12 @@ app.get('/hpc-menu-frame', (req, res) => {
       position: absolute;
       top: 0;
       right: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
     }
     #toggle:hover { transform: scale(1.05); }
+    #toggle:active { cursor: grabbing; }
     #toggle.open { background: rgba(74,222,128,0.8); }
     #toggle.warning { border-color: #fbbf24; }
     #toggle.critical { border-color: #ef4444; animation: pulse 1s infinite; }
@@ -1251,11 +1277,53 @@ app.get('/hpc-menu-frame', (req, res) => {
     let countdown = null;
     let activeHpc = null;
 
-    toggle.addEventListener('click', () => {
-      open = !open;
-      toggle.classList.toggle('open', open);
-      panel.classList.toggle('open', open);
-    });
+    // Drag functionality
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    let hasMoved = false;
+
+    function onDragStart(e) {
+      isDragging = true;
+      hasMoved = false;
+      const touch = e.touches ? e.touches[0] : e;
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+      e.preventDefault();
+    }
+
+    function onDragMove(e) {
+      if (!isDragging) return;
+      const touch = e.touches ? e.touches[0] : e;
+      const dx = touch.clientX - dragStartX;
+      const dy = touch.clientY - dragStartY;
+
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMoved = true;
+        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, '*');
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+      }
+    }
+
+    function onDragEnd() {
+      isDragging = false;
+      // Only toggle panel if it was a click (not a drag)
+      if (!hasMoved) {
+        open = !open;
+        toggle.classList.toggle('open', open);
+        panel.classList.toggle('open', open);
+      }
+    }
+
+    // Mouse events
+    toggle.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+
+    // Touch events (for iPad)
+    toggle.addEventListener('touchstart', onDragStart, { passive: false });
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
 
     function formatTime(seconds) {
       if (!seconds || seconds <= 0) return '0m';
@@ -1288,7 +1356,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<button onclick="parent.location.href=\\'/\\'">← Main Menu</button>' +
+        '<button onclick="parent.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1357,8 +1425,8 @@ app.get('/hpc-menu-frame', (req, res) => {
 
 // Landing page / UI
 app.get('/', (req, res) => {
-  // If there's an active running session, redirect to code
-  if (hasRunningSession()) {
+  // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
+  if (!req.query.menu && hasRunningSession()) {
     return res.redirect('/code/');
   }
 
