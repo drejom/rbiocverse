@@ -736,27 +736,32 @@ function renderFloatingMenu() {
           right: 10px;
           z-index: 999999;
           font-family: system-ui, -apple-system, sans-serif;
+          cursor: move;
+          user-select: none;
         }
         #hpc-menu-toggle {
           width: 44px;
           height: 44px;
           border-radius: 10px;
           background: rgba(30,30,40,0.95);
-          border: 1px solid rgba(255,255,255,0.1);
+          border: 2px solid rgba(255,255,255,0.2);
           color: #fff;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 20px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          transition: transform 0.2s;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+          transition: transform 0.2s, box-shadow 0.2s;
+          pointer-events: auto;
         }
         #hpc-menu-toggle:hover {
           transform: scale(1.05);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.6);
         }
         #hpc-menu-toggle.running { border-color: #4ade80; }
         #hpc-menu-toggle.starting { border-color: #fbbf24; }
+        #hpc-menu-toggle.dragging { cursor: move; opacity: 0.8; }
 
         #hpc-menu-panel {
           display: none;
@@ -770,6 +775,7 @@ function renderFloatingMenu() {
           min-width: 260px;
           box-shadow: 0 8px 24px rgba(0,0,0,0.4);
           color: #fff;
+          pointer-events: auto;
         }
         #hpc-menu-panel.open { display: block; }
 
@@ -862,7 +868,7 @@ function renderFloatingMenu() {
         }
       </style>
 
-      <button id="hpc-menu-toggle" class="running" onclick="toggleMenu()">🖥️</button>
+      <button id="hpc-menu-toggle" class="running">🖥️</button>
 
       <div id="hpc-menu-panel">
         <div id="sessions-container"></div>
@@ -876,11 +882,84 @@ function renderFloatingMenu() {
       let menuOpen = false;
       let activeHpc = null;
       let sessions = {};
+      let isDragging = false;
+      let dragStartX, dragStartY, startLeft, startTop;
 
-      function toggleMenu() {
+      function toggleMenu(e) {
+        // Don't toggle if we just finished dragging
+        if (isDragging) return;
+        e.stopPropagation();
         menuOpen = !menuOpen;
         document.getElementById('hpc-menu-panel').classList.toggle('open', menuOpen);
       }
+
+      // Drag functionality
+      (function initDrag() {
+        const overlay = document.getElementById('hpc-menu-overlay');
+        const toggle = document.getElementById('hpc-menu-toggle');
+        let wasDragged = false;
+
+        toggle.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return; // Only left click
+          e.preventDefault();
+          wasDragged = false;
+          isDragging = true;
+
+          const rect = overlay.getBoundingClientRect();
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          startLeft = rect.left;
+          startTop = rect.top;
+
+          toggle.classList.add('dragging');
+          document.addEventListener('mousemove', onDrag);
+          document.addEventListener('mouseup', onDragEnd);
+        });
+
+        function onDrag(e) {
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+
+          // Only consider it a drag if moved more than 5px
+          if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            wasDragged = true;
+          }
+
+          const newLeft = startLeft + dx;
+          const newTop = startTop + dy;
+
+          // Keep within viewport
+          const maxX = window.innerWidth - overlay.offsetWidth;
+          const maxY = window.innerHeight - overlay.offsetHeight;
+
+          overlay.style.left = Math.max(0, Math.min(newLeft, maxX)) + 'px';
+          overlay.style.top = Math.max(0, Math.min(newTop, maxY)) + 'px';
+          overlay.style.right = 'auto';
+        }
+
+        function onDragEnd(e) {
+          document.removeEventListener('mousemove', onDrag);
+          document.removeEventListener('mouseup', onDragEnd);
+          toggle.classList.remove('dragging');
+
+          // Small delay before allowing click
+          setTimeout(() => {
+            isDragging = false;
+            // If dragged, don't toggle menu
+            if (!wasDragged) {
+              toggleMenu(e);
+            }
+          }, 50);
+        }
+
+        // Handle click separately (for non-drag clicks)
+        toggle.addEventListener('click', (e) => {
+          if (!wasDragged && !isDragging) {
+            toggleMenu(e);
+          }
+          wasDragged = false;
+        });
+      })();
 
       // Close menu when clicking outside
       document.addEventListener('click', (e) => {
