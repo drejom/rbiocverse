@@ -1372,7 +1372,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<a href="/?menu=1" target="_top" style="display:block;width:100%;padding:10px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;background:rgba(255,255,255,0.05);color:#fff;text-decoration:none;text-align:center;font-size:0.9rem;">← Main Menu</a>' +
+        '<button onclick="parent.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1432,12 +1432,7 @@ app.get('/hpc-menu-frame', (req, res) => {
       } catch(e) {
         console.error('Kill error:', e);
       }
-      // Navigate using top-level link
-      const link = document.createElement('a');
-      link.href = '/?menu=1';
-      link.target = '_top';
-      document.body.appendChild(link);
-      link.click();
+      parent.location.href = '/?menu=1';
     }
 
     fetchStatus();
