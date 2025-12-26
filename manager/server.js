@@ -1322,6 +1322,8 @@ app.get('/hpc-menu-frame', (req, res) => {
     }
 
     function onDragEnd() {
+      // Only process if we were actually dragging (started on toggle)
+      if (!isDragging) return;
       isDragging = false;
       // Only toggle panel if it was a click (not a drag)
       if (!hasMoved) {
