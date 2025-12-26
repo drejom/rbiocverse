@@ -879,95 +879,114 @@ function renderFloatingMenu() {
     </div>
 
     <script>
-      let menuOpen = false;
-      let activeHpc = null;
-      let sessions = {};
-      let isDragging = false;
-      let dragStartX, dragStartY, startLeft, startTop;
+      (function() {
+        // Wait for DOM to be ready
+        setTimeout(function initHpcMenu() {
+          const overlay = document.getElementById('hpc-menu-overlay');
+          const toggle = document.getElementById('hpc-menu-toggle');
+          const panel = document.getElementById('hpc-menu-panel');
 
-      function toggleMenu(e) {
-        // Don't toggle if we just finished dragging
-        if (isDragging) return;
-        e.stopPropagation();
-        menuOpen = !menuOpen;
-        document.getElementById('hpc-menu-panel').classList.toggle('open', menuOpen);
-      }
-
-      // Drag functionality
-      (function initDrag() {
-        const overlay = document.getElementById('hpc-menu-overlay');
-        const toggle = document.getElementById('hpc-menu-toggle');
-        let wasDragged = false;
-
-        toggle.addEventListener('mousedown', (e) => {
-          if (e.button !== 0) return; // Only left click
-          e.preventDefault();
-          wasDragged = false;
-          isDragging = true;
-
-          const rect = overlay.getBoundingClientRect();
-          dragStartX = e.clientX;
-          dragStartY = e.clientY;
-          startLeft = rect.left;
-          startTop = rect.top;
-
-          toggle.classList.add('dragging');
-          document.addEventListener('mousemove', onDrag);
-          document.addEventListener('mouseup', onDragEnd);
-        });
-
-        function onDrag(e) {
-          const dx = e.clientX - dragStartX;
-          const dy = e.clientY - dragStartY;
-
-          // Only consider it a drag if moved more than 5px
-          if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            wasDragged = true;
+          if (!overlay || !toggle || !panel) {
+            console.error('HPC Menu: Elements not found, retrying...');
+            setTimeout(initHpcMenu, 500);
+            return;
           }
 
-          const newLeft = startLeft + dx;
-          const newTop = startTop + dy;
+          console.log('HPC Menu: Initialized');
 
-          // Keep within viewport
-          const maxX = window.innerWidth - overlay.offsetWidth;
-          const maxY = window.innerHeight - overlay.offsetHeight;
+          let menuOpen = false;
+          let isDragging = false;
+          let wasDragged = false;
+          let dragStartX, dragStartY, startLeft, startTop;
 
-          overlay.style.left = Math.max(0, Math.min(newLeft, maxX)) + 'px';
-          overlay.style.top = Math.max(0, Math.min(newTop, maxY)) + 'px';
-          overlay.style.right = 'auto';
-        }
-
-        function onDragEnd(e) {
-          document.removeEventListener('mousemove', onDrag);
-          document.removeEventListener('mouseup', onDragEnd);
-          toggle.classList.remove('dragging');
-
-          // Small delay before allowing click
-          setTimeout(() => {
-            isDragging = false;
-            // If dragged, don't toggle menu
-            if (!wasDragged) {
-              toggleMenu(e);
+          // Toggle menu panel
+          function toggleMenu() {
+            if (wasDragged) {
+              wasDragged = false;
+              return;
             }
-          }, 50);
-        }
-
-        // Handle click separately (for non-drag clicks)
-        toggle.addEventListener('click', (e) => {
-          if (!wasDragged && !isDragging) {
-            toggleMenu(e);
+            menuOpen = !menuOpen;
+            panel.classList.toggle('open', menuOpen);
+            console.log('HPC Menu: toggled to', menuOpen);
           }
-          wasDragged = false;
-        });
+
+          // Drag handlers
+          function onMouseDown(e) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            isDragging = true;
+            wasDragged = false;
+
+            const rect = overlay.getBoundingClientRect();
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            startLeft = rect.left;
+            startTop = rect.top;
+
+            document.addEventListener('mousemove', onMouseMove, true);
+            document.addEventListener('mouseup', onMouseUp, true);
+          }
+
+          function onMouseMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+              wasDragged = true;
+            }
+
+            const newLeft = Math.max(0, Math.min(startLeft + dx, window.innerWidth - 60));
+            const newTop = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+
+            overlay.style.left = newLeft + 'px';
+            overlay.style.top = newTop + 'px';
+            overlay.style.right = 'auto';
+          }
+
+          function onMouseUp(e) {
+            document.removeEventListener('mousemove', onMouseMove, true);
+            document.removeEventListener('mouseup', onMouseUp, true);
+            isDragging = false;
+
+            if (!wasDragged) {
+              toggleMenu();
+            }
+          }
+
+          function onClick(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isDragging && !wasDragged) {
+              toggleMenu();
+            }
+          }
+
+          // Attach event listeners with capture to beat VS Code
+          toggle.addEventListener('mousedown', onMouseDown, true);
+          toggle.addEventListener('click', onClick, true);
+
+          // Close when clicking outside
+          document.addEventListener('click', function(e) {
+            if (menuOpen && !overlay.contains(e.target)) {
+              menuOpen = false;
+              panel.classList.remove('open');
+            }
+          }, true);
+
+          // Expose for status updates
+          window.hpcMenuState = { menuOpen: false, sessions: {}, activeHpc: null };
+        }, 100);
       })();
 
-      // Close menu when clicking outside
-      document.addEventListener('click', (e) => {
-        if (!e.target.closest('#hpc-menu-overlay')) {
-          menuOpen = false;
-          document.getElementById('hpc-menu-panel').classList.remove('open');
-        }
-      });
+      // Session management functions (called by updateMenu)
+      let sessions = {};
+      let activeHpc = null;
 
       async function updateMenu() {
         try {
