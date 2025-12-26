@@ -1006,30 +1006,40 @@ function renderFloatingMenu() {
       pointer-events: auto !important;
       background: transparent !important;
     "></iframe>
-    <script>
-      (function() {
-        const frame = document.getElementById('hpc-menu-frame');
-        if (!frame) return;
-
-        // Listen for drag messages from iframe
-        window.addEventListener('message', function(e) {
-          if (e.data && e.data.type === 'hpc-menu-drag') {
-            const rect = frame.getBoundingClientRect();
-            let newTop = rect.top + e.data.dy;
-            let newRight = (window.innerWidth - rect.right) - e.data.dx;
-
-            // Keep within viewport
-            newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
-            newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
-
-            frame.style.top = newTop + 'px';
-            frame.style.right = newRight + 'px';
-          }
-        });
-      })();
-    </script>
+    <script src="/hpc-drag.js"></script>
   `;
 }
+
+// Serve drag script externally (bypasses CSP)
+app.get('/hpc-drag.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(`
+(function() {
+  function initDrag() {
+    const frame = document.getElementById('hpc-menu-frame');
+    if (!frame) {
+      setTimeout(initDrag, 100);
+      return;
+    }
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'hpc-menu-drag') {
+        const rect = frame.getBoundingClientRect();
+        let newTop = rect.top + e.data.dy;
+        let newRight = (window.innerWidth - rect.right) - e.data.dx;
+
+        newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
+        newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
+
+        frame.style.top = newTop + 'px';
+        frame.style.right = newRight + 'px';
+      }
+    });
+  }
+  initDrag();
+})();
+  `);
+});
 
 // External menu script (bypasses CSP inline restrictions)
 function getMenuScript() {
@@ -1356,7 +1366,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<button onclick="parent.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
+        '<button onclick="window.top.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1412,7 +1422,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({cancelJob: true})
       });
-      parent.location.href = '/';
+      window.top.location.href = '/?menu=1';
     }
 
     fetchStatus();
