@@ -351,12 +351,6 @@ app.get('/api/cluster-status', async (req, res) => {
   }
 });
 
-// Debug endpoint for UI events
-app.post('/api/log', (req, res) => {
-  console.log('UI Event:', req.body);
-  res.json({ ok: true });
-});
-
 app.post('/api/launch', async (req, res) => {
   const { hpc = config.defaultHpc, cpus = config.defaultCpus, mem = config.defaultMem, time = config.defaultTime } = req.body;
 
@@ -1012,46 +1006,8 @@ function renderFloatingMenu() {
       pointer-events: auto !important;
       background: transparent !important;
     "></iframe>
-    <script src="/hpc-drag.js"></script>
   `;
 }
-
-// Serve drag script externally (bypasses CSP)
-app.get('/hpc-drag.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  res.send(`
-(function() {
-  function initDrag() {
-    const frame = document.getElementById('hpc-menu-frame');
-    if (!frame) {
-      setTimeout(initDrag, 100);
-      return;
-    }
-
-    window.addEventListener('message', function(e) {
-      if (!e.data) return;
-
-      if (e.data.type === 'hpc-menu-drag') {
-        const rect = frame.getBoundingClientRect();
-        let newTop = rect.top + e.data.dy;
-        let newRight = (window.innerWidth - rect.right) - e.data.dx;
-
-        newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
-        newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
-
-        frame.style.top = newTop + 'px';
-        frame.style.right = newRight + 'px';
-      }
-
-      if (e.data.type === 'hpc-menu-navigate') {
-        window.location.href = e.data.url;
-      }
-    });
-  }
-  initDrag();
-})();
-  `);
-});
 
 // External menu script (bypasses CSP inline restrictions)
 function getMenuScript() {
@@ -1195,7 +1151,7 @@ app.get('/hpc-menu-frame', (req, res) => {
       background: rgba(30,30,40,0.95);
       border: 2px solid #4ade80;
       color: #fff;
-      cursor: grab;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1204,12 +1160,8 @@ app.get('/hpc-menu-frame', (req, res) => {
       position: absolute;
       top: 0;
       right: 0;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
     }
     #toggle:hover { transform: scale(1.05); }
-    #toggle:active { cursor: grabbing; }
     #toggle.open { background: rgba(74,222,128,0.8); }
     #toggle.warning { border-color: #fbbf24; }
     #toggle.critical { border-color: #ef4444; animation: pulse 1s infinite; }
@@ -1299,55 +1251,11 @@ app.get('/hpc-menu-frame', (req, res) => {
     let countdown = null;
     let activeHpc = null;
 
-    // Drag functionality
-    let isDragging = false;
-    let dragStartX, dragStartY;
-    let hasMoved = false;
-
-    function onDragStart(e) {
-      isDragging = true;
-      hasMoved = false;
-      const touch = e.touches ? e.touches[0] : e;
-      dragStartX = touch.clientX;
-      dragStartY = touch.clientY;
-      e.preventDefault();
-    }
-
-    function onDragMove(e) {
-      if (!isDragging) return;
-      const touch = e.touches ? e.touches[0] : e;
-      const dx = touch.clientX - dragStartX;
-      const dy = touch.clientY - dragStartY;
-
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        hasMoved = true;
-        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, '*');
-        dragStartX = touch.clientX;
-        dragStartY = touch.clientY;
-      }
-    }
-
-    function onDragEnd() {
-      // Only process if we were actually dragging (started on toggle)
-      if (!isDragging) return;
-      isDragging = false;
-      // Only toggle panel if it was a click (not a drag)
-      if (!hasMoved) {
-        open = !open;
-        toggle.classList.toggle('open', open);
-        panel.classList.toggle('open', open);
-      }
-    }
-
-    // Mouse events
-    toggle.addEventListener('mousedown', onDragStart);
-    document.addEventListener('mousemove', onDragMove);
-    document.addEventListener('mouseup', onDragEnd);
-
-    // Touch events (for iPad)
-    toggle.addEventListener('touchstart', onDragStart, { passive: false });
-    document.addEventListener('touchmove', onDragMove, { passive: false });
-    document.addEventListener('touchend', onDragEnd);
+    toggle.addEventListener('click', () => {
+      open = !open;
+      toggle.classList.toggle('open', open);
+      panel.classList.toggle('open', open);
+    });
 
     function formatTime(seconds) {
       if (!seconds || seconds <= 0) return '0m';
@@ -1380,7 +1288,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<button onclick="goToMenu()">← Main Menu</button>' +
+        '<button onclick="parent.location.href=\\'/\\'">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1429,34 +1337,14 @@ app.get('/hpc-menu-frame', (req, res) => {
       }
     }
 
-    function goToMenu() {
-      console.log('goToMenu clicked');
-      fetch('/api/log', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event: 'goToMenu', time: new Date().toISOString()})
-      }).catch(e => console.error('Log error:', e));
-      window.top.location.href = '/?menu=1';
-    }
-
     async function killJob() {
-      console.log('killJob clicked');
-      fetch('/api/log', {
+      if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
+      await fetch('/api/stop/' + activeHpc, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event: 'killJob', hpc: activeHpc, time: new Date().toISOString()})
-      }).catch(e => console.error('Log error:', e));
-      if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
-      try {
-        await fetch('/api/stop/' + activeHpc, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({cancelJob: true})
-        });
-      } catch(e) {
-        console.error('Kill error:', e);
-      }
-      window.top.location.href = '/?menu=1';
+        body: JSON.stringify({cancelJob: true})
+      });
+      parent.location.href = '/';
     }
 
     fetchStatus();
@@ -1469,8 +1357,8 @@ app.get('/hpc-menu-frame', (req, res) => {
 
 // Landing page / UI
 app.get('/', (req, res) => {
-  // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
-  if (!req.query.menu && hasRunningSession()) {
+  // If there's an active running session, redirect to code
+  if (hasRunningSession()) {
     return res.redirect('/code/');
   }
 
@@ -1492,15 +1380,12 @@ app.use((req, res, next) => {
 
 // Proxy /code/* to code-server when running, with floating menu
 app.use('/code', (req, res, next) => {
-  console.log(`/code route: path=${req.path} hasSession=${hasRunningSession()}`);
   if (!hasRunningSession()) {
-    console.log('/code: no session, redirecting to /');
     return res.redirect('/');
   }
 
   // For the main /code/ request, inject floating menu
   if (req.path === '/' || req.path === '') {
-    console.log('/code: main page, injecting floating menu');
     // Modify the response to inject our floating menu
     const originalWrite = res.write;
     const originalEnd = res.end;
