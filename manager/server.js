@@ -66,6 +66,22 @@ function createSession() {
   };
 }
 
+// SECURITY: Validate sbatch inputs to prevent command injection
+function validateSbatchInputs(cpus, mem, time) {
+  // CPUs: must be integer 1-128
+  if (!/^\d+$/.test(cpus) || parseInt(cpus) < 1 || parseInt(cpus) > 128) {
+    throw new Error('Invalid CPU value: must be integer 1-128');
+  }
+  // Memory: must match pattern like "40G", "100M", "8g"
+  if (!/^\d+[gGmM]$/.test(mem)) {
+    throw new Error('Invalid memory value: use format like "40G" or "100M"');
+  }
+  // Time: must match HH:MM:SS or D-HH:MM:SS format
+  if (!/^(\d{1,2}-)?\d{1,2}:\d{2}:\d{2}$/.test(time)) {
+    throw new Error('Invalid time value: use format like "12:00:00" or "1-00:00:00"');
+  }
+}
+
 // Proxy for forwarding to code-server when tunnel is active
 const proxy = httpProxy.createProxyServer({
   ws: true,
@@ -384,6 +400,13 @@ app.post('/api/launch', async (req, res) => {
   // Reject if starting/pending (in progress)
   if (session.status !== 'idle') {
     return res.status(400).json({ error: `${hpc} is already ${session.status}` });
+  }
+
+  // SECURITY: Validate inputs before using in shell command
+  try {
+    validateSbatchInputs(cpus, mem, time);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
   }
 
   session.status = 'starting';
