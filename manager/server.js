@@ -169,7 +169,6 @@ async function startTunnel(hpc, node) {
   console.log(`Starting tunnel: localhost:${port} -> ${node}:${port} via ${cluster.host}`);
 
   const tunnel = spawn('ssh', [
-    '-v',  // Verbose for debugging
     '-o', 'StrictHostKeyChecking=no',
     '-o', 'ServerAliveInterval=30',
     '-o', 'ExitOnForwardFailure=yes',
@@ -178,7 +177,7 @@ async function startTunnel(hpc, node) {
     `${config.hpcUser}@${cluster.host}`
   ]);
 
-  // Log stderr for debugging
+  // Log SSH errors
   tunnel.stderr.on('data', (data) => {
     const line = data.toString().trim();
     if (line) console.log(`SSH: ${line}`);
@@ -203,7 +202,6 @@ async function startTunnel(hpc, node) {
   });
 
   // Wait for tunnel to establish (check port becomes available)
-  console.log('Waiting for tunnel to establish...');
   for (let i = 0; i < 30; i++) {  // 30 seconds max
     await new Promise(r => setTimeout(r, 1000));
 
@@ -349,12 +347,6 @@ app.get('/api/cluster-status', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
-
-// Debug endpoint for UI events
-app.post('/api/log', (req, res) => {
-  console.log('UI Event:', req.body);
-  res.json({ ok: true });
 });
 
 app.post('/api/launch', async (req, res) => {
@@ -1430,22 +1422,10 @@ app.get('/hpc-menu-frame', (req, res) => {
     }
 
     function goToMenu() {
-      console.log('goToMenu clicked');
-      fetch('/api/log', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event: 'goToMenu', time: new Date().toISOString()})
-      }).catch(e => console.error('Log error:', e));
       window.top.location.href = '/?menu=1';
     }
 
     async function killJob() {
-      console.log('killJob clicked');
-      fetch('/api/log', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event: 'killJob', hpc: activeHpc, time: new Date().toISOString()})
-      }).catch(e => console.error('Log error:', e));
       if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
       try {
         await fetch('/api/stop/' + activeHpc, {
@@ -1479,9 +1459,7 @@ app.get('/', (req, res) => {
 
 // Proxy VS Code asset paths directly (stable-xxx, vscode-xxx, etc.)
 app.use((req, res, next) => {
-  // Match paths starting with /stable-, /vscode-, /oss-dev
   if (req.path.match(/^\/(stable-|vscode-|oss-dev)/)) {
-    console.log(`Asset path: ${req.path}`);
     if (!hasRunningSession()) {
       return res.redirect('/');
     }
@@ -1543,24 +1521,19 @@ const server = app.listen(PORT, () => {
 
 // Handle WebSocket upgrades for code-server
 server.on('upgrade', (req, socket, head) => {
-  console.log(`WebSocket upgrade request: url=${req.url} headers=${JSON.stringify(req.headers)}`);
-
   if (hasRunningSession()) {
-    // Proxy WebSocket for /code, /stable-, /vscode-, /oss-dev, or root paths
+    // Proxy WebSocket for /code, /stable-, /vscode-, /oss-dev paths
     if (req.url.startsWith('/code') ||
         req.url.startsWith('/stable-') ||
         req.url.startsWith('/vscode-') ||
         req.url.startsWith('/oss-dev') ||
         req.url === '/' ||
         req.url.startsWith('/?')) {
-      console.log(`WebSocket proxying: ${req.url}`);
       proxy.ws(req, socket, head);
     } else {
-      console.log(`WebSocket rejected (no match): ${req.url}`);
       socket.destroy();
     }
   } else {
-    console.log(`WebSocket rejected (no session): ${req.url}`);
     socket.destroy();
   }
 });
