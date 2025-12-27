@@ -1521,6 +1521,7 @@ const server = app.listen(PORT, () => {
 
 // Handle WebSocket upgrades for code-server
 server.on('upgrade', (req, socket, head) => {
+  console.log(`WebSocket: ${req.url}`);
   if (hasRunningSession()) {
     // Proxy WebSocket for /code, /stable-, /vscode-, /oss-dev paths
     if (req.url.startsWith('/code') ||
@@ -1531,9 +1532,11 @@ server.on('upgrade', (req, socket, head) => {
         req.url.startsWith('/?')) {
       proxy.ws(req, socket, head);
     } else {
+      console.log(`WebSocket rejected: ${req.url}`);
       socket.destroy();
     }
   } else {
+    console.log('WebSocket rejected: no session');
     socket.destroy();
   }
 });
