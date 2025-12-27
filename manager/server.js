@@ -351,6 +351,12 @@ app.get('/api/cluster-status', async (req, res) => {
   }
 });
 
+// Debug endpoint for UI events
+app.post('/api/log', (req, res) => {
+  console.log('UI Event:', req.body);
+  res.json({ ok: true });
+});
+
 app.post('/api/launch', async (req, res) => {
   const { hpc = config.defaultHpc, cpus = config.defaultCpus, mem = config.defaultMem, time = config.defaultTime } = req.body;
 
@@ -1374,7 +1380,7 @@ app.get('/hpc-menu-frame', (req, res) => {
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
-        '<button onclick="parent.location.href=\\'/?menu=1\\'">← Main Menu</button>' +
+        '<button onclick="goToMenu()">← Main Menu</button>' +
         '<button class="danger" onclick="killJob()">Kill Job</button>' +
         '</div>';
     }
@@ -1423,7 +1429,23 @@ app.get('/hpc-menu-frame', (req, res) => {
       }
     }
 
+    function goToMenu() {
+      console.log('goToMenu clicked');
+      fetch('/api/log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event: 'goToMenu', time: new Date().toISOString()})
+      }).catch(e => console.error('Log error:', e));
+      window.top.location.href = '/?menu=1';
+    }
+
     async function killJob() {
+      console.log('killJob clicked');
+      fetch('/api/log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event: 'killJob', hpc: activeHpc, time: new Date().toISOString()})
+      }).catch(e => console.error('Log error:', e));
       if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
       try {
         await fetch('/api/stop/' + activeHpc, {
@@ -1434,7 +1456,7 @@ app.get('/hpc-menu-frame', (req, res) => {
       } catch(e) {
         console.error('Kill error:', e);
       }
-      parent.location.href = '/?menu=1';
+      window.top.location.href = '/?menu=1';
     }
 
     fetchStatus();
