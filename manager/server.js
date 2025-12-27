@@ -74,6 +74,13 @@ function createSession() {
 const proxy = httpProxy.createProxyServer({
   ws: true,
   target: `http://127.0.0.1:${config.codeServerPort}`,
+  xfwd: true,  // Pass X-Forwarded-* headers
+});
+
+// Ensure code-server knows we're behind HTTPS
+proxy.on('proxyReq', (proxyReq, req) => {
+  proxyReq.setHeader('X-Forwarded-Proto', 'https');
+  proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
 });
 
 proxy.on('error', (err, req, res) => {
