@@ -596,6 +596,7 @@ function renderLauncherPage() {
     }
     .status-dot.running { background: #4ade80; }
     .status-dot.pending { background: #fbbf24; animation: pulse 1.5s infinite; }
+    .status-dot.killing { background: #f87171; animation: pulse 0.5s infinite; }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
@@ -935,6 +936,14 @@ function renderLauncherPage() {
 
         if (!res.ok) {
           const data = await res.json();
+          // If already running, offer to connect
+          if (data.error && data.error.includes('already')) {
+            overlay.style.display = 'none';
+            if (confirm(hpc + ' already has a running session. Connect to it?')) {
+              connect(hpc);
+            }
+            return;
+          }
           throw new Error(data.error || 'Launch failed');
         }
 
@@ -973,19 +982,39 @@ function renderLauncherPage() {
       }
     }
 
-    // Kill job
+    // Kill job with visual feedback
     async function killJob(hpc) {
       if (!confirm('Kill the ' + hpc + ' job?')) return;
 
+      // Show killing state
+      const card = document.getElementById('cluster-' + hpc);
+      if (card) {
+        const statusEl = card.querySelector('.status');
+        if (statusEl) statusEl.innerHTML = '<span class="status-dot killing"></span> Killing job...';
+        const btns = card.querySelectorAll('button');
+        btns.forEach(b => b.disabled = true);
+      }
+
       try {
-        await fetch('/api/stop/' + hpc, {
+        const resp = await fetch('/api/stop/' + hpc, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cancelJob: true })
         });
-        fetchStatus();
+        const data = await resp.json();
+        if (resp.ok) {
+          if (card) {
+            const statusEl = card.querySelector('.status');
+            if (statusEl) statusEl.innerHTML = '<span class="status-dot"></span> Job killed';
+          }
+        } else {
+          alert('Failed to kill job: ' + (data.error || 'Unknown error'));
+        }
+        setTimeout(fetchStatus, 1000);
       } catch (e) {
         console.error('Kill error:', e);
+        alert('Failed to kill job: ' + e.message);
+        fetchStatus();
       }
     }
 
@@ -1435,14 +1464,25 @@ app.get('/hpc-menu-frame', (req, res) => {
 
     async function killJob() {
       if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
+      // Show killing feedback
+      const btn = document.querySelector('button.danger');
+      if (btn) {
+        btn.textContent = 'Killing...';
+        btn.disabled = true;
+      }
       try {
-        await fetch('/api/stop/' + activeHpc, {
+        const resp = await fetch('/api/stop/' + activeHpc, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({cancelJob: true})
         });
+        if (!resp.ok) {
+          const data = await resp.json();
+          alert('Failed: ' + (data.error || 'Unknown error'));
+        }
       } catch(e) {
         console.error('Kill error:', e);
+        alert('Failed to kill job: ' + e.message);
       }
       window.top.location.href = '/?menu=1';
     }
