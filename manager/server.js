@@ -10,7 +10,7 @@ const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
   defaultHpc: process.env.DEFAULT_HPC || 'gemini',
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT) || 8000,
-  defaultCpus: process.env.DEFAULT_CPUS || '4',
+  defaultCpus: process.env.DEFAULT_CPUS || '2',
   defaultMem: process.env.DEFAULT_MEM || '40G',
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
 };
@@ -27,11 +27,11 @@ const clusters = {
   },
   apollo: {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
-    partition: 'all',
-    singularityBin: '/opt/singularity-images/singularity/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/rbioc_3.18.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
-    bindPaths: '/opt,/labs,/run,/ref_genome',
+    partition: 'fast,all',
+    singularityBin: '/opt/singularity/3.7.0/bin/singularity',
+    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
+    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
+    bindPaths: '/opt,/run,/labs',
   },
 };
 
@@ -88,19 +88,55 @@ function sshExec(hpc, command) {
   });
 }
 
-// Helper: get job info
+// Helper: get job info with timing data
 async function getJobInfo(hpc) {
   try {
     const output = await sshExec(hpc,
-      `squeue --user=${config.hpcUser} --name=code-server --states=R,PD -h -O JobID,State,NodeList 2>/dev/null | head -1`
+      `squeue --user=${config.hpcUser} --name=code-server --states=R,PD -h -O JobID,State,NodeList,TimeLeft,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
     );
     if (!output) return null;
 
-    const [jobId, jobState, node] = output.split(/\s+/);
-    return { jobId, state: jobState, node: node === '(null)' ? null : node };
+    const parts = output.split(/\s+/);
+    const [jobId, jobState, node, timeLeft, cpus, memory, ...startTimeParts] = parts;
+    const startTime = startTimeParts.join(' '); // StartTime may have spaces
+
+    return {
+      jobId,
+      state: jobState,
+      node: node === '(null)' ? null : node,
+      timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
+      cpus: cpus || null,
+      memory: memory || null,
+      startTime: startTime === 'N/A' ? null : startTime,
+    };
   } catch (e) {
     return null;
   }
+}
+
+// Helper: parse time string (HH:MM:SS or D-HH:MM:SS) to seconds
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  if (parts.length === 3) {
+    // Check for days (D-HH:MM:SS)
+    const [h, m, s] = parts;
+    if (h.includes('-')) {
+      const [days, hours] = h.split('-');
+      return parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(m) * 60 + parseInt(s);
+    }
+    return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s);
+  }
+  return null;
+}
+
+// Helper: format seconds to human readable (11h 45m)
+function formatHumanTime(seconds) {
+  if (!seconds || seconds <= 0) return '0m';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 // Helper: check if port is open
@@ -279,6 +315,48 @@ app.get('/api/status', async (req, res) => {
   });
 });
 
+// Get job status for both clusters (checks SLURM directly)
+app.get('/api/cluster-status', async (req, res) => {
+  try {
+    const [geminiJob, apolloJob] = await Promise.all([
+      getJobInfo('gemini'),
+      getJobInfo('apollo'),
+    ]);
+
+    const formatClusterStatus = (job) => {
+      if (!job) return { status: 'idle' };
+
+      const timeLeftSeconds = parseTimeToSeconds(job.timeLeft);
+
+      return {
+        status: job.state === 'RUNNING' ? 'running' : 'pending',
+        jobId: job.jobId,
+        node: job.node,
+        timeLeft: job.timeLeft,
+        timeLeftSeconds,
+        timeLeftHuman: formatHumanTime(timeLeftSeconds),
+        cpus: job.cpus,
+        memory: job.memory,
+        startTime: job.startTime,
+      };
+    };
+
+    res.json({
+      gemini: formatClusterStatus(geminiJob),
+      apollo: formatClusterStatus(apolloJob),
+      activeHpc: state.activeHpc,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Debug endpoint for UI events
+app.post('/api/log', (req, res) => {
+  console.log('UI Event:', req.body);
+  res.json({ ok: true });
+});
+
 app.post('/api/launch', async (req, res) => {
   const { hpc = config.defaultHpc, cpus = config.defaultCpus, mem = config.defaultMem, time = config.defaultTime } = req.body;
 
@@ -308,7 +386,8 @@ app.post('/api/launch', async (req, res) => {
       console.log(`Submitting new job on ${hpc}...`);
       const cluster = clusters[hpc] || clusters.gemini;
 
-      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=~/vscode-slurm-logs/code-server_%j.log --error=~/vscode-slurm-logs/code-server_%j.err --wrap='mkdir -p ~/vscode-slurm-logs && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-base-path /code --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions'`;
+      const logDir = `/home/${config.hpcUser}/vscode-slurm-logs`;
+      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=${logDir}/code-server_%j.log --error=${logDir}/code-server_%j.err --wrap='mkdir -p ${logDir} && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-base-path /code --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions'`;
 
       const output = await sshExec(hpc, submitCmd);
       const match = output.match(/Submitted batch job (\d+)/);
@@ -456,110 +535,159 @@ function renderLauncherPage() {
       align-items: center;
       justify-content: center;
       color: #fff;
+      padding: 20px;
     }
     .launcher {
       background: rgba(255,255,255,0.1);
       backdrop-filter: blur(10px);
       border-radius: 20px;
-      padding: 40px;
-      max-width: 500px;
-      width: 90%;
+      padding: 30px;
+      max-width: 600px;
+      width: 100%;
       box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
     h1 {
-      font-size: 2rem;
+      font-size: 1.8rem;
       margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      text-align: center;
     }
     .subtitle {
       color: rgba(255,255,255,0.6);
-      margin-bottom: 30px;
-    }
-    .hpc-selector {
-      display: flex;
-      gap: 10px;
       margin-bottom: 25px;
-    }
-    .hpc-btn {
-      flex: 1;
-      padding: 20px;
-      border: 2px solid rgba(255,255,255,0.2);
-      border-radius: 12px;
-      background: rgba(255,255,255,0.05);
-      color: #fff;
-      cursor: pointer;
-      transition: all 0.2s;
       text-align: center;
     }
-    .hpc-btn:hover {
-      background: rgba(255,255,255,0.1);
-      border-color: rgba(255,255,255,0.3);
+    .cluster-card {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 15px;
+      transition: all 0.2s;
     }
-    .hpc-btn.selected {
-      background: rgba(59,130,246,0.3);
-      border-color: #3b82f6;
+    .cluster-card.running {
+      border-color: #4ade80;
+      background: rgba(74,222,128,0.1);
     }
-    .hpc-btn .name {
-      font-size: 1.2rem;
+    .cluster-card.pending {
+      border-color: #fbbf24;
+      background: rgba(251,191,36,0.1);
+    }
+    .cluster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .cluster-name {
+      font-size: 1.3rem;
       font-weight: 600;
     }
-    .hpc-btn .status {
-      font-size: 0.8rem;
-      color: rgba(255,255,255,0.5);
-      margin-top: 5px;
+    .cluster-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
     }
-    .hpc-btn .status.running {
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+    }
+    .status-dot.running { background: #4ade80; }
+    .status-dot.pending { background: #fbbf24; animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .cluster-info {
+      color: rgba(255,255,255,0.7);
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+    .countdown {
+      font-size: 1.4rem;
+      font-weight: 600;
       color: #4ade80;
     }
-    .form-row {
+    .countdown.warning { color: #fbbf24; }
+    .countdown.critical { color: #ef4444; }
+    .resources {
       display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    .form-group {
-      flex: 1;
-    }
-    label {
-      display: block;
+      gap: 15px;
+      color: rgba(255,255,255,0.6);
       font-size: 0.85rem;
-      color: rgba(255,255,255,0.7);
-      margin-bottom: 5px;
+      margin-top: 8px;
     }
-    input, select {
+    .launch-form {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .form-input {
+      flex: 1;
+      min-width: 70px;
+    }
+    .form-input label {
+      display: block;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4px;
+    }
+    .form-input input {
       width: 100%;
-      padding: 12px;
+      padding: 8px;
       border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
+      border-radius: 6px;
       background: rgba(255,255,255,0.1);
       color: #fff;
-      font-size: 1rem;
+      font-size: 0.9rem;
     }
-    input:focus, select:focus {
+    .form-input input:focus {
       outline: none;
       border-color: #3b82f6;
     }
-    .launch-btn {
-      width: 100%;
-      padding: 16px;
+    .btn {
+      padding: 10px 20px;
       border: none;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-      color: #fff;
-      font-size: 1.1rem;
-      font-weight: 600;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 500;
       cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      margin-top: 10px;
+      transition: all 0.2s;
     }
-    .launch-btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 20px rgba(59,130,246,0.4);
-    }
-    .launch-btn:disabled {
+    .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(59,130,246,0.4);
+    }
+    .btn-success {
+      background: #4ade80;
+      color: #000;
+    }
+    .btn-success:hover:not(:disabled) {
+      background: #22c55e;
+    }
+    .btn-danger {
+      background: transparent;
+      border: 1px solid rgba(239,68,68,0.5);
+      color: #fca5a5;
+    }
+    .btn-danger:hover {
+      background: rgba(239,68,68,0.2);
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
     }
     .error {
       background: rgba(239,68,68,0.2);
@@ -569,136 +697,240 @@ function renderLauncherPage() {
       margin-bottom: 15px;
       color: #fca5a5;
     }
-    .status-msg {
-      text-align: center;
-      padding: 20px;
-      color: rgba(255,255,255,0.8);
-    }
     .spinner {
       display: inline-block;
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
       border: 2px solid rgba(255,255,255,0.3);
       border-radius: 50%;
       border-top-color: #fff;
       animation: spin 1s linear infinite;
-      margin-right: 10px;
-      vertical-align: middle;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .loading-content {
+      text-align: center;
+      color: #fff;
+    }
+    .loading-content .spinner {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 15px;
+    }
+    .estimated-start {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.85rem;
     }
   </style>
 </head>
 <body>
   <div class="launcher">
-    <h1>🖥️ HPC Code Server</h1>
-    <p class="subtitle">Launch VS Code on SLURM compute nodes</p>
+    <h1>HPC Code Server</h1>
+    <p class="subtitle">VS Code on SLURM compute nodes</p>
 
     <div id="error" class="error" style="display:none;"></div>
 
-    <div id="launcher-form">
-      <div class="hpc-selector">
-        <button type="button" class="hpc-btn selected" data-hpc="gemini" onclick="selectHpc('gemini')">
-          <div class="name">Gemini</div>
-          <div class="status" id="gemini-status">Idle</div>
-        </button>
-        <button type="button" class="hpc-btn" data-hpc="apollo" onclick="selectHpc('apollo')">
-          <div class="name">Apollo</div>
-          <div class="status" id="apollo-status">Idle</div>
-        </button>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>🖥️ CPUs</label>
-          <input type="number" id="cpus" value="${config.defaultCpus}" min="1" max="64">
-        </div>
-        <div class="form-group">
-          <label>🧠 Memory</label>
-          <input type="text" id="mem" value="${config.defaultMem}" placeholder="e.g., 40G">
-        </div>
-        <div class="form-group">
-          <label>⏱️ Time</label>
-          <input type="text" id="time" value="${config.defaultTime}" placeholder="HH:MM:SS">
+    <div id="gemini-card" class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-name">Gemini</span>
+        <div class="cluster-status">
+          <span class="status-dot" id="gemini-dot"></span>
+          <span id="gemini-status-text">Loading...</span>
         </div>
       </div>
-
-      <button id="launchBtn" class="launch-btn" onclick="launch()">🚀 Launch Session</button>
+      <div id="gemini-content"></div>
     </div>
 
-    <div id="status-msg" class="status-msg" style="display:none;">
-      <span class="spinner"></span>
-      <span id="status-text">Starting...</span>
+    <div id="apollo-card" class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-name">Apollo</span>
+        <div class="cluster-status">
+          <span class="status-dot" id="apollo-dot"></span>
+          <span id="apollo-status-text">Loading...</span>
+        </div>
+      </div>
+      <div id="apollo-content"></div>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="loading-overlay" style="display:none;">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <div id="loading-text">Connecting...</div>
     </div>
   </div>
 
   <script>
-    let selectedHpc = '${config.defaultHpc}';
-    let sessions = {};
+    const defaultConfig = {
+      cpus: '${config.defaultCpus}',
+      mem: '${config.defaultMem}',
+      time: '${config.defaultTime}',
+    };
 
-    function selectHpc(hpc) {
-      selectedHpc = hpc;
-      document.querySelectorAll('.hpc-btn').forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.hpc === hpc);
-      });
+    let clusterStatus = { gemini: null, apollo: null };
+    let countdowns = { gemini: null, apollo: null };
+
+    // Format seconds to human readable
+    function formatTime(seconds) {
+      if (!seconds || seconds <= 0) return '0m';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
     }
 
-    async function updateStatus() {
-      try {
-        const res = await fetch('/api/status');
-        const data = await res.json();
-        sessions = data.sessions || {};
+    // Render idle state with launch form
+    function renderIdleContent(hpc) {
+      return \`
+        <div class="cluster-info">No active session</div>
+        <div class="launch-form">
+          <div class="form-input">
+            <label>CPUs</label>
+            <input type="number" id="\${hpc}-cpus" value="\${defaultConfig.cpus}" min="1" max="64">
+          </div>
+          <div class="form-input">
+            <label>Memory</label>
+            <input type="text" id="\${hpc}-mem" value="\${defaultConfig.mem}">
+          </div>
+          <div class="form-input">
+            <label>Time</label>
+            <input type="text" id="\${hpc}-time" value="\${defaultConfig.time}">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="launch('\${hpc}')">Launch Session</button>
+        </div>
+      \`;
+    }
 
-        // Update HPC status indicators
-        for (const [hpc, session] of Object.entries(sessions)) {
-          const el = document.getElementById(hpc + '-status');
-          if (el) {
-            if (session.status === 'running') {
-              el.textContent = 'Running on ' + session.node;
-              el.className = 'status running';
-            } else if (session.status === 'starting') {
-              el.textContent = 'Starting...';
-              el.className = 'status';
-            } else {
-              el.textContent = 'Idle';
-              el.className = 'status';
-            }
-          }
-        }
+    // Render running state with countdown
+    function renderRunningContent(hpc, status) {
+      const seconds = countdowns[hpc] || status.timeLeftSeconds || 0;
+      let countdownClass = 'countdown';
+      if (seconds < 600) countdownClass += ' critical';
+      else if (seconds < 1800) countdownClass += ' warning';
 
-        // If any session is running, redirect to /code/
-        if (Object.values(sessions).some(s => s && s.status === 'running')) {
-          window.location.href = '/code/';
+      return \`
+        <div class="cluster-info">Running on \${status.node || 'compute node'}</div>
+        <div class="\${countdownClass}" id="\${hpc}-countdown">\${formatTime(seconds)}</div>
+        <div class="resources">
+          <span>\${status.cpus || '?'} CPUs</span>
+          <span>\${status.memory || '?'} RAM</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="connect('\${hpc}')">Connect</button>
+          <button class="btn btn-danger" onclick="killJob('\${hpc}')">Kill Job</button>
+        </div>
+      \`;
+    }
+
+    // Render pending state
+    function renderPendingContent(hpc, status) {
+      let estStart = '';
+      if (status.startTime) {
+        estStart = '<div class="estimated-start">Est. start: ' + status.startTime + '</div>';
+      }
+      return \`
+        <div class="cluster-info">
+          <span class="spinner"></span> Waiting for resources...
+        </div>
+        \${estStart}
+        <div class="btn-group">
+          <button class="btn btn-danger" onclick="killJob('\${hpc}')">Cancel</button>
+        </div>
+      \`;
+    }
+
+    // Update a single cluster card
+    function updateClusterCard(hpc, status) {
+      const card = document.getElementById(hpc + '-card');
+      const dot = document.getElementById(hpc + '-dot');
+      const statusText = document.getElementById(hpc + '-status-text');
+      const content = document.getElementById(hpc + '-content');
+
+      card.className = 'cluster-card';
+      dot.className = 'status-dot';
+
+      if (!status || status.status === 'idle') {
+        statusText.textContent = 'No session';
+        content.innerHTML = renderIdleContent(hpc);
+        countdowns[hpc] = null;
+      } else if (status.status === 'running') {
+        card.classList.add('running');
+        dot.classList.add('running');
+        statusText.textContent = 'Running';
+        // Initialize countdown if not set
+        if (!countdowns[hpc] && status.timeLeftSeconds) {
+          countdowns[hpc] = status.timeLeftSeconds;
         }
-      } catch (e) {
-        console.error('Status error:', e);
+        content.innerHTML = renderRunningContent(hpc, status);
+      } else if (status.status === 'pending') {
+        card.classList.add('pending');
+        dot.classList.add('pending');
+        statusText.textContent = 'Pending';
+        content.innerHTML = renderPendingContent(hpc, status);
+        countdowns[hpc] = null;
       }
     }
 
-    async function launch() {
-      const btn = document.getElementById('launchBtn');
-      const form = document.getElementById('launcher-form');
-      const statusMsg = document.getElementById('status-msg');
-      const statusText = document.getElementById('status-text');
+    // Fetch status from server
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/cluster-status');
+        const data = await res.json();
+        clusterStatus = data;
+
+        updateClusterCard('gemini', data.gemini);
+        updateClusterCard('apollo', data.apollo);
+      } catch (e) {
+        console.error('Status fetch error:', e);
+      }
+    }
+
+    // Client-side countdown tick
+    function tickCountdowns() {
+      ['gemini', 'apollo'].forEach(hpc => {
+        if (countdowns[hpc] && countdowns[hpc] > 0) {
+          countdowns[hpc]--;
+          const el = document.getElementById(hpc + '-countdown');
+          if (el) {
+            el.textContent = formatTime(countdowns[hpc]);
+            // Update warning class
+            el.className = 'countdown';
+            if (countdowns[hpc] < 600) el.classList.add('critical');
+            else if (countdowns[hpc] < 1800) el.classList.add('warning');
+          }
+        }
+      });
+    }
+
+    // Launch session
+    async function launch(hpc) {
+      const overlay = document.getElementById('loading-overlay');
+      const loadingText = document.getElementById('loading-text');
       const errorEl = document.getElementById('error');
 
-      btn.disabled = true;
       errorEl.style.display = 'none';
+      overlay.style.display = 'flex';
+      loadingText.textContent = 'Submitting job to ' + hpc + '...';
 
       try {
-        statusText.textContent = 'Submitting job to ' + selectedHpc + '...';
-        statusMsg.style.display = 'block';
+        const cpus = document.getElementById(hpc + '-cpus').value;
+        const mem = document.getElementById(hpc + '-mem').value;
+        const time = document.getElementById(hpc + '-time').value;
 
         const res = await fetch('/api/launch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hpc: selectedHpc,
-            cpus: document.getElementById('cpus').value,
-            mem: document.getElementById('mem').value,
-            time: document.getElementById('time').value,
-          })
+          body: JSON.stringify({ hpc, cpus, mem, time })
         });
 
         if (!res.ok) {
@@ -706,20 +938,61 @@ function renderLauncherPage() {
           throw new Error(data.error || 'Launch failed');
         }
 
-        // Redirect to code server
         window.location.href = '/code/';
-
       } catch (e) {
+        overlay.style.display = 'none';
         errorEl.textContent = e.message;
         errorEl.style.display = 'block';
-        statusMsg.style.display = 'none';
-        btn.disabled = false;
       }
     }
 
-    // Initial status check
-    updateStatus();
-    setInterval(updateStatus, 5000);
+    // Connect to existing session
+    async function connect(hpc) {
+      const overlay = document.getElementById('loading-overlay');
+      overlay.style.display = 'flex';
+      document.getElementById('loading-text').textContent = 'Connecting to ' + hpc + '...';
+
+      try {
+        // Launch will reconnect to existing job
+        const res = await fetch('/api/launch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hpc })
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Connect failed');
+        }
+
+        window.location.href = '/code/';
+      } catch (e) {
+        overlay.style.display = 'none';
+        document.getElementById('error').textContent = e.message;
+        document.getElementById('error').style.display = 'block';
+      }
+    }
+
+    // Kill job
+    async function killJob(hpc) {
+      if (!confirm('Kill the ' + hpc + ' job?')) return;
+
+      try {
+        await fetch('/api/stop/' + hpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cancelJob: true })
+        });
+        fetchStatus();
+      } catch (e) {
+        console.error('Kill error:', e);
+      }
+    }
+
+    // Initialize
+    fetchStatus();
+    setInterval(fetchStatus, 30000);  // Sync with server every 30s
+    setInterval(tickCountdowns, 1000); // Client-side countdown every second
   </script>
 </body>
 </html>`;
@@ -739,8 +1012,46 @@ function renderFloatingMenu() {
       pointer-events: auto !important;
       background: transparent !important;
     "></iframe>
+    <script src="/hpc-drag.js"></script>
   `;
 }
+
+// Serve drag script externally (bypasses CSP)
+app.get('/hpc-drag.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(`
+(function() {
+  function initDrag() {
+    const frame = document.getElementById('hpc-menu-frame');
+    if (!frame) {
+      setTimeout(initDrag, 100);
+      return;
+    }
+
+    window.addEventListener('message', function(e) {
+      if (!e.data) return;
+
+      if (e.data.type === 'hpc-menu-drag') {
+        const rect = frame.getBoundingClientRect();
+        let newTop = rect.top + e.data.dy;
+        let newRight = (window.innerWidth - rect.right) - e.data.dx;
+
+        newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
+        newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
+
+        frame.style.top = newTop + 'px';
+        frame.style.right = newRight + 'px';
+      }
+
+      if (e.data.type === 'hpc-menu-navigate') {
+        window.location.href = e.data.url;
+      }
+    });
+  }
+  initDrag();
+})();
+  `);
+});
 
 // External menu script (bypasses CSP inline restrictions)
 function getMenuScript() {
@@ -884,7 +1195,7 @@ app.get('/hpc-menu-frame', (req, res) => {
       background: rgba(30,30,40,0.95);
       border: 2px solid #4ade80;
       color: #fff;
-      cursor: pointer;
+      cursor: grab;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -893,15 +1204,25 @@ app.get('/hpc-menu-frame', (req, res) => {
       position: absolute;
       top: 0;
       right: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
     }
     #toggle:hover { transform: scale(1.05); }
+    #toggle:active { cursor: grabbing; }
     #toggle.open { background: rgba(74,222,128,0.8); }
+    #toggle.warning { border-color: #fbbf24; }
+    #toggle.critical { border-color: #ef4444; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
     #panel {
       display: none;
       position: absolute;
       top: 50px;
       right: 0;
-      width: 280px;
+      width: 220px;
       background: rgba(30,30,40,0.98);
       border: 1px solid rgba(255,255,255,0.2);
       border-radius: 12px;
@@ -910,32 +1231,44 @@ app.get('/hpc-menu-frame', (req, res) => {
       color: #fff;
     }
     #panel.open { display: block; }
-    .session {
-      background: rgba(255,255,255,0.05);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 10px;
+    .cluster-name {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .session.active { border: 1px solid #3b82f6; }
-    .session-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
-    .session-name { font-weight: 600; }
-    .session-node { font-size: 0.8rem; color: rgba(255,255,255,0.5); }
-    .stats { display: flex; gap: 10px; font-size: 0.85rem; margin-bottom: 10px; color: rgba(255,255,255,0.7); }
-    .actions { display: flex; gap: 6px; }
-    .actions button {
-      flex: 1;
-      padding: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 6px;
-      background: rgba(255,255,255,0.05);
-      color: #fff;
-      cursor: pointer;
+    .cluster-name .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+    .countdown {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #4ade80;
+      margin-bottom: 6px;
+    }
+    .countdown.warning { color: #fbbf24; }
+    .countdown.critical { color: #ef4444; }
+    .resources {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 12px;
+    }
+    .node {
       font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 12px;
     }
-    .actions button:hover { background: rgba(255,255,255,0.1); }
-    .actions button.danger:hover { background: rgba(239,68,68,0.3); }
-    .footer { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px; }
-    .footer button {
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .actions button {
       width: 100%;
       padding: 10px;
       border: 1px solid rgba(255,255,255,0.2);
@@ -943,75 +1276,192 @@ app.get('/hpc-menu-frame', (req, res) => {
       background: rgba(255,255,255,0.05);
       color: #fff;
       cursor: pointer;
+      font-size: 0.9rem;
     }
-    .footer button:hover { background: rgba(255,255,255,0.1); }
+    .actions button:hover { background: rgba(255,255,255,0.1); }
+    .actions button.danger {
+      border-color: rgba(239,68,68,0.5);
+      color: #fca5a5;
+    }
+    .actions button.danger:hover { background: rgba(239,68,68,0.2); }
   </style>
 </head>
 <body>
-  <button id="toggle">🖥️</button>
+  <button id="toggle">✓</button>
   <div id="panel">
-    <div id="sessions"></div>
-    <div class="footer">
-      <button onclick="parent.location.href='/'">➕ New Session</button>
-    </div>
+    <div id="content">Loading...</div>
   </div>
 
   <script>
     const toggle = document.getElementById('toggle');
     const panel = document.getElementById('panel');
     let open = false;
+    let countdown = null;
+    let activeHpc = null;
 
-    toggle.addEventListener('click', () => {
-      open = !open;
-      toggle.classList.toggle('open', open);
-      panel.classList.toggle('open', open);
-    });
+    // Drag functionality
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    let hasMoved = false;
 
-    async function update() {
+    function onDragStart(e) {
+      isDragging = true;
+      hasMoved = false;
+      const touch = e.touches ? e.touches[0] : e;
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+      e.preventDefault();
+    }
+
+    function onDragMove(e) {
+      if (!isDragging) return;
+      const touch = e.touches ? e.touches[0] : e;
+      const dx = touch.clientX - dragStartX;
+      const dy = touch.clientY - dragStartY;
+
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMoved = true;
+        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, '*');
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+      }
+    }
+
+    function onDragEnd() {
+      // Only process if we were actually dragging (started on toggle)
+      if (!isDragging) return;
+      isDragging = false;
+      // Only toggle panel if it was a click (not a drag)
+      if (!hasMoved) {
+        open = !open;
+        toggle.classList.toggle('open', open);
+        panel.classList.toggle('open', open);
+      }
+    }
+
+    // Mouse events
+    toggle.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+
+    // Touch events (for iPad)
+    toggle.addEventListener('touchstart', onDragStart, { passive: false });
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
+
+    function formatTime(seconds) {
+      if (!seconds || seconds <= 0) return '0m';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    function render() {
+      const content = document.getElementById('content');
+      if (!activeHpc) {
+        content.innerHTML = '<div style="color:rgba(255,255,255,0.5)">No active session</div>';
+        return;
+      }
+
+      let countdownClass = 'countdown';
+      if (countdown < 600) countdownClass += ' critical';
+      else if (countdown < 1800) countdownClass += ' warning';
+
+      // Update toggle button appearance
+      toggle.className = '';
+      if (countdown < 600) toggle.classList.add('critical');
+      else if (countdown < 1800) toggle.classList.add('warning');
+      if (open) toggle.classList.add('open');
+
+      content.innerHTML =
+        '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
+        '<div class="' + countdownClass + '" id="countdown">' + formatTime(countdown) + '</div>' +
+        '<div class="resources" id="resources"></div>' +
+        '<div class="node" id="node"></div>' +
+        '<div class="actions">' +
+        '<button onclick="goToMenu()">← Main Menu</button>' +
+        '<button class="danger" onclick="killJob()">Kill Job</button>' +
+        '</div>';
+    }
+
+    async function fetchStatus() {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/cluster-status');
         const data = await res.json();
-        const sessions = data.sessions || {};
-        const active = data.activeHpc;
-        const container = document.getElementById('sessions');
-        container.innerHTML = '';
+        activeHpc = data.activeHpc;
 
-        for (const [hpc, s] of Object.entries(sessions)) {
-          if (s && (s.status === 'running' || s.status === 'starting')) {
-            const div = document.createElement('div');
-            div.className = 'session' + (hpc === active ? ' active' : '');
-            div.innerHTML = '<div class="session-header"><span class="session-name">' +
-              hpc.charAt(0).toUpperCase() + hpc.slice(1) + '</span>' +
-              '<span class="session-node">' + (s.node || '...') + '</span></div>' +
-              '<div class="stats">⏱️' + (s.remainingTime || s.walltime || '--') +
-              ' 🖥️' + (s.cpus || '-') + ' 🧠' + (s.memory || '-') + '</div>' +
-              '<div class="actions">' +
-              (hpc !== active ? '<button onclick="sw(\\'' + hpc + '\\')">Switch</button>' : '') +
-              '<button onclick="stop(\\'' + hpc + '\\',0)">Disconnect</button>' +
-              '<button class="danger" onclick="stop(\\'' + hpc + '\\',1)">Kill</button></div>';
-            container.appendChild(div);
+        if (activeHpc && data[activeHpc] && data[activeHpc].status === 'running') {
+          const status = data[activeHpc];
+          // Only update countdown from server if not already set (to avoid jumps)
+          if (countdown === null && status.timeLeftSeconds) {
+            countdown = status.timeLeftSeconds;
           }
+          render();
+          // Update resources and node
+          const resourcesEl = document.getElementById('resources');
+          const nodeEl = document.getElementById('node');
+          if (resourcesEl) resourcesEl.textContent = (status.cpus || '?') + ' CPUs • ' + (status.memory || '?');
+          if (nodeEl) nodeEl.textContent = status.node || '';
+        } else {
+          countdown = null;
+          render();
         }
-      } catch(e) {}
+      } catch(e) {
+        console.error('Status error:', e);
+      }
     }
 
-    async function sw(hpc) {
-      await fetch('/api/switch/' + hpc, {method:'POST'});
-      parent.location.reload();
+    function tickCountdown() {
+      if (countdown !== null && countdown > 0) {
+        countdown--;
+        const el = document.getElementById('countdown');
+        if (el) {
+          el.textContent = formatTime(countdown);
+          el.className = 'countdown';
+          if (countdown < 600) el.classList.add('critical');
+          else if (countdown < 1800) el.classList.add('warning');
+        }
+        // Update toggle button
+        toggle.className = open ? 'open' : '';
+        if (countdown < 600) toggle.classList.add('critical');
+        else if (countdown < 1800) toggle.classList.add('warning');
+      }
     }
 
-    async function stop(hpc, kill) {
-      if (kill && !confirm('Kill job?')) return;
-      await fetch('/api/stop/' + hpc, {
+    function goToMenu() {
+      console.log('goToMenu clicked');
+      fetch('/api/log', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cancelJob: !!kill})
-      });
-      update();
+        body: JSON.stringify({event: 'goToMenu', time: new Date().toISOString()})
+      }).catch(e => console.error('Log error:', e));
+      window.top.location.href = '/?menu=1';
     }
 
-    update();
-    setInterval(update, 30000);
+    async function killJob() {
+      console.log('killJob clicked');
+      fetch('/api/log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event: 'killJob', hpc: activeHpc, time: new Date().toISOString()})
+      }).catch(e => console.error('Log error:', e));
+      if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
+      try {
+        await fetch('/api/stop/' + activeHpc, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cancelJob: true})
+        });
+      } catch(e) {
+        console.error('Kill error:', e);
+      }
+      window.top.location.href = '/?menu=1';
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 60000);  // Sync every 60s
+    setInterval(tickCountdown, 1000); // Tick every second
   </script>
 </body>
 </html>`);
@@ -1019,8 +1469,8 @@ app.get('/hpc-menu-frame', (req, res) => {
 
 // Landing page / UI
 app.get('/', (req, res) => {
-  // If there's an active running session, redirect to code
-  if (hasRunningSession()) {
+  // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
+  if (!req.query.menu && hasRunningSession()) {
     return res.redirect('/code/');
   }
 
