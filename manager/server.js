@@ -5,6 +5,17 @@ const httpProxy = require('http-proxy');
 const app = express();
 app.use(express.json());
 
+// Prevent aggressive browser caching for HTML pages
+app.use((req, res, next) => {
+  // For HTML pages, prevent caching to avoid stale content issues
+  if (req.accepts('html') && !req.path.match(/\.(js|css|png|jpg|svg|woff|woff2)$/)) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
+
 // Configuration from environment
 const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
@@ -517,6 +528,19 @@ function renderLauncherPage() {
 <head>
   <title>HPC Code Server</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    // Clear stale service workers and caches on page load
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+      });
+    }
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
