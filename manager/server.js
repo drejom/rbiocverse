@@ -367,6 +367,21 @@ app.post('/api/launch', async (req, res) => {
 
   const session = state.sessions[hpc];
 
+  // If already running, just switch to this session (reconnect)
+  if (session.status === 'running') {
+    // Stop any other active tunnel
+    if (state.activeHpc && state.activeHpc !== hpc) {
+      stopTunnel(state.activeHpc);
+    }
+    // Ensure tunnel is running for this session
+    if (!session.tunnelProcess) {
+      session.tunnelProcess = await startTunnel(hpc, session.node);
+    }
+    state.activeHpc = hpc;
+    return res.json({ status: 'connected', hpc, jobId: session.jobId, node: session.node });
+  }
+
+  // Reject if starting/pending (in progress)
   if (session.status !== 'idle') {
     return res.status(400).json({ error: `${hpc} is already ${session.status}` });
   }
@@ -987,7 +1002,7 @@ function renderLauncherPage() {
       if (!confirm('Kill the ' + hpc + ' job?')) return;
 
       // Show killing state
-      const card = document.getElementById('cluster-' + hpc);
+      const card = document.getElementById(hpc + '-card');
       if (card) {
         const statusEl = card.querySelector('.status');
         if (statusEl) statusEl.innerHTML = '<span class="status-dot killing"></span> Killing job...';
