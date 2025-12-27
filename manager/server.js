@@ -1492,47 +1492,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Proxy /code/* to code-server when running, with floating menu
+// Proxy /code/* directly to code-server (no response modification)
 app.use('/code', (req, res, next) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
-
-  // For the main /code/ request, inject floating menu
-  if (req.path === '/' || req.path === '') {
-    // Modify the response to inject our floating menu
-    const originalWrite = res.write;
-    const originalEnd = res.end;
-    let body = [];
-
-    res.write = function(chunk) {
-      body.push(chunk);
-      return true;
-    };
-
-    res.end = function(chunk) {
-      // If headers already sent (e.g., proxy error), just call original end
-      if (res.headersSent) {
-        return originalEnd.call(res, chunk);
-      }
-
-      if (chunk) body.push(chunk);
-
-      let html = Buffer.concat(body.map(b => Buffer.isBuffer(b) ? b : Buffer.from(b))).toString('utf8');
-
-      // Inject floating menu before </body>
-      if (html.includes('</body>')) {
-        html = html.replace('</body>', renderFloatingMenu() + '</body>');
-      }
-
-      if (!res.headersSent) {
-        res.setHeader('Content-Length', Buffer.byteLength(html));
-      }
-      originalWrite.call(res, html);
-      originalEnd.call(res);
-    };
-  }
-
   proxy.web(req, res);
 });
 
