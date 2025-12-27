@@ -1470,8 +1470,7 @@ app.use((req, res, next) => {
 
 // Wrapper page for VS Code with floating menu (iframe isolation)
 function renderVscodeWrapper() {
-  const session = getActiveSession();
-  const hpc = session ? session.hpc : '';
+  const hpc = state.activeHpc || '';
   return `<!DOCTYPE html>
 <html>
 <head>
