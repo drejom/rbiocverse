@@ -1002,10 +1002,16 @@ function renderLauncherPage() {
       if (!confirm('Kill the ' + hpc + ' job?')) return;
 
       // Show killing state
+      const dot = document.getElementById(hpc + '-dot');
+      const statusText = document.getElementById(hpc + '-status-text');
+      if (dot) {
+        dot.className = 'status-dot killing';
+      }
+      if (statusText) {
+        statusText.textContent = 'Killing job...';
+      }
       const card = document.getElementById(hpc + '-card');
       if (card) {
-        const statusEl = card.querySelector('.status');
-        if (statusEl) statusEl.innerHTML = '<span class="status-dot killing"></span> Killing job...';
         const btns = card.querySelectorAll('button');
         btns.forEach(b => b.disabled = true);
       }
@@ -1018,10 +1024,8 @@ function renderLauncherPage() {
         });
         const data = await resp.json();
         if (resp.ok) {
-          if (card) {
-            const statusEl = card.querySelector('.status');
-            if (statusEl) statusEl.innerHTML = '<span class="status-dot"></span> Job killed';
-          }
+          if (dot) dot.className = 'status-dot';
+          if (statusText) statusText.textContent = 'Job killed';
         } else {
           alert('Failed to kill job: ' + (data.error || 'Unknown error'));
         }
