@@ -5,6 +5,13 @@ const httpProxy = require('http-proxy');
 const app = express();
 app.use(express.json());
 
+// Prevent caching issues - VS Code uses service workers that can cache stale paths
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
+
 // Configuration from environment
 const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
@@ -1498,9 +1505,32 @@ function renderVscodeWrapper() {
   </style>
 </head>
 <body>
-  <iframe id="vscode-frame" src="/vscode-direct/"></iframe>
+  <div id="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#1e1e1e;color:#fff;font-family:system-ui;">
+    <div>Clearing cache...</div>
+  </div>
+  <iframe id="vscode-frame" src="" style="display:none;"></iframe>
   <iframe id="hpc-menu-frame" src="/hpc-menu-frame"></iframe>
   <script>
+    // Clear stale service workers then load VS Code
+    (async function() {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(r => r.unregister()));
+        }
+        // Clear caches
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch(e) { console.log('Cache clear:', e); }
+      // Now load VS Code
+      document.getElementById('loading').style.display = 'none';
+      const frame = document.getElementById('vscode-frame');
+      frame.style.display = 'block';
+      frame.src = '/vscode-direct/';
+    })();
+
     // Handle navigation messages from menu frame
     window.addEventListener('message', function(e) {
       if (!e.data) return;
