@@ -1380,35 +1380,43 @@ app.use((req, res, next) => {
 
 // Proxy /code/* to code-server when running, with floating menu
 app.use('/code', (req, res, next) => {
+  console.log(`/code: path=${req.path} hasSession=${hasRunningSession()}`);
   if (!hasRunningSession()) {
+    console.log('/code: no session, redirecting');
     return res.redirect('/');
   }
 
   // For the main /code/ request, inject floating menu
   if (req.path === '/' || req.path === '') {
+    console.log('/code: main page, setting up response capture');
     // Modify the response to inject our floating menu
     const originalWrite = res.write;
     const originalEnd = res.end;
     let body = [];
 
     res.write = function(chunk) {
+      console.log(`/code: write chunk, size=${chunk ? chunk.length : 0}`);
       body.push(chunk);
       return true;
     };
 
     res.end = function(chunk) {
+      console.log(`/code: end called, headersSent=${res.headersSent}, chunkSize=${chunk ? chunk.length : 0}, bodyParts=${body.length}`);
       // If headers already sent (e.g., proxy error), just call original end
       if (res.headersSent) {
+        console.log('/code: headers already sent, calling original end');
         return originalEnd.call(res, chunk);
       }
 
       if (chunk) body.push(chunk);
 
       let html = Buffer.concat(body.map(b => Buffer.isBuffer(b) ? b : Buffer.from(b))).toString('utf8');
+      console.log(`/code: captured HTML length=${html.length}, hasBody=${html.includes('</body>')}`);
 
       // Inject floating menu before </body>
       if (html.includes('</body>')) {
         html = html.replace('</body>', renderFloatingMenu() + '</body>');
+        console.log(`/code: injected menu, new length=${html.length}`);
       }
 
       if (!res.headersSent) {
