@@ -1468,11 +1468,81 @@ app.use((req, res, next) => {
   next();
 });
 
-// Proxy /code/* directly to code-server (no response modification)
+// Wrapper page for VS Code with floating menu (iframe isolation)
+function renderVscodeWrapper() {
+  const session = getActiveSession();
+  const hpc = session ? session.hpc : '';
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>VS Code - ${hpc}</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #vscode-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    #hpc-menu-frame {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 320px;
+      height: 400px;
+      border: none;
+      z-index: 2147483647;
+      pointer-events: auto;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="vscode-frame" src="/vscode-direct/"></iframe>
+  <iframe id="hpc-menu-frame" src="/hpc-menu-frame"></iframe>
+  <script>
+    // Handle navigation messages from menu frame
+    window.addEventListener('message', function(e) {
+      if (!e.data) return;
+      if (e.data.type === 'hpc-menu-navigate') {
+        window.location.href = e.data.url;
+      }
+      if (e.data.type === 'hpc-menu-drag') {
+        const frame = document.getElementById('hpc-menu-frame');
+        const rect = frame.getBoundingClientRect();
+        let newTop = rect.top + e.data.dy;
+        let newRight = (window.innerWidth - rect.right) - e.data.dx;
+        newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
+        newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
+        frame.style.top = newTop + 'px';
+        frame.style.right = newRight + 'px';
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+// Direct proxy to VS Code (used by wrapper iframe)
+app.use('/vscode-direct', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  proxy.web(req, res);
+});
+
+// /code/ main page serves wrapper, /code/* paths proxy directly
 app.use('/code', (req, res, next) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
+
+  // Main /code/ page gets wrapper with floating menu
+  if (req.path === '/' || req.path === '') {
+    return res.send(renderVscodeWrapper());
+  }
+
+  // All other /code/* paths proxy directly
   proxy.web(req, res);
 });
 
