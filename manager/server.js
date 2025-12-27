@@ -5,17 +5,6 @@ const httpProxy = require('http-proxy');
 const app = express();
 app.use(express.json());
 
-// Prevent aggressive browser caching for HTML pages
-app.use((req, res, next) => {
-  // For HTML pages, prevent caching to avoid stale content issues
-  if (req.accepts('html') && !req.path.match(/\.(js|css|png|jpg|svg|woff|woff2)$/)) {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-  }
-  next();
-});
-
 // Configuration from environment
 const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
@@ -74,24 +63,6 @@ function createSession() {
 const proxy = httpProxy.createProxyServer({
   ws: true,
   target: `http://127.0.0.1:${config.codeServerPort}`,
-  xfwd: true,  // Pass X-Forwarded-* headers
-});
-
-// Ensure code-server knows we're behind HTTPS
-proxy.on('proxyReq', (proxyReq, req) => {
-  proxyReq.setHeader('X-Forwarded-Proto', 'https');
-  proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
-});
-
-// Fix CSP header - code-server generates http:// URLs, change to https://
-proxy.on('proxyRes', (proxyRes, req, res) => {
-  const csp = proxyRes.headers['content-security-policy'];
-  if (csp) {
-    // Replace http:// with https:// in CSP for our domain
-    proxyRes.headers['content-security-policy'] = csp
-      .replace(/http:\/\/hpc\.omeally\.com/g, 'https://hpc.omeally.com')
-      .replace(/:443,80/g, '');  // Remove port artifacts
-  }
 });
 
 proxy.on('error', (err, req, res) => {
@@ -546,19 +517,6 @@ function renderLauncherPage() {
 <head>
   <title>HPC Code Server</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script>
-    // Clear stale service workers and caches on page load
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => r.unregister());
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => caches.delete(name));
-      });
-    }
-  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
