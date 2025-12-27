@@ -83,6 +83,17 @@ proxy.on('proxyReq', (proxyReq, req) => {
   proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
 });
 
+// Fix CSP header - code-server generates http:// URLs, change to https://
+proxy.on('proxyRes', (proxyRes, req, res) => {
+  const csp = proxyRes.headers['content-security-policy'];
+  if (csp) {
+    // Replace http:// with https:// in CSP for our domain
+    proxyRes.headers['content-security-policy'] = csp
+      .replace(/http:\/\/hpc\.omeally\.com/g, 'https://hpc.omeally.com')
+      .replace(/:443,80/g, '');  // Remove port artifacts
+  }
+});
+
 proxy.on('error', (err, req, res) => {
   console.error('Proxy error:', err.message);
   // Check if headers already sent (from response wrapper)
