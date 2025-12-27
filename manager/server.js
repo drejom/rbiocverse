@@ -425,7 +425,7 @@ app.post('/api/launch', async (req, res) => {
       const cluster = clusters[hpc] || clusters.gemini;
 
       const logDir = `/home/${config.hpcUser}/vscode-slurm-logs`;
-      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=${logDir}/code-server_%j.log --error=${logDir}/code-server_%j.err --wrap='mkdir -p ${logDir} && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-base-path /vscode-direct --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions --user-data-dir ~/.vscode-slurm/data'`;
+      const submitCmd = `sbatch --job-name=code-server --nodes=1 --cpus-per-task=${cpus} --mem=${mem} --partition=${cluster.partition} --time=${time} --output=${logDir}/code-server_%j.log --error=${logDir}/code-server_%j.err --wrap='mkdir -p ${logDir} && ${cluster.singularityBin} exec --env TERM=xterm-256color --env R_LIBS_SITE=${cluster.rLibsSite} -B ${cluster.bindPaths} ${cluster.singularityImage} code serve-web --host 0.0.0.0 --port ${config.codeServerPort} --without-connection-token --accept-server-license-terms --server-base-path /vscode-direct --server-data-dir ~/.vscode-slurm/.vscode-server --extensions-dir ~/.vscode-slurm/.vscode-server/extensions --user-data-dir ~/.vscode-slurm/user-data'`;
 
       const output = await sshExec(hpc, submitCmd);
       const match = output.match(/Submitted batch job (\d+)/);
