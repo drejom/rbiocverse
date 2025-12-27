@@ -1380,14 +1380,15 @@ app.use((req, res, next) => {
 
 // Proxy /code/* to code-server when running, with floating menu
 app.use('/code', (req, res, next) => {
-  console.log(`/code: path=${req.path} hasSession=${hasRunningSession()}`);
+  const isMainPage = req.path === '/' || req.path === '';
+  console.log(`/code: path=${req.path} isMain=${isMainPage} hasSession=${hasRunningSession()}`);
   if (!hasRunningSession()) {
     console.log('/code: no session, redirecting');
     return res.redirect('/');
   }
 
   // For the main /code/ request, inject floating menu
-  if (req.path === '/' || req.path === '') {
+  if (isMainPage) {
     console.log('/code: main page, setting up response capture');
     // Modify the response to inject our floating menu
     const originalWrite = res.write;
