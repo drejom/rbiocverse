@@ -6,9 +6,12 @@ const app = express();
 app.use(express.json());
 
 // Prevent caching issues - VS Code uses service workers that can cache stale paths
+// Safari is particularly aggressive about caching, so we use multiple headers
 app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   next();
 });
 
@@ -1593,24 +1596,34 @@ function renderVscodeWrapper() {
   <iframe id="vscode-frame" src="" style="display:none;"></iframe>
   <iframe id="hpc-menu-frame" src="/hpc-menu-frame"></iframe>
   <script>
-    // Clear stale service workers then load VS Code
+    // Clear all cached content and storage before loading VS Code
+    // This fixes Safari normal mode caching issues (works in private mode because it starts fresh)
     (async function() {
       try {
+        // Clear localStorage and sessionStorage (Safari aggressive caching fix)
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch(e) { console.log('Storage clear:', e); }
+
+        // Clear service workers
         if ('serviceWorker' in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           await Promise.all(registrations.map(r => r.unregister()));
         }
+
         // Clear caches
         if ('caches' in window) {
           const keys = await caches.keys();
           await Promise.all(keys.map(k => caches.delete(k)));
         }
       } catch(e) { console.log('Cache clear:', e); }
-      // Now load VS Code
+
+      // Now load VS Code with cache-busting timestamp
       document.getElementById('loading').style.display = 'none';
       const frame = document.getElementById('vscode-frame');
       frame.style.display = 'block';
-      frame.src = '/vscode-direct/';
+      frame.src = '/vscode-direct/?t=' + Date.now();
     })();
 
     // Handle navigation messages from menu frame
