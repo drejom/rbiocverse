@@ -21,10 +21,16 @@ services:
       - DEFAULT_CPUS=${DEFAULT_CPUS:-2}
       - DEFAULT_MEM=${DEFAULT_MEM:-40G}
       - DEFAULT_TIME=${DEFAULT_TIME:-12:00:00}
+      # State persistence (Phase 1.4)
+      - STATE_FILE=/data/state.json
+      - ENABLE_STATE_PERSISTENCE=${ENABLE_STATE_PERSISTENCE:-false}
 
     volumes:
       # SSH keys copied from studio to TrueNAS (mount to apps user home)
       - /mnt/ssd/docker/hpc-ssh:/home/apps/.ssh:ro
+      # Persistent state storage (Phase 1.4)
+      # Directory will be created via Dokploy setup scripts
+      - data:/data
 
     expose:
       - 3000   # Manager UI/API (Traefik routes here)
@@ -38,6 +44,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  data:
+    driver: local
 
 networks:
   dokploy-network:
