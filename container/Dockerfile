@@ -40,7 +40,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # proffer: golang-go
 # b64: cargo
 # bedr deps: bedtools bedops
-# genomics: bcftools vcftools samtools tabix picard-tools freebayes
+# genomics: bcftools vcftools samtools tabix picard-tools
+# NOTE: freebayes not available in Ubuntu Noble (24.04)
 
 RUN apt-get update && apt-get -y install --no-install-recommends \
     # Core dev libraries
@@ -73,7 +74,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     golang-go cargo \
     # Genomics tools (bedr deps + general)
     bedtools bedops \
-    bcftools vcftools samtools tabix picard-tools freebayes \
+    bcftools vcftools samtools tabix picard-tools \
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
@@ -131,15 +132,17 @@ RUN mkdir -p /opt/renv/cache && chmod 777 /opt/renv/cache
 ENV RENV_PATHS_CACHE=/opt/renv/cache
 
 # Configure renv to use Posit Package Manager for fast binary installs
-# NOTE: Uses Ubuntu jammy (22.04) - update if base image changes
-ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/jammy/latest"
+# NOTE: Bioconductor 3.22 uses Ubuntu Noble (24.04)
+ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/noble/latest"
 
 # =============================================================================
 # Finalize
 # =============================================================================
 
-# Copy metapackage for easy package installation
+# Copy metapackage and scripts for easy package installation
 COPY rbiocverse/ /opt/rbiocverse/
+COPY scripts/install.R /opt/rbiocverse/scripts/
+COPY scripts/migrate-packages.R /opt/rbiocverse/scripts/
 
 # Default user (matches Bioconductor base image)
 USER rstudio
