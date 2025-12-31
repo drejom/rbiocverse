@@ -33,6 +33,13 @@ class StateManager {
       this.state = JSON.parse(data);
       console.log('State loaded from', this.stateFile);
 
+      // Ensure tunnelProcess is null for all sessions (can't be restored from disk)
+      for (const [hpc, session] of Object.entries(this.state.sessions)) {
+        if (session) {
+          session.tunnelProcess = null;
+        }
+      }
+
       await this.reconcile();
     } catch (e) {
       if (e.code !== 'ENOENT') {
@@ -44,6 +51,7 @@ class StateManager {
 
   /**
    * Save state to disk after every change
+   * Excludes non-serializable fields like tunnelProcess
    */
   async save() {
     if (!this.enablePersistence) return;
@@ -51,7 +59,24 @@ class StateManager {
     try {
       const dir = path.dirname(this.stateFile);
       await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(this.stateFile, JSON.stringify(this.state, null, 2));
+
+      // Create a clean copy without non-serializable fields
+      const cleanState = {
+        activeHpc: this.state.activeHpc,
+        sessions: {},
+      };
+
+      for (const [hpc, session] of Object.entries(this.state.sessions)) {
+        if (session) {
+          // Exclude tunnelProcess - it's a process handle that can't be serialized
+          const { tunnelProcess, ...rest } = session;
+          cleanState.sessions[hpc] = rest;
+        } else {
+          cleanState.sessions[hpc] = null;
+        }
+      }
+
+      await fs.writeFile(this.stateFile, JSON.stringify(cleanState, null, 2));
     } catch (e) {
       console.error('Failed to save state:', e.message);
     }
