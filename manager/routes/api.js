@@ -284,9 +284,13 @@ function createApiRouter(stateManager) {
 
     } catch (error) {
       console.error('Launch error:', error);
-      session.status = 'idle';
-      session.error = error.message;
-      await stateManager.save();
+      // Access session via state (session variable is scoped inside try block)
+      const session = state.sessions[hpc];
+      if (session) {
+        session.status = 'idle';
+        session.error = error.message;
+        await stateManager.save();
+      }
 
       if (!res.headersSent) {
         res.status(500).json({ error: error.message });
