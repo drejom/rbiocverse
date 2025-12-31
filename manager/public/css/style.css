@@ -10,6 +10,71 @@
   padding: 0;
 }
 
+/* Lucide icon styling */
+.lucide {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  stroke-width: 2;
+}
+
+.icon-sm {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* Time pie chart */
+.time-pie {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-pie svg {
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+}
+
+.time-pie-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 4;
+}
+
+.time-pie-fill {
+  fill: none;
+  stroke: #4ade80;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+
+.time-pie-fill.warning {
+  stroke: #fbbf24;
+}
+
+.time-pie-fill.critical {
+  stroke: #ef4444;
+}
+
+.time-pie-text {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.time-pie-text.warning {
+  color: #fbbf24;
+}
+
+.time-pie-text.critical {
+  color: #ef4444;
+}
+
 body {
   font-family: system-ui, -apple-system, sans-serif;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);

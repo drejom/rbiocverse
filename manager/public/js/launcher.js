@@ -12,6 +12,7 @@ let defaultConfig = {
 
 let clusterStatus = { gemini: null, apollo: null };
 let countdowns = { gemini: null, apollo: null };
+let walltimes = { gemini: null, apollo: null };  // Total walltime for pie calculation
 
 /**
  * Format seconds to human readable (e.g., "11h 45m")
@@ -25,6 +26,34 @@ function formatTime(seconds) {
 }
 
 /**
+ * Generate SVG pie chart for time remaining
+ * @param {number} remaining - Seconds remaining
+ * @param {number} total - Total walltime in seconds
+ * @param {string} hpc - Cluster name for IDs
+ */
+function renderTimePie(remaining, total, hpc) {
+  const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percent);
+
+  let colorClass = '';
+  if (remaining < 600) colorClass = 'critical';
+  else if (remaining < 1800) colorClass = 'warning';
+
+  return `
+    <div class="time-pie">
+      <svg viewBox="0 0 40 40">
+        <circle class="time-pie-bg" cx="20" cy="20" r="${radius}"/>
+        <circle class="time-pie-fill ${colorClass}" id="${hpc}-pie-fill" cx="20" cy="20" r="${radius}"
+          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+      </svg>
+      <span class="time-pie-text ${colorClass}" id="${hpc}-countdown-value">${formatTime(remaining)}</span>
+    </div>
+  `;
+}
+
+/**
  * Render idle state with launch form
  */
 function renderIdleContent(hpc) {
@@ -32,20 +61,20 @@ function renderIdleContent(hpc) {
     <div class="cluster-info">No active session</div>
     <div class="launch-form">
       <div class="form-input">
-        <label>CPUs</label>
+        <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
         <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
       </div>
       <div class="form-input">
-        <label>Memory</label>
+        <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
         <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
       </div>
       <div class="form-input">
-        <label>Time</label>
+        <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
         <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
       </div>
     </div>
     <div class="btn-group">
-      <button class="btn btn-primary" onclick="launch('${hpc}')">Launch Session</button>
+      <button class="btn btn-primary" onclick="launch('${hpc}')"><i data-lucide="play" class="lucide"></i> Launch Session</button>
     </div>
   `;
 }
@@ -55,20 +84,18 @@ function renderIdleContent(hpc) {
  */
 function renderRunningContent(hpc, status) {
   const seconds = countdowns[hpc] || status.timeLeftSeconds || 0;
-  let countdownClass = 'countdown';
-  if (seconds < 600) countdownClass += ' critical';
-  else if (seconds < 1800) countdownClass += ' warning';
+  const total = walltimes[hpc] || seconds;  // Use stored walltime or current as fallback
 
   return `
-    <div class="cluster-info">Running on ${status.node || 'compute node'}</div>
-    <div class="${countdownClass}" id="${hpc}-countdown">${formatTime(seconds)}</div>
+    <div class="cluster-info"><i data-lucide="server" class="icon-sm"></i> ${status.node || 'compute node'}</div>
+    ${renderTimePie(seconds, total, hpc)}
     <div class="resources">
-      <span>${status.cpus || '?'} CPUs</span>
-      <span>${status.memory || '?'} RAM</span>
+      <span><i data-lucide="cpu" class="icon-sm"></i>${status.cpus || '?'} CPUs</span>
+      <span><i data-lucide="memory-stick" class="icon-sm"></i>${status.memory || '?'}</span>
     </div>
     <div class="btn-group">
-      <button class="btn btn-success" onclick="connect('${hpc}')">Connect</button>
-      <button class="btn btn-danger" onclick="killJob('${hpc}')">Kill Job</button>
+      <button class="btn btn-success" onclick="connect('${hpc}')"><i data-lucide="plug" class="lucide"></i> Connect</button>
+      <button class="btn btn-danger" onclick="killJob('${hpc}')"><i data-lucide="square" class="lucide"></i> Kill Job</button>
     </div>
   `;
 }
@@ -87,7 +114,7 @@ function renderPendingContent(hpc, status) {
     </div>
     ${estStart}
     <div class="btn-group">
-      <button class="btn btn-danger" onclick="killJob('${hpc}')">Cancel</button>
+      <button class="btn btn-danger" onclick="killJob('${hpc}')"><i data-lucide="x" class="lucide"></i> Cancel</button>
     </div>
   `;
 }
@@ -108,13 +135,17 @@ function updateClusterCard(hpc, status) {
     statusText.textContent = 'No session';
     content.innerHTML = renderIdleContent(hpc);
     countdowns[hpc] = null;
+    walltimes[hpc] = null;
   } else if (status.status === 'running') {
     card.classList.add('running');
     dot.classList.add('running');
     statusText.textContent = 'Running';
-    // Initialize countdown if not set
+    // Initialize countdown and walltime if not set
     if (!countdowns[hpc] && status.timeLeftSeconds) {
       countdowns[hpc] = status.timeLeftSeconds;
+      // Store initial walltime for pie calculation (estimate from remaining time)
+      // API doesn't provide original walltime, so use first seen value
+      walltimes[hpc] = status.timeLeftSeconds;
     }
     content.innerHTML = renderRunningContent(hpc, status);
   } else if (status.status === 'pending') {
@@ -123,7 +154,11 @@ function updateClusterCard(hpc, status) {
     statusText.textContent = 'Pending';
     content.innerHTML = renderPendingContent(hpc, status);
     countdowns[hpc] = null;
+    walltimes[hpc] = null;
   }
+
+  // Render Lucide icons after DOM update
+  lucide.createIcons();
 }
 
 /**
@@ -149,13 +184,28 @@ function tickCountdowns() {
   ['gemini', 'apollo'].forEach(hpc => {
     if (countdowns[hpc] && countdowns[hpc] > 0) {
       countdowns[hpc]--;
-      const el = document.getElementById(hpc + '-countdown');
-      if (el) {
-        el.textContent = formatTime(countdowns[hpc]);
-        // Update warning class
-        el.className = 'countdown';
-        if (countdowns[hpc] < 600) el.classList.add('critical');
-        else if (countdowns[hpc] < 1800) el.classList.add('warning');
+      const remaining = countdowns[hpc];
+      const total = walltimes[hpc] || remaining;
+
+      // Determine color state
+      let colorClass = '';
+      if (remaining < 600) colorClass = 'critical';
+      else if (remaining < 1800) colorClass = 'warning';
+
+      // Update pie chart fill
+      const pieEl = document.getElementById(hpc + '-pie-fill');
+      if (pieEl) {
+        const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+        const circumference = 2 * Math.PI * 16;
+        pieEl.setAttribute('stroke-dashoffset', circumference * (1 - percent));
+        pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
+      }
+
+      // Update time text
+      const valueEl = document.getElementById(hpc + '-countdown-value');
+      if (valueEl) {
+        valueEl.textContent = formatTime(remaining);
+        valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
       }
     }
   });
