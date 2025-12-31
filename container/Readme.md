@@ -1,151 +1,169 @@
-[![Create and publish a Docker image](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml/badge.svg)](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml)
-# Bioconductor on Apollo
+[![Build and publish Docker image](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml/badge.svg)](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml)
 
-This repository provides a Dockerfile that extends the official [Bioconductor Docker](https://bioconductor.org/help/docker/) image by adding some packages including the HPC job scheduler SLURM. GitHub actions build the image and push it to GitHub Packages.
+# Bioconductor Development Container
 
-## Additionally supported packages
+Docker container extending [Bioconductor Docker](https://bioconductor.org/help/docker/) for HPC (Apollo/Gemini) and VSCode devcontainer workflows.
 
-[Bioconductor Docker](https://bioconductor.org/help/docker/) containers are based on [Rocker](https://rocker-project.org/) project images, which provide RStudio Server, a full featured IDE via a web browser. To the Rocker project's images, the Bioconductor developers add all the system dependencies required to support Bioconductor R libraries. We extend the container further by adding:
+## Architecture
 
-- ML libraries for transformers and convolutional neural networks
-- System dependencies to support `bedr`, `ctrdata`, `monocle3`, `fnmate` and `datapasta`
-- genomics tools like `sra-tools`, `bcftools` and `bedops`
-- DNAnexus support (DX toolkit, dxfuse)
-- SLURM
-- JupyterLab
-- VSCode LiveShare, R devcontainer [dependencies](https://github.com/microsoft/vscode-dev-containers/blob/main/containers/r/.devcontainer/devcontainer.json), miniconda
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Container (lean, ~2-3GB)                                   │
+│  - System dependencies (libhdf5, libgdal, etc.)            │
+│  - Genomics tools (bcftools, bedtools, sra-tools)          │
+│  - Python (dxpy, jupyterlab, radian)                       │
+│  - VSCode CLI, SLURM wrappers                              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ mounts R_LIBS_SITE
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Shared Library (on HPC storage)                           │
+│  /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22  │
+│  - 1500+ R packages                                         │
+│  - Shared by all users                                      │
+│  - Updated independently of container                       │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## Bioconductor version **3.19**
+## Quick Start
 
-### Apollo
+### VSCode Devcontainer (Local)
+1. Install [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+2. Open repo in VSCode → "Reopen in Container"
 
-Build the container image for the HPC:
-
+### HPC Interactive Session (Gemini)
 ```sh
+~/bin/ij 4  # Request 4 CPUs
+```
+
+### HPC Batch Job
+```sh
+sbatch /packages/singularity/shared_cache/rbioc/rbioc322.job
+```
+
+## Update Path (New Bioconductor Version)
+
+### Step 1: Update Container
+```sh
+# Edit Dockerfile line 3
+ARG BIOC_VERSION=RELEASE_3_22  # Change to new version
+
+# Build locally (optional test)
+docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest .
+
+# Push tag to trigger CI build (use format vYYYY-MM-DD or vX.Y.Z)
+git tag vYYYY-MM-DD
+git push --tags
+```
+
+### Step 2: Pull to HPC
+```sh
+# Gemini
 module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.19.sif docker://ghcr.io/drejom/vscode-rbioc:v2024-7-17
-```
-And launch on the HPC:
+singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif \
+  docker://ghcr.io/drejom/vscode-rbioc:latest
 
+# Apollo
+singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.22.sif \
+  docker://ghcr.io/drejom/vscode-rbioc:latest
+```
+
+### Step 3: Parallel Package Install
 ```sh
-sbatch /opt/singularity-images/rbioc/rbioc319.job
+# Create new library directory
+mkdir -p /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+
+# Export current packages
+Rscript scripts/migrate-packages.R export packages-3.19.rds
+
+# Generate SLURM array job (20 parallel workers)
+Rscript scripts/migrate-packages.R slurm packages-3.19.rds 20
+
+# Submit to cluster
+sbatch slurm_install/install_packages.slurm
 ```
-### Gemini
 
-Build the container image for the HPC:
+Or install from the metapackage:
+```r
+# In R
+devtools::install_local("/opt/rbiocverse", dependencies = TRUE)
+```
 
+### Step 4: Update Launch Scripts
+Update `R_LIBS_SITE` in `~/bin/ij` and job scripts:
 ```sh
-module load singularity
-singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif docker://ghcr.io/drejom/vscode-rbioc:v2024-7-17
-```
-And launch on the HPC:
-
-```sh
-# RStudio not supported on Gemini
-#sbatch /packages/singularity/shared_cache/rbioc/rbioc319.job
-# Use vscode tunnels
+R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
 ```
 
-## Bioconductor version **3.18**
+## What's Included
 
-### Apollo
+### System Dependencies
+- Seurat v5: libhdf5-dev
+- monocle3: libmysqlclient-dev, libudunits2-dev, libgdal-dev, libgeos-dev, libproj-dev
+- velocyto.R: libboost-all-dev, libomp-dev
+- bedr: bedtools, bedops
+- ctrdata: libjq-dev, php, php-xml
 
-Build the container image for the HPC:
+### Genomics Tools
+bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, freebayes, sra-tools
 
-```sh
-module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.18.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-11-27
-```
-And launch on the HPC:
+### Python
+- radian (better R console)
+- dxpy (DNAnexus toolkit)
+- jupyterlab
+- numpy, scipy, scikit-learn, umap-learn, leidenalg (Seurat Python deps)
 
-```sh
-sbatch /opt/singularity-images/rbioc/rbioc318.job
-```
-### Gemini
+### Other
+- VSCode CLI (`code serve-web`, tunnels)
+- DNAnexus dxfuse
+- SLURM SSH wrappers
+- qpdf, lftp, git-filter-repo
 
-Build the container image for the HPC:
+## rbiocverse Metapackage
 
-```sh
-module load singularity
-singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.18.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-11-27
-```
-And launch on the HPC:
+The `rbiocverse/` directory contains a metapackage that documents and installs standard packages:
 
-```sh
-#sbatch /packages/singularity/shared_cache/rbioc/rbioc318.job
-```
+```r
+# Install all standard packages
+devtools::install_local("rbiocverse")
 
-## Bioconductor version **3.17**
-
-### Apollo
-
-Build the container image for the HPC:
-
-```sh
-module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-9-26
-```
-And launch on the HPC:
-
-```sh
-sbatch /opt/singularity-images/rbioc/rbioc317.job
-```
-### Gemini
-
-Build the container image for the HPC:
-
-```sh
-singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-10-24
-```
-And launch on the HPC:
-
-```sh
-#sbatch /opt/singularity-images/rbioc/rbioc317.job
+# Or use pak
+pak::local_install("rbiocverse")
 ```
 
-## Bioconductor version **3.16**
+See `rbiocverse/DESCRIPTION` for the full package list organized by category:
+- Development (BiocManager, devtools, targets, renv)
+- Tidyverse & Data
+- Bioconductor Core
+- Single Cell (Seurat, scran, harmony, slingshot, etc.)
+- Bulk RNA-seq (DESeq2, edgeR, limma)
+- Visualization (ggplot2, ComplexHeatmap, dittoSeq)
 
-Build the container for the HPC:
+## Files
 
-```sh
-module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.16.sif docker://ghcr.io/drejom/vscode-rbioc:v2023-1-8
+```
+├── .devcontainer/
+│   └── devcontainer.json     # VSCode devcontainer config
+├── .github/workflows/
+│   └── publish-to-github-package.yaml
+├── rbiocverse/
+│   ├── DESCRIPTION           # Metapackage manifest
+│   ├── LICENSE
+│   └── NAMESPACE
+├── scripts/
+│   ├── migrate-packages.R    # Package migration tools
+│   └── slurm-wrappers.sh     # SLURM SSH wrapper installer
+├── Dockerfile
+├── CLAUDE.md
+└── Readme.md
 ```
 
-And launch on the HPC:
+## Previous Versions
 
-```sh
-sbatch /opt/singularity-images/rbioc/rbioc316.job
-```
-
-## Bioconductor version **3.15**
-
-Build the container for the HPC:
-
-```sh
-module load singularity
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.15.sif docker://ghcr.io/drejom/vscode-rbioc:v2022-10-14
-```
-
-And launch on the HPC:
-
-```sh
-sbatch /opt/singularity-images/rbioc/rbioc.job
-```
-
-# Docker
-
-Build the Docker container locally:
-
-```sh
-docker buildx create --use
-#docker buildx build --load --platform linux/amd64,linux/arm64 -t ghcr.io/drejom/vscode-rbioc:latest
-docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
-```
-
-Get a shell locally:
-
-```sh
-docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
-```
-
+| Bioconductor | Container Tag | R_LIBS_SITE |
+|--------------|---------------|-------------|
+| 3.22 | `ghcr.io/drejom/vscode-rbioc:latest` | `rlibs/bioc-3.22` |
+| 3.19 | `ghcr.io/drejom/vscode-rbioc:v2024-7-17` | `rlibs/bioc-3.19` |
+| 3.18 | `ghcr.io/drejom/vscode-rbioc:v2023-11-27` | `rlibs/bioc-3.18` |
+| 3.17 | `ghcr.io/drejom/vscode-rbioc:v2023-9-26` | `rlibs/bioc-3.17` |

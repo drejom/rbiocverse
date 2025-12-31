@@ -1,0 +1,38 @@
+{
+  "name": "R/Bioconductor",
+  "image": "ghcr.io/drejom/vscode-rbioc:latest",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "configureZshAsDefaultShell": false,
+      "installOhMyZsh": false
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "quarto.quarto",
+        "ms-python.python",
+        "GitHub.copilot",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "r.rterm.linux": "/usr/local/bin/radian",
+        "r.bracketedPaste": true,
+        "r.plot.useHttpgd": true
+      }
+    }
+  },
+  "remoteUser": "rstudio",
+  "containerEnv": {
+    "RENV_PATHS_CACHE": "/opt/renv/cache",
+    "RENV_CONFIG_REPOS_OVERRIDE": "https://packagemanager.posit.co/cran/__linux__/jammy/latest",
+    "R_LIBS_SITE": "${localEnv:R_LIBS_SITE:-/opt/rlibs}"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/rstudio/.gitconfig,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": "echo 'Container ready. R_LIBS_SITE=${R_LIBS_SITE}'"
+}

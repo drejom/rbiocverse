@@ -1,160 +1,149 @@
-# Set ARG defaults
-ARG VARIANT=RELEASE_3_19
+# R/Bioconductor Development Container
+# Change BIOC_VERSION to update to a new Bioconductor release
+ARG BIOC_VERSION=RELEASE_3_22
 
-FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${VARIANT} 
+# Tool versions - pin for reproducibility
+ARG DXFUSE_VERSION=0.23.2
+ARG SRATOOLKIT_VERSION=3.1.1
+ARG VSCODE_CLI_BUILD=stable
 
-### Install vscode stuff
-# [Option] Install zsh
-ARG INSTALL_ZSH=FALSE
-# [Option] Upgrade OS packages to their latest versions
-ARG UPGRADE_PACKAGES="true"
+FROM --platform=linux/amd64 bioconductor/bioconductor_docker:${BIOC_VERSION}
 
-# Install needed packages and setup non-root user. Use a separate RUN statement to add your own dependencies.
-ARG USERNAME=rstudio
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
+# Re-declare ARGs after FROM and export as ENV for runtime access
+ARG BIOC_VERSION
+ARG DXFUSE_VERSION
+ARG SRATOOLKIT_VERSION
+ENV BIOC_VERSION=${BIOC_VERSION}
+ENV DXFUSE_VERSION=${DXFUSE_VERSION}
+ENV SRATOOLKIT_VERSION=${SRATOOLKIT_VERSION}
+
 USER root
-ADD assets/common-debian.sh /tmp/
-ENV SHELL=/bin/bash 
+ENV SHELL=/bin/bash
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && /bin/bash /tmp/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
-    && usermod -a -G staff ${USERNAME} \
-    && apt-get update && apt-get -y install \
-    libgit2-dev \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    libxml2-dev \
-    libxt-dev \
-    libfontconfig1-dev \
-    libcairo2-dev \
-    squashfs-tools \
-    gdal-bin \
-    pandoc \
-    pandoc-citeproc \
-    && rm -rf /tmp/downloaded_packages \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# # VSCode R Debugger dependency. Install the latest release version from GitHub without using GitHub API.
-# # See https://github.com/microsoft/vscode-dev-containers/issues/1032
-# RUN export TAG=$(git ls-remote --tags --refs --sort='version:refname' https://github.com/ManuelHentschel/vscDebugger v\* | tail -n 1 | cut --delimiter='/' --fields=3) \
-#     && Rscript -e "remotes::install_git('https://github.com/ManuelHentschel/vscDebugger.git', ref = '"${TAG}"', dependencies = FALSE)"
-
-# R Session watcher settings.
-# See more details: https://github.com/REditorSupport/vscode-R/wiki/R-Session-watcher
-RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >>"${R_HOME}/etc/Rprofile.site"
-
-### Install additional OS packages 
+# =============================================================================
+# System Dependencies (single consolidated layer)
+# =============================================================================
+# Core dev tools: libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev
+# Graphics: libxt-dev libfontconfig1-dev libcairo2-dev libpng-dev
 # Seurat v5: libhdf5-dev
-# fnmate and datapasta: ripgrep xsel
-# vscode jupyter: libzmq3-dev
-# jupyter-minimal-notebook: run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip 
-# jupyter-scikit-learn: build-essential cm-super dvipng ffmpeg
-# monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev
+# monocle3: libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev
+#           libgdal-dev libgeos-dev libproj-dev
 # velocyto.R: libboost-all-dev libomp-dev
-# velociraptor: libpng
-# ctrdata: libjq-dev, php, php-xm, php-json
-# bedr: bedtools bedops
-# genomics: bcftools vcftools samtools tabix picard-tools freebayes   
+# ctrdata: libjq-dev php php-xml php-json
+# fnmate/datapasta: ripgrep xsel
+# Jupyter: libzmq3-dev
+# LaTeX: texlive-xetex texlive-fonts-recommended texlive-plain-generic
+# Build tools: build-essential cm-super dvipng ffmpeg
+# Utilities from issues: qpdf (#12), lftp (#11), git-filter-repo (#9)
 # reticulate: python3-venv python3-dev
 # proffer: golang-go
 # b64: cargo
-RUN apt-get update \
-    && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends \
+# bedr deps: bedtools bedops
+# genomics: bcftools vcftools samtools tabix picard-tools freebayes
+
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    # Core dev libraries
+    libgit2-dev libcurl4-openssl-dev libssl-dev libxml2-dev libxt-dev \
+    libfontconfig1-dev libcairo2-dev libpng-dev squashfs-tools \
+    gdal-bin pandoc \
+    # Seurat v5
     libhdf5-dev libxml-libxml-perl \
-    xsel ripgrep \
-    run-one texlive-xetex texlive-fonts-recommended texlive-plain-generic xclip \
-    libzmq3-dev build-essential cm-super dvipng ffmpeg \
-    libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev libgdal-dev libgeos-dev libproj-dev \
+    # monocle3
+    libmysqlclient-dev default-libmysqlclient-dev libudunits2-dev \
+    libgdal-dev libgeos-dev libproj-dev \
+    # velocyto.R
     libboost-all-dev libomp-dev \
-    libpng-dev \
+    # ctrdata
     libjq-dev php php-xml php-json \
+    # fnmate/datapasta
+    xsel ripgrep \
+    # Jupyter/LaTeX
+    libzmq3-dev run-one texlive-xetex texlive-fonts-recommended \
+    texlive-plain-generic xclip \
+    # Build tools
+    build-essential cm-super dvipng ffmpeg \
+    # Utilities (from issues #12, #11, #9)
+    qpdf lftp git-filter-repo \
+    # Fonts
     fonts-powerline \
+    # Python
+    python3-venv python3-dev \
+    # proffer/b64
+    golang-go cargo \
+    # Genomics tools (bedr deps + general)
     bedtools bedops \
     bcftools vcftools samtools tabix picard-tools freebayes \
-    python3-venv python3-dev \
-    golang-go \
-    cargo \
-    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts 
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
 
-### Install miniconda
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh \
-    && bash miniconda.sh -b -u -p /usr/local/bin \
-    && rm -rf miniconda.sh
+# =============================================================================
+# Python Packages
+# =============================================================================
+# radian: Better R console
+# dxpy: DNAnexus toolkit
+# jupyterlab: Jupyter notebook server
+# Seurat Python deps (#6): numpy scipy scikit-learn umap-learn leidenalg
 
-### Install Python packages
-# radian, DNAnexus DX toolkit, jupyterlab
 RUN pip3 install --no-cache-dir \
-    dxpy radian \
-    nodejs npm \
-    jupyterlab 
+    radian \
+    dxpy \
+    jupyterlab \
+    numpy scipy scikit-learn umap-learn leidenalg
 
-### Install other software
-# Install dxfuse
-RUN wget https://github.com/dnanexus/dxfuse/releases/download/v0.23.2/dxfuse-linux -P /usr/local/bin/ \
-    && mv /usr/local/bin/dxfuse-linux /usr/local/bin/dxfuse \
+# =============================================================================
+# External Tools (pinned versions for reproducibility)
+# =============================================================================
+
+# dxfuse - DNAnexus FUSE filesystem
+# Pinned to specific version for reproducibility
+RUN curl -fsSL "https://github.com/dnanexus/dxfuse/releases/download/v${DXFUSE_VERSION}/dxfuse-linux" -o /usr/local/bin/dxfuse \
     && chmod +x /usr/local/bin/dxfuse
 
-# Install sra-tools
-RUN wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz  \
-    && tar -xzf sratoolkit.current-ubuntu64.tar.gz -C /usr/local --strip-components=1 \
-    && rm sratoolkit.current-ubuntu64.tar.gz
+# sra-tools - NCBI SRA toolkit (pinned version)
+RUN curl -fsSL "https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/${SRATOOLKIT_VERSION}/sratoolkit.${SRATOOLKIT_VERSION}-ubuntu64.tar.gz" -o sratoolkit.tar.gz \
+    && tar -xzf sratoolkit.tar.gz -C /usr/local --strip-components=1 \
+    && rm sratoolkit.tar.gz
 
-# Install VSCode-cli
-RUN curl -LJO "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64" \
-&& tar -xvf vscode_cli_alpine_x64_cli.tar.gz \
-&& chmod +x code \
-&& mv code /usr/local/bin \
-&& rm vscode_cli_alpine_x64_cli.tar.gz
+# VSCode CLI - for code serve-web and tunnels
+RUN curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64" -o vscode_cli.tar.gz \
+    && tar -xzf vscode_cli.tar.gz \
+    && chmod +x code \
+    && mv code /usr/local/bin/ \
+    && rm vscode_cli.tar.gz
 
-### SLURM FROM WITHIN THE CONTAINER VIA SSH
-# https://github.com/gearslaboratory/gears-singularity/blob/master/singularity-definitions/general_use/Singularity.gears-general
-# https://groups.google.com/a/lbl.gov/g/singularity/c/syLcsIWWzdo/m/NZvF2Ud2AAAJ
-RUN echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sacct $@' >> /usr/local/bin/sacct && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sacctmgr $@' >> /usr/local/bin/sacctmgr && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) salloc $@' >> /usr/local/bin/salloc && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sattach $@' >> /usr/local/bin/sattach && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sbatch $@' >> /usr/local/bin/sbatch && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sbcast $@' >> /usr/local/bin/sbcast && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) scancel $@' >> /usr/local/bin/scancel && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) scontrol $@' >> /usr/local/bin/scontrol && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sdiag $@' >> /usr/local/bin/sdiag && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sgather $@' >> /usr/local/bin/sgather && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sinfo $@' >> /usr/local/bin/sinfo && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) smap $@' >> /usr/local/bin/smap && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sprio $@' >> /usr/local/bin/sprio && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) squeue $@' >> /usr/local/bin/squeue && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sreport $@' >> /usr/local/bin/sreport && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) srun $@' >> /usr/local/bin/srun && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sshare $@' >> /usr/local/bin/sshare && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sstat $@' >> /usr/local/bin/sstat && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/strigger && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) sview $@' >> /usr/local/bin/sview && \
-    echo '#!/bin/bash \n\
-ssh $(whoami)@$(hostname) strigger $@' >> /usr/local/bin/seff && \
-    cd /usr/local/bin && \
-    chmod 755 sacct salloc sbatch scancel sdiag sinfo sprio sreport sshare strigger sacctmgr sattach sbcast scontrol sgather smap squeue srun sstat sview seff   
+# =============================================================================
+# SLURM Wrappers (SSH passthrough for HPC container usage)
+# =============================================================================
+COPY scripts/slurm-wrappers.sh /tmp/
+RUN bash /tmp/slurm-wrappers.sh && rm /tmp/slurm-wrappers.sh
 
-# Init command for s6-overlay
-CMD [ "/init" ]
+# =============================================================================
+# R Configuration
+# =============================================================================
+
+# VSCode R session watcher
+RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
+
+# renv cache directory (shared across projects)
+RUN mkdir -p /opt/renv/cache && chmod 777 /opt/renv/cache
+ENV RENV_PATHS_CACHE=/opt/renv/cache
+
+# Configure renv to use Posit Package Manager for fast binary installs
+# NOTE: Uses Ubuntu jammy (22.04) - update if base image changes
+ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/jammy/latest"
+
+# =============================================================================
+# Finalize
+# =============================================================================
+
+# Copy metapackage for easy package installation
+COPY rbiocverse/ /opt/rbiocverse/
+
+# Default user (matches Bioconductor base image)
+USER rstudio
+WORKDIR /home/rstudio
+
+# Init command for s6-overlay (inherited from base)
+CMD ["/init"]

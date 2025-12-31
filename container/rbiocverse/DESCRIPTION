@@ -1,0 +1,149 @@
+Package: rbiocverse
+Title: R/Bioconductor Development Environment Packages
+Version: 3.22.0
+Authors@R:
+    person("Denis", "O'Meally", email = "domeally@coh.org", role = c("aut", "cre"))
+Description: Metapackage that installs commonly-used R and Bioconductor packages
+    for bioinformatics workflows. This serves as both documentation and a bootstrap
+    tool for populating R_LIBS_SITE with a comprehensive single-cell and genomics
+    analysis environment. Install with devtools::install_local() or pak::local_install().
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.0
+biocViews: Software
+Depends:
+    R (>= 4.4.0)
+Imports:
+    # =========================================================================
+    # Development & Workflow
+    # =========================================================================
+    BiocManager,
+    devtools,
+    usethis,
+    pak,
+    renv,
+    remotes,
+    targets,
+    tarchetypes,
+    drake,
+    # =========================================================================
+    # Tidyverse & Data Manipulation
+    # =========================================================================
+    tidyverse,
+    data.table,
+    janitor,
+    here,
+    fs,
+    glue,
+    rlang,
+    purrr,
+    # =========================================================================
+    # Bioconductor Core
+    # =========================================================================
+    Biostrings,
+    GenomicRanges,
+    GenomicFeatures,
+    GenomicAlignments,
+    SummarizedExperiment,
+    rtracklayer,
+    AnnotationHub,
+    AnnotationDbi,
+    ensembldb,
+    biomaRt,
+    # =========================================================================
+    # Annotation Databases
+    # =========================================================================
+    org.Hs.eg.db,
+    org.Mm.eg.db,
+    org.Rn.eg.db,
+    BSgenome.Hsapiens.UCSC.hg38,
+    BSgenome.Hsapiens.UCSC.hg19,
+    # =========================================================================
+    # Single Cell - Core
+    # =========================================================================
+    Seurat,
+    SeuratObject,
+    SingleCellExperiment,
+    scran,
+    scater,
+    scuttle,
+    DropletUtils,
+    # =========================================================================
+    # Single Cell - Integration & Batch Correction
+    # =========================================================================
+    batchelor,
+    harmony,
+    sctransform,
+    rliger,
+    # =========================================================================
+    # Single Cell - Trajectory & Velocity
+    # =========================================================================
+    slingshot,
+    # =========================================================================
+    # Single Cell - Annotation
+    # =========================================================================
+    SingleR,
+    celldex,
+    AUCell,
+    UCell,
+    # =========================================================================
+    # Single Cell - QC & Doublets
+    # =========================================================================
+    scDblFinder,
+    # =========================================================================
+    # Bulk RNA-seq & Differential Expression
+    # =========================================================================
+    DESeq2,
+    edgeR,
+    limma,
+    muscat,
+    MAST,
+    # =========================================================================
+    # Pathway & Enrichment
+    # =========================================================================
+    clusterProfiler,
+    enrichplot,
+    fgsea,
+    msigdbr,
+    # =========================================================================
+    # Visualization
+    # =========================================================================
+    ggplot2,
+    patchwork,
+    cowplot,
+    viridis,
+    RColorBrewer,
+    pheatmap,
+    ComplexHeatmap,
+    EnhancedVolcano,
+    dittoSeq,
+    # =========================================================================
+    # Reporting & VSCode
+    # =========================================================================
+    knitr,
+    rmarkdown,
+    quarto,
+    bookdown,
+    xaringan,
+    httpgd,
+    languageserver
+Suggests:
+    testthat (>= 3.0.0),
+    roxygen2,
+    pkgdown
+# GitHub packages pinned to specific commits/tags for reproducibility
+# Update these periodically and test before deploying
+Remotes:
+    cole-trapnell-lab/monocle3@v1.4.26,
+    satijalab/seurat-data@3e51f44,
+    satijalab/seurat-wrappers@a1eb0d8,
+    satijalab/azimuth@243ee5d,
+    mojaveazure/seurat-disk@877d4e1,
+    immunogenomics/presto@7636b3d,
+    velocyto-team/velocyto.R@83e6ed9,
+    sqjin/CellChat@v1.5.0,
+    Irrationone/cellassign@be66325,
+    welch-lab/liger@v2.2.1,
+    chris-mcginnis-ucsf/DoubletFinder@1b244d8
+Config/testthat/edition: 3
