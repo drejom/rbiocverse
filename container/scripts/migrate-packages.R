@@ -1,51 +1,22 @@
 #!/usr/bin/env Rscript
 # migrate-packages.R
-# Tools for migrating R packages between Bioconductor versions
-# Leverages HPC parallelization for fast installation
+# Utility for auditing installed packages
+# - Export current environment for comparison
+# - Find packages not in rbiocverse DESCRIPTION
+# - Compare two environments
+#
+# NOTE: For installing packages, use install.R instead.
+# This script is for auditing/comparison only.
 
 # =============================================================================
-# Configuration (override via environment variables)
-# =============================================================================
-
-# Default paths - override with environment variables for your HPC
-DEFAULT_SINGULARITY_IMAGE <- Sys.getenv(
-
-  "RBIOC_SINGULARITY_IMAGE",
-  "/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif"
-)
-DEFAULT_BIND_PATHS <- Sys.getenv(
-
-"RBIOC_BIND_PATHS",
-  "/packages,/scratch"
-)
-
-# =============================================================================
-# Helper: Validate library path
-# =============================================================================
-
-validate_lib <- function(lib) {
-  if (is.null(lib) || lib == "") {
-    stop(
-      "R_LIBS_SITE is not set. Please set the environment variable or pass 'lib' explicitly.\n",
-      "Example: R_LIBS_SITE=/path/to/rlibs Rscript migrate-packages.R ...",
-      call. = FALSE
-    )
-  }
-  if (!dir.exists(lib)) {
-    stop(sprintf("Library path does not exist: %s", lib), call. = FALSE)
-  }
-  invisible(lib)
-}
-
-# =============================================================================
-# Export current environment
+# Export Functions
 # =============================================================================
 
 #' Export installed packages to a file
 #' @param file Output file path (.rds or .csv)
 #' @param lib Library path to export (default: all libraries)
 #' @export
-migrate_export <- function(file = "packages.rds", lib = NULL) {
+export_packages <- function(file = "packages.rds", lib = NULL) {
   pkgs <- installed.packages(lib.loc = lib)[, c("Package", "Version", "Repository", "LibPath")]
   pkgs <- as.data.frame(pkgs, stringsAsFactors = FALSE)
 
@@ -70,214 +41,122 @@ migrate_export <- function(file = "packages.rds", lib = NULL) {
 }
 
 # =============================================================================
-# Install packages using pak (fast, parallel)
+# Comparison Functions
 # =============================================================================
 
-#' Install packages from export file using pak
-#' @param file Package list file (.rds or .csv)
-#' @param lib Target library path
-#' @param ncpus Number of CPUs for parallel installation
+#' Compare installed packages against rbiocverse DESCRIPTION
+#' @param description_path Path to rbiocverse DESCRIPTION
 #' @export
-migrate_install_pak <- function(file = "packages.rds", lib = NULL, ncpus = parallel::detectCores()) {
-  if (!requireNamespace("pak", quietly = TRUE)) {
-    install.packages("pak")
+compare_to_rbiocverse <- function(description_path = "rbiocverse/DESCRIPTION") {
+  if (!file.exists(description_path)) {
+    stop("DESCRIPTION not found: ", description_path, call. = FALSE)
   }
 
-  # Validate lib if provided
-if (!is.null(lib) && lib != "") {
-    validate_lib(lib)
-  }
+  # Parse DESCRIPTION
+  desc <- read.dcf(description_path, all = TRUE)
 
-  pkgs <- if (grepl("\\.csv$", file)) read.csv(file) else readRDS(file)
-  pkg_names <- pkgs$Package
-
-  message(sprintf("Installing %d packages using pak with %d cores...", length(pkg_names), ncpus))
-
-  # pak handles CRAN, Bioconductor, and GitHub automatically
-  options(Ncpus = ncpus)
-  pak::pkg_install(pkg_names, lib = lib, upgrade = FALSE)
-}
-
-# =============================================================================
-# HPC Parallel Installation (for large package sets)
-# =============================================================================
-
-#' Generate SLURM job array script for parallel package installation
-#' @param file Package list file
-#' @param lib Target library path (required)
-#' @param jobs Number of parallel jobs
-#' @param output_dir Directory for job scripts
-#' @param singularity_image Path to Singularity image (default from env)
-#' @param bind_paths Singularity bind paths (default from env)
-#' @export
-migrate_generate_slurm <- function(file = "packages.rds",
-                                    lib = Sys.getenv("R_LIBS_SITE"),
-                                    jobs = 20,
-                                    output_dir = "slurm_install",
-                                    singularity_image = DEFAULT_SINGULARITY_IMAGE,
-                                    bind_paths = DEFAULT_BIND_PATHS) {
-
-  # Validate required parameters
-  validate_lib(lib)
-
-  if (!file.exists(singularity_image)) {
-    warning(sprintf(
-      "Singularity image not found: %s\n  Update RBIOC_SINGULARITY_IMAGE or edit the generated script.",
-      singularity_image
-    ))
-  }
-
-  pkgs <- if (grepl("\\.csv$", file)) read.csv(file) else readRDS(file)
-  pkg_names <- pkgs$Package
-
-  # Split packages into chunks
-  chunks <- split(pkg_names, cut(seq_along(pkg_names), jobs, labels = FALSE))
-
-  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-
-  # Write package lists
-  for (i in seq_along(chunks)) {
-    writeLines(chunks[[i]], file.path(output_dir, sprintf("pkgs_%03d.txt", i)))
-  }
-
-  # Generate SLURM array script
-  slurm_script <- sprintf('#!/bin/bash
-#SBATCH --job-name=pkg_install
-#SBATCH --array=1-%d
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=4:00:00
-#SBATCH --output=%s/install_%%a.log
-
-# Configuration - edit these paths for your HPC environment
-SINGULARITY_IMAGE="%s"
-BIND_PATHS="%s"
-R_LIBS_SITE="%s"
-
-# Load singularity module (adjust for your HPC)
-module load singularity 2>/dev/null || true
-
-PKGFILE=%s/pkgs_$(printf "%%03d" $SLURM_ARRAY_TASK_ID).txt
-
-if [ ! -f "$PKGFILE" ]; then
-    echo "Package file not found: $PKGFILE"
-    exit 1
-fi
-
-singularity exec \\
-  --env R_LIBS_SITE=$R_LIBS_SITE \\
-  -B $BIND_PATHS \\
-  "$SINGULARITY_IMAGE" \\
-  Rscript -e "
-    pkgs <- readLines(\\"$PKGFILE\\")
-    for (pkg in pkgs) {
-      message(sprintf(\\"Installing %%s...\\", pkg))
-      tryCatch(
-        pak::pkg_install(pkg, lib = Sys.getenv(\\"R_LIBS_SITE\\"), upgrade = FALSE),
-        error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e)))
-      )
-    }
-  "
-', jobs, output_dir, singularity_image, bind_paths, lib, output_dir)
-
-  script_path <- file.path(output_dir, "install_packages.slurm")
-  writeLines(slurm_script, script_path)
-
-  message(sprintf("Generated SLURM job array in %s/", output_dir))
-  message(sprintf("  %d jobs, each installing ~%d packages", jobs, ceiling(length(pkg_names)/jobs)))
-  message(sprintf("  Singularity image: %s", singularity_image))
-  message(sprintf("  Target library: %s", lib))
-  message(sprintf("\nReview and edit paths in the script if needed, then submit with:"))
-  message(sprintf("  sbatch %s", script_path))
-
-  invisible(script_path)
-}
-
-# =============================================================================
-# Install from metapackage DESCRIPTION
-# =============================================================================
-
-#' Install all packages listed in rbiocverse DESCRIPTION
-#' @param path Path to rbiocverse package
-#' @param lib Target library path
-#' @param ncpus Number of CPUs
-#' @export
-install_rbiocverse <- function(path = "/opt/rbiocverse",
-                                lib = Sys.getenv("R_LIBS_SITE"),
-                                ncpus = parallel::detectCores()) {
-  if (!requireNamespace("pak", quietly = TRUE)) {
-    install.packages("pak")
-  }
-
-  # Validate lib if provided and not empty
-  if (!is.null(lib) && lib != "") {
-    validate_lib(lib)
-  }
-
-  desc_file <- file.path(path, "DESCRIPTION")
-  if (!file.exists(desc_file)) {
-    stop(sprintf("DESCRIPTION not found at: %s", desc_file), call. = FALSE)
-  }
-
-  desc <- read.dcf(desc_file)
-
-  # Parse Imports
-  imports <- desc[, "Imports"]
-  imports <- gsub("#.*", "", imports)  # Remove comments
-  imports <- strsplit(imports, ",\\s*")[[1]]
+  imports_str <- gsub("#[^\n]*", "", desc$Imports)
+  imports <- strsplit(imports_str, ",\\s*")[[1]]
   imports <- trimws(imports)
   imports <- imports[imports != ""]
+  imports <- gsub("\\s*\\([^)]+\\)", "", imports)
 
-  # Parse Remotes (GitHub packages)
-  remotes <- if ("Remotes" %in% colnames(desc)) {
-    strsplit(desc[, "Remotes"], ",\\s*")[[1]]
-  } else {
-    character(0)
+  remotes <- character(0)
+  if (!is.null(desc$Remotes) && !is.na(desc$Remotes)) {
+    remotes <- strsplit(desc$Remotes, ",\\s*")[[1]]
+    remotes <- trimws(remotes)
+    # Extract package name from user/repo@ref
+    remotes <- sapply(remotes, function(r) {
+      r <- gsub("@.*", "", r)  # Remove @ref
+      basename(r)              # Get repo name
+    })
   }
-  remotes <- trimws(remotes)
 
-  message(sprintf("Installing %d packages from rbiocverse...", length(imports)))
-  message(sprintf("  Including %d GitHub packages", length(remotes)))
+  rbiocverse_pkgs <- c(imports, remotes)
 
-  options(Ncpus = ncpus)
+  # Get installed packages
+  installed <- installed.packages()[, "Package"]
+  base_pkgs <- rownames(installed.packages(priority = c("base", "recommended")))
+  installed <- setdiff(installed, base_pkgs)
 
-  # Install CRAN/Bioc packages first
-  pak::pkg_install(imports, lib = lib, upgrade = FALSE)
+  # Compare
+  in_rbiocverse <- intersect(installed, rbiocverse_pkgs)
+  extra <- setdiff(installed, rbiocverse_pkgs)
+  missing <- setdiff(rbiocverse_pkgs, installed)
 
-  # Install GitHub packages
-  if (length(remotes) > 0) {
-    pak::pkg_install(remotes, lib = lib, upgrade = FALSE)
+  message("=== Comparison with rbiocverse ===")
+  message("rbiocverse packages: ", length(rbiocverse_pkgs))
+  message("Installed (non-base): ", length(installed))
+  message("")
+  message("In both: ", length(in_rbiocverse))
+  message("Extra (installed but not in rbiocverse): ", length(extra))
+  message("Missing (in rbiocverse but not installed): ", length(missing))
+
+  if (length(extra) > 0) {
+    message("\nExtra packages (consider adding to DESCRIPTION):")
+    message(paste("  ", head(extra, 20), collapse = "\n"))
+    if (length(extra) > 20) message("  ... and ", length(extra) - 20, " more")
   }
+
+  if (length(missing) > 0) {
+    message("\nMissing packages:")
+    message(paste("  ", missing, collapse = "\n"))
+  }
+
+  invisible(list(
+    in_both = in_rbiocverse,
+    extra = extra,
+    missing = missing
+  ))
 }
 
-# =============================================================================
-# Compare environments
-# =============================================================================
-
-#' Compare two package environments
+#' Compare two exported package lists
 #' @param old_file Old environment export
-#' @param new_lib New library path to compare
+#' @param new_file New environment export (or NULL to compare with current)
 #' @export
-migrate_compare <- function(old_file, new_lib = .libPaths()[1]) {
+compare_exports <- function(old_file, new_file = NULL) {
   old <- if (grepl("\\.csv$", old_file)) read.csv(old_file) else readRDS(old_file)
-  new <- installed.packages(lib.loc = new_lib)[, c("Package", "Version")]
-  new <- as.data.frame(new, stringsAsFactors = FALSE)
 
-  missing <- setdiff(old$Package, new$Package)
+  if (is.null(new_file)) {
+    new <- installed.packages()[, c("Package", "Version")]
+    new <- as.data.frame(new, stringsAsFactors = FALSE)
+  } else {
+    new <- if (grepl("\\.csv$", new_file)) read.csv(new_file) else readRDS(new_file)
+  }
+
+  removed <- setdiff(old$Package, new$Package)
   added <- setdiff(new$Package, old$Package)
 
   # Version changes
   common <- intersect(old$Package, new$Package)
-  old_common <- old[old$Package %in% common, ]
-  new_common <- new[new$Package %in% common, ]
+  old_common <- old[old$Package %in% common, c("Package", "Version")]
+  new_common <- new[new$Package %in% common, c("Package", "Version")]
   merged <- merge(old_common, new_common, by = "Package", suffixes = c(".old", ".new"))
-  upgraded <- merged[merged$Version.old != merged$Version.new, ]
+  changed <- merged[merged$Version.old != merged$Version.new, ]
 
-  list(
-    missing = missing,
+  message("=== Environment Comparison ===")
+  message("Old: ", nrow(old), " packages")
+  message("New: ", nrow(new), " packages")
+  message("")
+  message("Removed: ", length(removed))
+  message("Added: ", length(added))
+  message("Version changed: ", nrow(changed))
+
+  if (length(removed) > 0) {
+    message("\nRemoved:")
+    message(paste("  ", head(removed, 10), collapse = "\n"))
+  }
+
+  if (length(added) > 0) {
+    message("\nAdded:")
+    message(paste("  ", head(added, 10), collapse = "\n"))
+  }
+
+  invisible(list(
+    removed = removed,
     added = added,
-    upgraded = upgraded
-  )
+    changed = changed
+  ))
 }
 
 # =============================================================================
@@ -291,16 +170,16 @@ if (!interactive()) {
     message("Usage: Rscript migrate-packages.R <command> [options]")
     message("")
     message("Commands:")
-    message("  export [file]           Export installed packages")
-    message("  install [file]          Install packages from export")
-    message("  slurm [file] [jobs]     Generate SLURM job array")
-    message("  rbiocverse [path]       Install from rbiocverse metapackage")
-    message("  compare [old] [new]     Compare environments")
+    message("  export [file]              Export installed packages (default: packages.rds)")
+    message("  compare-rbiocverse [path]  Compare installed vs rbiocverse DESCRIPTION")
+    message("  compare <old> [new]        Compare two exports (or old vs current)")
     message("")
-    message("Environment variables:")
-    message("  R_LIBS_SITE              Target library path (required for slurm)")
-    message("  RBIOC_SINGULARITY_IMAGE  Singularity image path")
-    message("  RBIOC_BIND_PATHS         Singularity bind paths")
+    message("NOTE: For installing packages, use install.R instead.")
+    message("")
+    message("Examples:")
+    message("  Rscript migrate-packages.R export packages-3.19.rds")
+    message("  Rscript migrate-packages.R compare-rbiocverse")
+    message("  Rscript migrate-packages.R compare packages-3.19.rds packages-3.22.rds")
     quit(status = 0)
   }
 
@@ -308,27 +187,16 @@ if (!interactive()) {
 
   if (cmd == "export") {
     file <- if (length(args) > 1) args[2] else "packages.rds"
-    migrate_export(file)
-  } else if (cmd == "install") {
-    file <- if (length(args) > 1) args[2] else "packages.rds"
-    migrate_install_pak(file)
-  } else if (cmd == "slurm") {
-    file <- if (length(args) > 1) args[2] else "packages.rds"
-    jobs <- 20
-    if (length(args) > 2) {
-      jobs <- as.integer(args[3])
-    }
-    migrate_generate_slurm(file, jobs = jobs)
-  } else if (cmd == "rbiocverse") {
-    path <- if (length(args) > 1) args[2] else "/opt/rbiocverse"
-    install_rbiocverse(path)
+    export_packages(file)
+  } else if (cmd == "compare-rbiocverse") {
+    path <- if (length(args) > 1) args[2] else "rbiocverse/DESCRIPTION"
+    compare_to_rbiocverse(path)
   } else if (cmd == "compare") {
-    if (length(args) < 2) stop("Need old file")
-    result <- migrate_compare(args[2])
-    message(sprintf("Missing: %d packages", length(result$missing)))
-    message(sprintf("Added: %d packages", length(result$added)))
-    message(sprintf("Upgraded: %d packages", nrow(result$upgraded)))
+    if (length(args) < 2) stop("Need at least one file to compare", call. = FALSE)
+    old_file <- args[2]
+    new_file <- if (length(args) > 2) args[3] else NULL
+    compare_exports(old_file, new_file)
   } else {
-    stop(sprintf("Unknown command: %s", cmd), call. = FALSE)
+    stop("Unknown command: ", cmd, call. = FALSE)
   }
 }
