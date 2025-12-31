@@ -135,16 +135,6 @@ function renderPendingContent(hpc, status) {
   `;
 }
 
-/**
- * Calculate original walltime from startTime and timeLeftSeconds
- */
-function calculateWalltime(status) {
-  if (!status.startTime || !status.timeLeftSeconds) return null;
-  const startTime = new Date(status.startTime);
-  const now = new Date();
-  const elapsedSeconds = Math.floor((now - startTime) / 1000);
-  return elapsedSeconds + status.timeLeftSeconds;
-}
 
 /**
  * Update a single cluster card
@@ -170,8 +160,8 @@ function updateClusterCard(hpc, status) {
     // Initialize countdown and walltime if not set
     if (!countdowns[hpc] && status.timeLeftSeconds) {
       countdowns[hpc] = status.timeLeftSeconds;
-      // Calculate original walltime from startTime + remaining time
-      walltimes[hpc] = calculateWalltime(status) || status.timeLeftSeconds;
+      // Use walltime from SLURM (timeLimitSeconds), fallback to remaining time
+      walltimes[hpc] = status.timeLimitSeconds || status.timeLeftSeconds;
     }
     content.innerHTML = renderRunningContent(hpc, status);
   } else if (status.status === 'pending') {

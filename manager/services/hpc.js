@@ -47,13 +47,13 @@ class HpcService {
   async getJobInfo() {
     try {
       const output = await this.sshExec(
-        `squeue --user=${config.hpcUser} --name=code-server --states=R,PD -h -O JobID,State,NodeList,TimeLeft,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
+        `squeue --user=${config.hpcUser} --name=code-server --states=R,PD -h -O JobID,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
       );
 
       if (!output) return null;
 
       const parts = output.split(/\s+/);
-      const [jobId, jobState, node, timeLeft, cpus, memory, ...startTimeParts] = parts;
+      const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
       const startTime = startTimeParts.join(' '); // StartTime may have spaces
 
       return {
@@ -61,6 +61,7 @@ class HpcService {
         state: jobState,
         node: node === '(null)' ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
+        timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
         startTime: startTime === 'N/A' ? null : startTime,

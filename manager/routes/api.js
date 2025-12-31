@@ -159,6 +159,7 @@ function createApiRouter(stateManager) {
         if (!job) return { status: 'idle' };
 
         const timeLeftSeconds = parseTimeToSeconds(job.timeLeft);
+        const timeLimitSeconds = parseTimeToSeconds(job.timeLimit);
 
         return {
           status: job.state === 'RUNNING' ? 'running' : 'pending',
@@ -167,6 +168,8 @@ function createApiRouter(stateManager) {
           timeLeft: job.timeLeft,
           timeLeftSeconds,
           timeLeftHuman: formatHumanTime(timeLeftSeconds),
+          timeLimit: job.timeLimit,
+          timeLimitSeconds,
           cpus: job.cpus,
           memory: job.memory,
           startTime: job.startTime,
