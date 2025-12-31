@@ -67,14 +67,39 @@
       border-radius: 50%;
       background: #4ade80;
     }
-    .countdown {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #4ade80;
+    /* Time pie chart */
+    .time-pie {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       margin-bottom: 6px;
     }
-    .countdown.warning { color: #fbbf24; }
-    .countdown.critical { color: #ef4444; }
+    .time-pie svg {
+      width: 36px;
+      height: 36px;
+      transform: rotate(-90deg);
+    }
+    .time-pie-bg {
+      fill: none;
+      stroke: rgba(255,255,255,0.1);
+      stroke-width: 4;
+    }
+    .time-pie-fill {
+      fill: none;
+      stroke: #4ade80;
+      stroke-width: 4;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.3s;
+    }
+    .time-pie-fill.warning { stroke: #fbbf24; }
+    .time-pie-fill.critical { stroke: #ef4444; }
+    .time-pie-text {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #4ade80;
+    }
+    .time-pie-text.warning { color: #fbbf24; }
+    .time-pie-text.critical { color: #ef4444; }
     .resources {
       font-size: 0.85rem;
       color: rgba(255,255,255,0.6);
@@ -216,6 +241,7 @@
     const panel = document.getElementById('panel');
     let open = false;
     let countdown = null;
+    let walltime = null;  // Total walltime for pie calculation
     let activeHpc = null;
     let liveServerAvailable = false;
     let currentStatus = null;  // Store current HPC status for render()
@@ -276,16 +302,38 @@
       return m + 'm';
     }
 
+    /**
+     * Generate SVG pie chart for time remaining
+     * Pie starts full and empties as time passes
+     */
+    function renderTimePie(remaining, total) {
+      const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+      const radius = 14;
+      const circumference = 2 * Math.PI * radius;
+      const offset = circumference * (1 - percent);
+
+      let colorClass = '';
+      if (remaining < 600) colorClass = 'critical';
+      else if (remaining < 1800) colorClass = 'warning';
+
+      return `
+        <div class="time-pie">
+          <svg viewBox="0 0 36 36">
+            <circle class="time-pie-bg" cx="18" cy="18" r="${radius}"/>
+            <circle class="time-pie-fill ${colorClass}" id="pie-fill" cx="18" cy="18" r="${radius}"
+              stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+          </svg>
+          <span class="time-pie-text ${colorClass}" id="countdown-value">${formatTime(remaining)}</span>
+        </div>
+      `;
+    }
+
     function render() {
       const content = document.getElementById('content');
       if (!activeHpc) {
         content.innerHTML = '<div style="color:rgba(255,255,255,0.5)">No active session</div>';
         return;
       }
-
-      let countdownClass = 'countdown';
-      if (countdown < 600) countdownClass += ' critical';
-      else if (countdown < 1800) countdownClass += ' warning';
 
       // Update toggle button appearance
       toggle.className = '';
@@ -302,12 +350,12 @@
       let nodeText = '';
       if (currentStatus) {
         resourcesHtml = '<i data-lucide="cpu" class="resource-icon"></i> ' + (currentStatus.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (currentStatus.memory || '?');
-        nodeText = currentStatus.node || '';
+        nodeText = '<i data-lucide="server" class="resource-icon"></i> ' + (currentStatus.node || '');
       }
 
       content.innerHTML =
         '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
-        '<div class="' + countdownClass + '" id="countdown"><i data-lucide="timer" class="lucide"></i> <span id="countdown-value">' + formatTime(countdown) + '</span></div>' +
+        renderTimePie(countdown || 0, walltime || countdown || 1) +
         '<div class="resources">' + resourcesHtml + '</div>' +
         '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
@@ -340,10 +388,13 @@
           currentStatus = data[activeHpc];
           if (countdown === null && currentStatus.timeLeftSeconds) {
             countdown = currentStatus.timeLeftSeconds;
+            // Store initial walltime for pie calculation
+            walltime = currentStatus.timeLeftSeconds;
           }
         } else {
           currentStatus = null;
           countdown = null;
+          walltime = null;
         }
         render();
       } catch(e) {
@@ -354,17 +405,31 @@
     function tickCountdown() {
       if (countdown !== null && countdown > 0) {
         countdown--;
-        // Update only the value span, not the whole countdown div (preserves icon)
+        const remaining = countdown;
+        const total = walltime || remaining;
+
+        // Determine color state
+        let colorClass = '';
+        if (remaining < 600) colorClass = 'critical';
+        else if (remaining < 1800) colorClass = 'warning';
+
+        // Update pie chart fill
+        const pieEl = document.getElementById('pie-fill');
+        if (pieEl) {
+          const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+          const circumference = 2 * Math.PI * 14;
+          pieEl.setAttribute('stroke-dashoffset', circumference * (1 - percent));
+          pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
+        }
+
+        // Update time text
         const valueEl = document.getElementById('countdown-value');
-        const containerEl = document.getElementById('countdown');
         if (valueEl) {
-          valueEl.textContent = formatTime(countdown);
+          valueEl.textContent = formatTime(remaining);
+          valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
         }
-        if (containerEl) {
-          containerEl.className = 'countdown';
-          if (countdown < 600) containerEl.classList.add('critical');
-          else if (countdown < 1800) containerEl.classList.add('warning');
-        }
+
+        // Update toggle button
         toggle.className = open ? 'open' : '';
         if (countdown < 600) toggle.classList.add('critical');
         else if (countdown < 1800) toggle.classList.add('warning');
