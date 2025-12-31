@@ -1,6 +1,7 @@
 const express = require('express');
 const { spawn, exec } = require('child_process');
 const httpProxy = require('http-proxy');
+const StateManager = require('./lib/state');
 
 const app = express();
 app.use(express.json());
@@ -46,13 +47,16 @@ const clusters = {
 };
 
 // Multi-session state - track sessions per HPC
-let state = {
-  sessions: {
-    gemini: null,  // { status, jobId, node, tunnelProcess, startedAt, cpus, memory, walltime, error }
-    apollo: null,
-  },
-  activeHpc: null,  // Which HPC is currently being proxied
-};
+// Using StateManager for persistence across container restarts
+const stateManager = new StateManager();
+const state = stateManager.state;  // Alias for backward compatibility
+
+// Load persisted state on startup
+stateManager.load().then(() => {
+  console.log('State manager initialized');
+}).catch(err => {
+  console.error('Failed to load state:', err.message);
+});
 
 // Create a session object
 function createSession() {
@@ -312,6 +316,7 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/status', async (req, res) => {
   // Check actual job status for running sessions
+  let stateChanged = false;
   for (const [hpc, session] of Object.entries(state.sessions)) {
     if (session && session.status === 'running' && session.jobId) {
       const jobInfo = await getJobInfo(hpc);
@@ -324,8 +329,13 @@ app.get('/api/status', async (req, res) => {
         if (state.activeHpc === hpc) {
           state.activeHpc = null;
         }
+        stateChanged = true;
       }
     }
+  }
+
+  if (stateChanged) {
+    await stateManager.save();  // Persist cleanup of disappeared jobs
   }
 
   res.json({
@@ -397,6 +407,7 @@ app.post('/api/launch', async (req, res) => {
       session.tunnelProcess = await startTunnel(hpc, session.node);
     }
     state.activeHpc = hpc;
+    await stateManager.save();  // Persist activeHpc change
     return res.json({ status: 'connected', hpc, jobId: session.jobId, node: session.node });
   }
 
@@ -417,6 +428,7 @@ app.post('/api/launch', async (req, res) => {
   session.cpus = cpus;
   session.memory = mem;
   session.walltime = time;
+  await stateManager.save();  // Persist starting state
 
   try {
     // Check for existing job
@@ -479,6 +491,7 @@ app.post('/api/launch', async (req, res) => {
     session.status = 'running';
     session.startedAt = new Date().toISOString();
     state.activeHpc = hpc;
+    await stateManager.save();  // Persist running state
 
     res.json({
       status: 'running',
@@ -491,6 +504,7 @@ app.post('/api/launch', async (req, res) => {
     console.error('Launch error:', error);
     session.status = 'idle';
     session.error = error.message;
+    await stateManager.save();  // Persist error state
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -517,6 +531,7 @@ app.post('/api/switch/:hpc', async (req, res) => {
     }
 
     state.activeHpc = hpc;
+    await stateManager.save();  // Persist HPC switch
     res.json({ status: 'switched', hpc });
   } catch (error) {
     console.error('Switch error:', error);
@@ -555,6 +570,8 @@ app.post('/api/stop/:hpc?', async (req, res) => {
     state.activeHpc = Object.entries(state.sessions)
       .find(([h, s]) => s && s.status === 'running')?.[0] || null;
   }
+
+  await stateManager.save();  // Persist session cleared
 
   res.json({ status: 'stopped', hpc });
 });
