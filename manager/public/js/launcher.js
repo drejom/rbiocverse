@@ -212,13 +212,26 @@ async function fetchStatus(forceRefresh = false) {
 /**
  * Force refresh status (called by refresh button)
  */
+let isRefreshing = false;
+
 async function refreshStatus() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+
   const btn = document.getElementById('refresh-btn');
+  const ageSpan = document.querySelector('.cache-age');
+
   if (btn) {
     btn.classList.add('spinning');
     btn.disabled = true;
   }
+  if (ageSpan) {
+    ageSpan.innerHTML = '<em>Updating...</em>';
+  }
+
   await fetchStatus(true);
+
+  isRefreshing = false;
   if (btn) {
     btn.classList.remove('spinning');
     btn.disabled = false;
@@ -229,6 +242,8 @@ async function refreshStatus() {
  * Update cache age indicator
  */
 function updateCacheIndicator() {
+  if (isRefreshing) return;  // Don't overwrite "Updating..." message
+
   const indicator = document.getElementById('cache-indicator');
   if (!indicator || !lastStatusUpdate) return;
 
