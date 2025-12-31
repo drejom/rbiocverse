@@ -87,7 +87,7 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 # jupyterlab: Jupyter notebook server
 # Seurat Python deps (#6): numpy scipy scikit-learn umap-learn leidenalg
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --break-system-packages \
     radian \
     dxpy \
     jupyterlab \
