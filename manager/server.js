@@ -80,6 +80,21 @@ proxy.on('error', (err, req, res) => {
   }
 });
 
+// Proxy for Live Server (port 5500) - allows accessing dev server through manager
+const liveServerProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: 'http://127.0.0.1:5500',
+  changeOrigin: true,
+});
+
+liveServerProxy.on('error', (err, req, res) => {
+  console.error('Live Server proxy error:', err.message);
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
+  }
+});
+
 // Helper: run SSH command
 function sshExec(hpc, command) {
   const cluster = clusters[hpc] || clusters.gemini;
@@ -1648,6 +1663,14 @@ app.use('/vscode-direct', (req, res, next) => {
   proxy.web(req, res);
 });
 
+// Proxy to Live Server (port 5500) - access at /live/
+app.use('/live', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  liveServerProxy.web(req, res);
+});
+
 // /code/ main page serves wrapper, /code/* paths proxy directly
 app.use('/code', (req, res, next) => {
   if (!hasRunningSession()) {
@@ -1670,12 +1693,16 @@ const server = app.listen(PORT, () => {
   console.log(`Default HPC: ${config.defaultHpc}`);
 });
 
-// Handle WebSocket upgrades for code-server
+// Handle WebSocket upgrades for code-server and Live Server
 server.on('upgrade', (req, socket, head) => {
   console.log(`WebSocket: ${req.url}`);
   if (hasRunningSession()) {
+    // Live Server WebSocket (for hot reload)
+    if (req.url.startsWith('/live')) {
+      liveServerProxy.ws(req, socket, head);
+    }
     // Proxy WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
-    if (req.url.startsWith('/code') ||
+    else if (req.url.startsWith('/code') ||
         req.url.startsWith('/stable-') ||
         req.url.startsWith('/vscode-') ||
         req.url.startsWith('/oss-dev') ||
