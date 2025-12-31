@@ -77,28 +77,30 @@ check_cran <- function(pkg) {
   tryCatch({
     url <- sprintf("https://cran.r-project.org/package=%s", pkg)
     con <- url(url)
-    on.exit(close(con))
+    on.exit(try(close(con), silent = TRUE))
     readLines(con, n = 1, warn = FALSE)
     TRUE
-  }, error = function(e) FALSE)
+  }, error = function(e) FALSE, warning = function(w) FALSE)
 }
 
 #' Check if package is available on Bioconductor
 check_bioc <- function(pkg) {
-  tryCatch({
-    # Check both software and annotation
-    urls <- c(
-      sprintf("https://bioconductor.org/packages/release/bioc/html/%s.html", pkg),
-      sprintf("https://bioconductor.org/packages/release/data/annotation/html/%s.html", pkg)
-    )
-    for (url in urls) {
+  # Check both software, data/annotation, and data/experiment repos
+  urls <- c(
+    sprintf("https://bioconductor.org/packages/release/bioc/html/%s.html", pkg),
+    sprintf("https://bioconductor.org/packages/release/data/annotation/html/%s.html", pkg),
+    sprintf("https://bioconductor.org/packages/release/data/experiment/html/%s.html", pkg)
+  )
+  for (url in urls) {
+    result <- tryCatch({
       con <- url(url)
-      on.exit(close(con), add = TRUE)
-      result <- tryCatch(readLines(con, n = 1, warn = FALSE), error = function(e) NULL)
-      if (!is.null(result)) return(TRUE)
-    }
-    FALSE
-  }, error = function(e) FALSE)
+      on.exit(try(close(con), silent = TRUE))
+      readLines(con, n = 1, warn = FALSE)
+      TRUE
+    }, error = function(e) FALSE, warning = function(w) FALSE)
+    if (isTRUE(result)) return(TRUE)
+  }
+  FALSE
 }
 
 #' Check package availability (CRAN or Bioc)
@@ -160,6 +162,46 @@ bump_version <- function(version_str, type = c("patch", "minor", "major", "bioc"
 # Main Functions
 # =============================================================================
 
+#' Get all available packages from CRAN and Bioconductor
+#' @return Character vector of available package names
+get_available_packages <- function() {
+  message("Fetching available packages from CRAN and Bioconductor...")
+
+  # Use filters=NULL to ignore R version constraints
+  # This ensures we check package existence, not compatibility with current R
+  cran_pkgs <- tryCatch({
+    ap <- available.packages(repos = "https://cloud.r-project.org", filters = NULL)
+    rownames(ap)
+  }, error = function(e) {
+    warning("Could not fetch CRAN packages: ", e$message)
+    character(0)
+  })
+  message("  CRAN: ", length(cran_pkgs), " packages")
+
+  # Bioconductor repos
+  bioc_repos <- c(
+    "https://bioconductor.org/packages/release/bioc",
+    "https://bioconductor.org/packages/release/data/annotation",
+    "https://bioconductor.org/packages/release/data/experiment"
+  )
+
+  bioc_pkgs <- character(0)
+  for (repo in bioc_repos) {
+    pkgs <- tryCatch({
+      ap <- available.packages(repos = repo, filters = NULL)
+      rownames(ap)
+    }, error = function(e) character(0))
+    bioc_pkgs <- c(bioc_pkgs, pkgs)
+  }
+  bioc_pkgs <- unique(bioc_pkgs)
+  message("  Bioconductor: ", length(bioc_pkgs), " packages")
+
+  all_pkgs <- unique(c(cran_pkgs, bioc_pkgs))
+  message("  Total available: ", length(all_pkgs), " packages")
+
+  all_pkgs
+}
+
 #' Check all packages in DESCRIPTION for availability
 #' @param fix If TRUE, remove unavailable packages
 #' @export
@@ -169,12 +211,19 @@ check_packages <- function(fix = FALSE, path = DESCRIPTION_PATH) {
 
   message("Checking ", length(imports), " packages...")
 
-  unavailable <- character(0)
+  # Get all available packages (fast batch lookup)
+  available <- get_available_packages()
 
-  for (pkg in imports) {
-    if (!check_package_available(pkg)) {
+  # Base packages are always available
+  base_pkgs <- rownames(installed.packages(priority = "base"))
+  available <- unique(c(available, base_pkgs))
+
+  unavailable <- setdiff(imports, available)
+
+  if (length(unavailable) > 0) {
+    message("\nUnavailable packages:")
+    for (pkg in unavailable) {
       message("  UNAVAILABLE: ", pkg)
-      unavailable <- c(unavailable, pkg)
     }
   }
 
