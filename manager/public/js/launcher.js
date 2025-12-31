@@ -13,6 +13,8 @@ let defaultConfig = {
 let clusterStatus = { gemini: null, apollo: null };
 let countdowns = { gemini: null, apollo: null };
 let walltimes = { gemini: null, apollo: null };  // Total walltime for pie calculation
+let lastStatusUpdate = null;  // Timestamp of last status fetch
+let statusCacheTtl = 120;     // Cache TTL in seconds (from server)
 
 /**
  * Format seconds to human readable (e.g., "11h 45m")
@@ -187,18 +189,67 @@ function updateClusterCard(hpc, status) {
 
 /**
  * Fetch status from server
+ * @param {boolean} forceRefresh - Force cache refresh
  */
-async function fetchStatus() {
+async function fetchStatus(forceRefresh = false) {
   try {
-    const res = await fetch('/api/cluster-status');
+    const url = forceRefresh ? '/api/cluster-status?refresh=true' : '/api/cluster-status';
+    const res = await fetch(url);
     const data = await res.json();
     clusterStatus = data;
 
+    // Track cache info
+    if (data.updatedAt) {
+      lastStatusUpdate = new Date(data.updatedAt);
+    } else if (!data.cached) {
+      lastStatusUpdate = new Date();
+    }
+    if (data.cacheTtl) {
+      statusCacheTtl = data.cacheTtl;
+    }
+
     updateClusterCard('gemini', data.gemini);
     updateClusterCard('apollo', data.apollo);
+    updateCacheIndicator();
   } catch (e) {
     console.error('Status fetch error:', e);
   }
+}
+
+/**
+ * Force refresh status (called by refresh button)
+ */
+async function refreshStatus() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) {
+    btn.classList.add('spinning');
+    btn.disabled = true;
+  }
+  await fetchStatus(true);
+  if (btn) {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+  }
+}
+
+/**
+ * Update cache age indicator
+ */
+function updateCacheIndicator() {
+  const indicator = document.getElementById('cache-indicator');
+  if (!indicator || !lastStatusUpdate) return;
+
+  const ageSeconds = Math.floor((Date.now() - lastStatusUpdate.getTime()) / 1000);
+  const ageText = ageSeconds < 60 ? `${ageSeconds}s` : `${Math.floor(ageSeconds / 60)}m ${ageSeconds % 60}s`;
+  const stale = ageSeconds > statusCacheTtl;
+
+  indicator.innerHTML = `
+    <span class="cache-age ${stale ? 'stale' : ''}">Updated ${ageText} ago</span>
+    <button id="refresh-btn" class="refresh-btn" onclick="refreshStatus()" title="Refresh status">
+      <i data-lucide="refresh-cw" class="icon-sm"></i>
+    </button>
+  `;
+  lucide.createIcons();
 }
 
 /**
@@ -382,9 +433,62 @@ function initConfig(config) {
   };
 }
 
+/**
+ * Tick every second - countdowns and cache age
+ */
+function tick() {
+  tickCountdowns();
+  updateCacheIndicator();
+}
+
+// Interval handles for pause/resume
+let statusInterval = null;
+let tickInterval = null;
+
+/**
+ * Start polling intervals
+ */
+function startPolling() {
+  if (!statusInterval) {
+    statusInterval = setInterval(fetchStatus, 60000);
+  }
+  if (!tickInterval) {
+    tickInterval = setInterval(tick, 1000);
+  }
+}
+
+/**
+ * Stop polling intervals (when tab is hidden)
+ */
+function stopPolling() {
+  if (statusInterval) {
+    clearInterval(statusInterval);
+    statusInterval = null;
+  }
+  if (tickInterval) {
+    clearInterval(tickInterval);
+    tickInterval = null;
+  }
+}
+
+/**
+ * Handle visibility change - pause polling when hidden
+ */
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    // Tab became visible - fetch status (uses cache) and resume polling
+    fetchStatus();
+    startPolling();
+  }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-  fetchStatus();
-  setInterval(fetchStatus, 30000);  // Sync with server every 30s
-  setInterval(tickCountdowns, 1000); // Client-side countdown every second
+  fetchStatus();  // Use cached data for fast load
+  startPolling();
+
+  // Pause polling when tab is hidden
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 });

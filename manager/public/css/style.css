@@ -337,3 +337,74 @@ h1 {
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.85rem;
 }
+
+/* Launcher Header */
+.launcher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 25px;
+}
+
+.launcher-header h1 {
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.launcher-header .subtitle {
+  text-align: left;
+  margin-bottom: 0;
+}
+
+/* Cache Indicator */
+.cache-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.cache-age {
+  opacity: 0.7;
+}
+
+.cache-age.stale {
+  color: #fbbf24;
+  opacity: 1;
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-btn.spinning svg {
+  animation: spin 1s linear infinite;
+}
+
+.refresh-btn .icon-sm {
+  margin-right: 0;
+  width: 12px;
+  height: 12px;
+}

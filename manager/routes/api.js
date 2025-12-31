@@ -15,6 +15,13 @@ const { log } = require('../lib/logger');
 // Shared tunnel service instance
 const tunnelService = new TunnelService();
 
+// Status cache - reduces SSH calls to HPC clusters
+const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 120000; // 120 seconds default
+let statusCache = {
+  data: null,
+  timestamp: 0,
+};
+
 /**
  * Initialize router with state manager dependency
  * @param {StateManager} stateManager - State manager instance
@@ -119,8 +126,27 @@ function createApiRouter(stateManager) {
   });
 
   // Get job status for both clusters (checks SLURM directly)
+  // Cached to reduce SSH load - use ?refresh=true to force update
   router.get('/cluster-status', async (req, res) => {
+    const forceRefresh = req.query.refresh === 'true';
+    const now = Date.now();
+    const cacheAge = now - statusCache.timestamp;
+    const cacheValid = statusCache.data && cacheAge < STATUS_CACHE_TTL;
+
+    // Return cached data if valid and not forcing refresh
+    if (cacheValid && !forceRefresh) {
+      log.debug('Returning cached cluster status', { ageMs: cacheAge });
+      return res.json({
+        ...statusCache.data,
+        cached: true,
+        cacheAge: Math.floor(cacheAge / 1000),
+        cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
+      });
+    }
+
     try {
+      log.info('Fetching fresh cluster status', { forceRefresh, cacheAge: cacheAge ? Math.floor(cacheAge / 1000) : null });
+
       const geminiService = new HpcService('gemini');
       const apolloService = new HpcService('apollo');
 
@@ -147,12 +173,27 @@ function createApiRouter(stateManager) {
         };
       };
 
-      res.json({
+      const freshData = {
         gemini: formatClusterStatus(geminiJob),
         apollo: formatClusterStatus(apolloJob),
         activeHpc: state.activeHpc,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Update cache
+      statusCache = {
+        data: freshData,
+        timestamp: now,
+      };
+
+      res.json({
+        ...freshData,
+        cached: false,
+        cacheAge: 0,
+        cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
       });
     } catch (e) {
+      log.error('Failed to fetch cluster status', { error: e.message });
       res.status(500).json({ error: e.message });
     }
   });
