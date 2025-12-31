@@ -298,7 +298,7 @@
 
       content.innerHTML =
         '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
-        '<div class="' + countdownClass + '" id="countdown"><i data-lucide="timer" class="lucide"></i> ' + formatTime(countdown) + '</div>' +
+        '<div class="' + countdownClass + '" id="countdown"><i data-lucide="timer" class="lucide"></i> <span id="countdown-value">' + formatTime(countdown) + '</span></div>' +
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
@@ -336,7 +336,7 @@
           const resourcesEl = document.getElementById('resources');
           const nodeEl = document.getElementById('node');
           if (resourcesEl) {
-            resourcesEl.innerHTML = '<i data-lucide="cpu" class="resource-icon"></i>' + (status.cpus || '?') + ' CPUs &nbsp; <i data-lucide="memory-stick" class="resource-icon"></i>' + (status.memory || '?');
+            resourcesEl.innerHTML = '<i data-lucide="cpu" class="resource-icon"></i> ' + (status.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (status.memory || '?');
             lucide.createIcons();
           }
           if (nodeEl) nodeEl.textContent = status.node || '';
@@ -352,12 +352,16 @@
     function tickCountdown() {
       if (countdown !== null && countdown > 0) {
         countdown--;
-        const el = document.getElementById('countdown');
-        if (el) {
-          el.textContent = formatTime(countdown);
-          el.className = 'countdown';
-          if (countdown < 600) el.classList.add('critical');
-          else if (countdown < 1800) el.classList.add('warning');
+        // Update only the value span, not the whole countdown div (preserves icon)
+        const valueEl = document.getElementById('countdown-value');
+        const containerEl = document.getElementById('countdown');
+        if (valueEl) {
+          valueEl.textContent = formatTime(countdown);
+        }
+        if (containerEl) {
+          containerEl.className = 'countdown';
+          if (countdown < 600) containerEl.classList.add('critical');
+          else if (countdown < 1800) containerEl.classList.add('warning');
         }
         toggle.className = open ? 'open' : '';
         if (countdown < 600) toggle.classList.add('critical');
