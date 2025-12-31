@@ -148,8 +148,8 @@ generate_slurm <- function(jobs = 20, output_dir = "slurm_install") {
   chunks <- split(all_pkgs, cut(seq_along(all_pkgs), jobs, labels = FALSE))
 
   # Use absolute path for output directory
-  output_dir_abs <- normalizePath(output_dir, mustWork = FALSE)
-  dir.create(output_dir_abs, showWarnings = FALSE, recursive = TRUE)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  output_dir_abs <- normalizePath(output_dir)
 
   # Write package lists
   for (i in seq_along(chunks)) {
@@ -187,8 +187,13 @@ singularity exec \\
   -B $BIND_PATHS \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
-    pkgs <- readLines(\\"$PKGFILE\\")
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
+    # Bootstrap pak if needed
+    if (!requireNamespace(\\"pak\\", quietly = TRUE)) {
+      message(\\"Installing pak...\\")
+      install.packages(\\"pak\\", lib = lib, repos = \\"https://cloud.r-project.org\\")
+    }
+    pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
       message(sprintf(\\"Installing %%s...\\", pkg))
       tryCatch(
