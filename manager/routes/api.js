@@ -317,25 +317,35 @@ function createApiRouter(stateManager) {
     }
 
     const session = state.sessions[hpc];
-    if (!session) {
-      return res.status(400).json({ error: `No session for ${hpc}` });
-    }
 
-    // Stop tunnel
+    // Stop tunnel if exists
     tunnelService.stop(hpc);
 
     // Cancel SLURM job if requested
-    if (cancelJob && session.jobId) {
+    if (cancelJob) {
       try {
         const hpcService = new HpcService(hpc);
-        await hpcService.cancelJob(session.jobId);
-        console.log(`Cancelled job ${session.jobId} on ${hpc}`);
+
+        // Get job ID from session or query SLURM directly
+        let jobId = session?.jobId;
+        if (!jobId) {
+          // No session tracked - check SLURM directly for running job
+          const jobInfo = await hpcService.getJobInfo();
+          if (jobInfo) {
+            jobId = jobInfo.jobId;
+          }
+        }
+
+        if (jobId) {
+          await hpcService.cancelJob(jobId);
+          console.log(`Cancelled job ${jobId} on ${hpc}`);
+        }
       } catch (e) {
         console.error('Failed to cancel job:', e);
       }
     }
 
-    // Reset session
+    // Reset session (even if null, ensure it's properly initialized)
     state.sessions[hpc] = createSession();
     if (state.activeHpc === hpc) {
       state.activeHpc = null;
