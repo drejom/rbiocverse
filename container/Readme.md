@@ -44,20 +44,36 @@ sbatch /packages/singularity/shared_cache/rbioc/rbioc322.job
 
 ## Update Path (New Bioconductor Version)
 
-### Step 1: Update DESCRIPTION (Before Release)
+### Step 1: Sync DESCRIPTION with Current Environment
+Run from INSIDE the current container/environment to capture all ~1600 packages:
 ```sh
-# Check package availability and update GitHub remotes
-Rscript scripts/update-description.R check
-Rscript scripts/update-description.R remotes --apply
+# Preview what will change
+Rscript scripts/update-description.R sync
 
-# Bump version for new Bioconductor release
-Rscript scripts/update-description.R bump bioc  # 3.22.0 -> 3.23.0
-
-# Or do all at once
-Rscript scripts/update-description.R update --apply
+# Apply: adds all installed packages to DESCRIPTION
+Rscript scripts/update-description.R sync --apply
 ```
 
-### Step 2: Update Container
+### Step 2: Check Availability for New Bioconductor
+Some packages may not be available in the new Bioconductor version:
+```sh
+# Check which packages are unavailable
+Rscript scripts/update-description.R check
+
+# Remove unavailable packages from DESCRIPTION
+Rscript scripts/update-description.R check --apply
+```
+
+### Step 3: Update Remotes and Bump Version
+```sh
+# Update GitHub remote pins to latest tags/commits
+Rscript scripts/update-description.R remotes --apply
+
+# Bump version for new Bioconductor release (3.22.0 -> 3.23.0)
+Rscript scripts/update-description.R bump bioc
+```
+
+### Step 4: Update Container
 ```sh
 # Edit Dockerfile line 3 to match DESCRIPTION version
 ARG BIOC_VERSION=RELEASE_3_23  # Match rbiocverse/DESCRIPTION
@@ -71,7 +87,7 @@ git tag v2025-MM-DD
 git push && git push --tags
 ```
 
-### Step 3: Pull to HPC
+### Step 5: Pull to HPC
 ```sh
 # Gemini
 module load singularity
@@ -83,9 +99,9 @@ singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.23.sif \
   docker://ghcr.io/drejom/vscode-rbioc:latest
 ```
 
-### Step 4: Install Packages
+### Step 6: Install Packages
 ```sh
-# Create new library directory
+# Create new library directory (Gemini example)
 mkdir -p /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23
 
 # Option A: Direct install (uses all CPUs)
@@ -100,7 +116,7 @@ R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23 \
 sbatch slurm_install/install.slurm
 ```
 
-### Step 5: Update Launch Scripts
+### Step 7: Update Launch Scripts
 Update `R_LIBS_SITE` in `~/bin/ij` and job scripts:
 ```sh
 R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23
@@ -150,8 +166,11 @@ See `rbiocverse/DESCRIPTION` for the full package list organized by category:
 
 | Script | Purpose | When to Use |
 |--------|---------|-------------|
-| `update-description.R` | Check/update DESCRIPTION before release | Before tagging a new release |
-| `install.R` | Install packages from DESCRIPTION | After pulling new container to HPC |
+| `update-description.R sync` | Sync DESCRIPTION with installed packages | Step 1: Capture current ~1600 packages |
+| `update-description.R check` | Check/remove unavailable packages | Step 2: Before new Bioconductor release |
+| `update-description.R remotes` | Update GitHub remote pins | Step 3: Pin to latest tags/commits |
+| `update-description.R bump` | Bump version number | Step 3: After sync/check |
+| `install.R` | Install packages from DESCRIPTION | Step 6: After pulling new container |
 | `migrate-packages.R` | Export/compare package environments | Auditing, troubleshooting |
 
 ## Files

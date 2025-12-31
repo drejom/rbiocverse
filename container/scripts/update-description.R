@@ -184,7 +184,11 @@ check_packages <- function(fix = FALSE, path = DESCRIPTION_PATH) {
     message("\n", length(unavailable), " unavailable packages")
     if (fix) {
       message("Removing unavailable packages from DESCRIPTION...")
-      # TODO: Implement removal
+      available_imports <- setdiff(imports, unavailable)
+      imports_str <- paste("    ", sort(available_imports), collapse = ",\n")
+      desc$Imports <- paste0("\n", imports_str)
+      write_description(desc, path)
+      message("Removed ", length(unavailable), " packages, ", length(available_imports), " remaining")
     }
   }
 
@@ -265,6 +269,75 @@ suggest_packages <- function(path = DESCRIPTION_PATH,
   invisible(missing)
 }
 
+#' Sync DESCRIPTION with current environment
+#' Adds all installed packages to DESCRIPTION, removes unavailable ones
+#' @param dry_run If TRUE, just show what would change
+#' @param exclude Packages to exclude
+#' @export
+sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
+                                   exclude = c("rbiocverse")) {
+  desc <- read_description(path)
+  current_imports <- parse_imports(desc$Imports)
+  current_remotes <- parse_remotes(desc$Remotes)
+  remote_pkgs <- sapply(current_remotes, function(r) basename(r$repo))
+
+  # Get installed packages (non-base)
+  installed <- installed.packages()[, c("Package", "Repository")]
+  installed <- as.data.frame(installed, stringsAsFactors = FALSE)
+  base_pkgs <- rownames(installed.packages(priority = c("base", "recommended")))
+  installed <- installed[!installed$Package %in% base_pkgs, ]
+  installed <- installed[!installed$Package %in% exclude, ]
+  installed <- installed[!installed$Package %in% remote_pkgs, ]  # Keep remotes separate
+
+  # Classify by source
+  installed$Source <- ifelse(
+    grepl("bioconductor", installed$Repository, ignore.case = TRUE), "Bioconductor",
+    ifelse(is.na(installed$Repository) | installed$Repository == "", "GitHub/Local", "CRAN")
+  )
+
+  # Only include CRAN and Bioconductor packages (GitHub handled via Remotes)
+  cran_bioc <- installed[installed$Source %in% c("CRAN", "Bioconductor"), "Package"]
+
+  # Find what's new vs current
+  new_pkgs <- setdiff(cran_bioc, current_imports)
+  removed_pkgs <- setdiff(current_imports, cran_bioc)
+
+  message("=== Sync from Environment ===")
+  message("Current DESCRIPTION imports: ", length(current_imports))
+  message("Installed (CRAN/Bioc): ", length(cran_bioc))
+  message("GitHub remotes (unchanged): ", length(remote_pkgs))
+  message("")
+  message("To add: ", length(new_pkgs))
+  message("To remove: ", length(removed_pkgs))
+
+  if (length(new_pkgs) > 0) {
+    message("\nNew packages to add:")
+    message(paste("  ", head(new_pkgs, 20), collapse = "\n"))
+    if (length(new_pkgs) > 20) message("  ... and ", length(new_pkgs) - 20, " more")
+  }
+
+  if (length(removed_pkgs) > 0) {
+    message("\nPackages to remove (not installed):")
+    message(paste("  ", removed_pkgs, collapse = "\n"))
+  }
+
+  if (!dry_run) {
+    # Sort packages alphabetically
+    all_imports <- sort(cran_bioc)
+
+    # Format as DESCRIPTION Imports field
+    imports_str <- paste("    ", all_imports, collapse = ",\n")
+
+    desc$Imports <- paste0("\n", imports_str)
+    write_description(desc, path)
+    message("\nDESCRIPTION updated with ", length(all_imports), " packages")
+  } else {
+    message("\n[DRY RUN] Re-run with --apply to update DESCRIPTION")
+  }
+
+  invisible(list(added = new_pkgs, removed = removed_pkgs, total = length(cran_bioc)))
+}
+
 #' Bump version in DESCRIPTION
 #' @param type One of "patch", "minor", "major", "bioc"
 #' @export
@@ -310,24 +383,35 @@ if (!interactive()) {
     message("Usage: Rscript update-description.R <command> [options]")
     message("")
     message("Commands:")
-    message("  check              Check package availability")
+    message("  sync [--apply]     Sync DESCRIPTION with installed packages (MIGRATION)")
+    message("  check [--apply]    Check package availability, remove unavailable")
     message("  remotes [--apply]  Update GitHub remote pins (dry-run by default)")
     message("  suggest            Show installed packages not in DESCRIPTION")
     message("  bump [type]        Bump version (patch|minor|major|bioc)")
     message("  update [--apply]   Full update (check + remotes + bump)")
     message("")
+    message("Migration workflow (3.19 -> 3.22):")
+    message("  1. Run from CURRENT environment (3.19):")
+    message("     Rscript update-description.R sync --apply")
+    message("  2. Check availability for NEW Bioconductor:")
+    message("     Rscript update-description.R check --apply")
+    message("  3. Update remotes and bump version:")
+    message("     Rscript update-description.R update --apply")
+    message("")
     message("Examples:")
-    message("  Rscript update-description.R check")
-    message("  Rscript update-description.R remotes --apply")
-    message("  Rscript update-description.R bump bioc")
-    message("  Rscript update-description.R update --apply")
+    message("  Rscript update-description.R sync          # Preview sync")
+    message("  Rscript update-description.R sync --apply  # Apply sync")
+    message("  Rscript update-description.R check --apply # Remove unavailable")
+    message("  Rscript update-description.R bump bioc     # 3.22.0 -> 3.23.0")
     quit(status = 0)
   }
 
   cmd <- args[1]
   apply_flag <- "--apply" %in% args
 
-  if (cmd == "check") {
+  if (cmd == "sync") {
+    sync_from_environment(dry_run = !apply_flag)
+  } else if (cmd == "check") {
     check_packages(fix = apply_flag)
   } else if (cmd == "remotes") {
     update_remotes(dry_run = !apply_flag)
