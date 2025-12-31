@@ -1,0 +1,271 @@
+const { expect } = require('chai');
+const sinon = require('sinon');
+const sinonChai = require('sinon-chai');
+const chai = require('chai');
+const HpcService = require('../../services/hpc');
+
+chai.use(sinonChai);
+
+describe('HpcService', () => {
+  let hpcService;
+  let sshExecStub;
+
+  beforeEach(() => {
+    hpcService = new HpcService('gemini');
+    sshExecStub = sinon.stub(hpcService, 'sshExec');
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  describe('Constructor', () => {
+    it('should create instance for valid cluster', () => {
+      const gemini = new HpcService('gemini');
+      expect(gemini.clusterName).to.equal('gemini');
+      expect(gemini.cluster).to.have.property('host');
+    });
+
+    it('should create instance for apollo cluster', () => {
+      const apollo = new HpcService('apollo');
+      expect(apollo.clusterName).to.equal('apollo');
+      expect(apollo.cluster).to.have.property('host');
+    });
+
+    it('should throw error for invalid cluster', () => {
+      expect(() => new HpcService('invalid')).to.throw('Unknown cluster: invalid');
+    });
+
+    it('should have cluster configuration', () => {
+      expect(hpcService.cluster).to.have.property('partition');
+      expect(hpcService.cluster).to.have.property('singularityBin');
+      expect(hpcService.cluster).to.have.property('singularityImage');
+    });
+  });
+
+  describe('getJobInfo', () => {
+    it('should parse job info from squeue output', async () => {
+      sshExecStub.resolves('12345 RUNNING node01 11:30:00 4 40000M 2025-12-29T10:00:00');
+
+      const jobInfo = await hpcService.getJobInfo();
+
+      expect(jobInfo).to.deep.equal({
+        jobId: '12345',
+        state: 'RUNNING',
+        node: 'node01',
+        timeLeft: '11:30:00',
+        cpus: '4',
+        memory: '40000M',
+        startTime: '2025-12-29T10:00:00',
+      });
+    });
+
+    it('should return null for no output', async () => {
+      sshExecStub.resolves('');
+
+      const jobInfo = await hpcService.getJobInfo();
+
+      expect(jobInfo).to.be.null;
+    });
+
+    it('should handle null node for pending jobs', async () => {
+      sshExecStub.resolves('12345 PENDING (null) INVALID 4 40000M N/A');
+
+      const jobInfo = await hpcService.getJobInfo();
+
+      expect(jobInfo.state).to.equal('PENDING');
+      expect(jobInfo.node).to.be.null;
+      expect(jobInfo.timeLeft).to.be.null;
+      expect(jobInfo.startTime).to.be.null;
+    });
+
+    it('should return null on SSH error', async () => {
+      sshExecStub.rejects(new Error('SSH connection failed'));
+
+      const jobInfo = await hpcService.getJobInfo();
+
+      expect(jobInfo).to.be.null;
+    });
+
+    it('should handle start time with spaces', async () => {
+      sshExecStub.resolves('12345 RUNNING node01 11:30:00 4 40000M 2025-12-29 10:00:00 EST');
+
+      const jobInfo = await hpcService.getJobInfo();
+
+      expect(jobInfo.startTime).to.equal('2025-12-29 10:00:00 EST');
+    });
+  });
+
+  describe('submitJob', () => {
+    it('should submit job and return job ID', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      const jobId = await hpcService.submitJob('4', '40G', '12:00:00');
+
+      expect(jobId).to.equal('12345');
+      expect(sshExecStub).to.have.been.calledOnce;
+    });
+
+    it('should include correct sbatch parameters', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('8', '64G', '24:00:00');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('sbatch');
+      expect(sshCommand).to.include('--cpus-per-task=8');
+      expect(sshCommand).to.include('--mem=64G');
+      expect(sshCommand).to.include('--time=24:00:00');
+      expect(sshCommand).to.include('--job-name=code-server');
+    });
+
+    it('should include cluster-specific partition', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('--partition=compute');
+    });
+
+    it('should include singularity container configuration', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('singularity');
+      expect(sshCommand).to.include('.sif');
+      expect(sshCommand).to.include('code serve-web');
+    });
+
+    it('should throw error if job ID cannot be parsed', async () => {
+      sshExecStub.resolves('Some other output');
+
+      try {
+        await hpcService.submitJob('4', '40G', '12:00:00');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Failed to parse job ID');
+      }
+    });
+
+    it('should propagate SSH errors', async () => {
+      sshExecStub.rejects(new Error('SSH connection failed'));
+
+      try {
+        await hpcService.submitJob('4', '40G', '12:00:00');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('SSH connection failed');
+      }
+    });
+  });
+
+  describe('cancelJob', () => {
+    it('should call scancel with job ID', async () => {
+      sshExecStub.resolves('');
+
+      await hpcService.cancelJob('12345');
+
+      expect(sshExecStub).to.have.been.calledWith('scancel 12345');
+    });
+
+    it('should handle scancel errors', async () => {
+      sshExecStub.rejects(new Error('Job not found'));
+
+      try {
+        await hpcService.cancelJob('12345');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Job not found');
+      }
+    });
+  });
+
+  describe('waitForNode', () => {
+    it('should wait for node assignment', async function() {
+      this.timeout(15000); // Increase timeout for polling test
+
+      // First call: pending, second call: running with node
+      sshExecStub.onFirstCall().resolves('12345 PENDING (null) INVALID 4 40000M N/A');
+      sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 4 40000M 2025-12-29T10:00:00');
+
+      const node = await hpcService.waitForNode('12345');
+
+      expect(node).to.equal('node01');
+      expect(sshExecStub).to.have.been.calledTwice;
+    });
+
+    it('should return immediately if job already running', async () => {
+      sshExecStub.resolves('12345 RUNNING node01 11:30:00 4 40000M 2025-12-29T10:00:00');
+
+      const node = await hpcService.waitForNode('12345');
+
+      expect(node).to.equal('node01');
+      expect(sshExecStub).to.have.been.calledOnce;
+    });
+
+    it('should throw error if job disappears', async () => {
+      sshExecStub.resolves('');
+
+      try {
+        await hpcService.waitForNode('12345');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Job disappeared');
+      }
+    });
+
+    it('should timeout after max attempts', async function() {
+      this.timeout(15000); // Increase timeout for polling test
+
+      sshExecStub.resolves('12345 PENDING (null) INVALID 4 40000M N/A');
+
+      try {
+        await hpcService.waitForNode('12345', 2); // Only 2 attempts
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Timeout waiting for node assignment');
+      }
+    });
+
+    it('should continue polling if node is null', async function() {
+      this.timeout(15000); // Increase timeout for polling test
+
+      sshExecStub.onFirstCall().resolves('12345 RUNNING (null) 11:30:00 4 40000M 2025-12-29T10:00:00');
+      sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 4 40000M 2025-12-29T10:00:00');
+
+      const node = await hpcService.waitForNode('12345');
+
+      expect(node).to.equal('node01');
+    });
+  });
+
+  describe('checkJobExists', () => {
+    it('should return true if job exists', async () => {
+      sshExecStub.resolves('12345 RUNNING node01');
+
+      const exists = await hpcService.checkJobExists('12345');
+
+      expect(exists).to.be.true;
+      expect(sshExecStub).to.have.been.calledWith('squeue -j 12345 --noheader 2>/dev/null');
+    });
+
+    it('should return false if job does not exist', async () => {
+      sshExecStub.resolves('');
+
+      const exists = await hpcService.checkJobExists('12345');
+
+      expect(exists).to.be.false;
+    });
+
+    it('should return false on SSH error', async () => {
+      sshExecStub.rejects(new Error('Job not found'));
+
+      const exists = await hpcService.checkJobExists('12345');
+
+      expect(exists).to.be.false;
+    });
+  });
+});

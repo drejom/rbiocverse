@@ -2,6 +2,8 @@ const express = require('express');
 const { spawn, exec } = require('child_process');
 const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
+const { config, clusters } = require('./config');
+const createApiRouter = require('./routes/api');
 
 const app = express();
 app.use(express.json());
@@ -16,36 +18,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Configuration from environment
-const config = {
-  hpcUser: process.env.HPC_SSH_USER || 'domeally',
-  defaultHpc: process.env.DEFAULT_HPC || 'gemini',
-  codeServerPort: parseInt(process.env.CODE_SERVER_PORT) || 8000,
-  defaultCpus: process.env.DEFAULT_CPUS || '2',
-  defaultMem: process.env.DEFAULT_MEM || '40G',
-  defaultTime: process.env.DEFAULT_TIME || '12:00:00',
-};
-
-// Per-cluster configuration
-const clusters = {
-  gemini: {
-    host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
-    partition: 'compute',
-    singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
-    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
-    bindPaths: '/packages,/run,/scratch,/ref_genomes',
-  },
-  apollo: {
-    host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
-    partition: 'fast,all',
-    singularityBin: '/opt/singularity/3.7.0/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
-    bindPaths: '/opt,/run,/labs',
-  },
-};
-
 // Multi-session state - track sessions per HPC
 // Using StateManager for persistence across container restarts
 const stateManager = new StateManager();
@@ -57,6 +29,9 @@ stateManager.load().then(() => {
 }).catch(err => {
   console.error('Failed to load state:', err.message);
 });
+
+// Mount API routes
+app.use('/api', createApiRouter(stateManager));
 
 // Create a session object
 function createSession() {
