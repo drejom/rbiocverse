@@ -27,26 +27,40 @@ function formatTime(seconds) {
 
 /**
  * Generate SVG pie chart for time remaining
+ * Solid filled pie that "opens up" (gap grows) as time passes
  * @param {number} remaining - Seconds remaining
  * @param {number} total - Total walltime in seconds
  * @param {string} hpc - Cluster name for IDs
  */
 function renderTimePie(remaining, total, hpc) {
-  const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+  const percent = total > 0 ? Math.max(0, remaining / total) : 1;
   const radius = 16;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - percent);
+  const cx = 20, cy = 20;
 
   let colorClass = '';
   if (remaining < 600) colorClass = 'critical';
   else if (remaining < 1800) colorClass = 'warning';
 
+  // Calculate pie wedge path
+  // Starts from top (12 o'clock), goes clockwise for remaining percent
+  let piePath = '';
+  if (percent >= 1) {
+    // Full circle
+    piePath = `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
+  } else if (percent > 0) {
+    const angle = percent * 2 * Math.PI;
+    const endX = cx + radius * Math.sin(angle);
+    const endY = cy - radius * Math.cos(angle);
+    const largeArc = percent > 0.5 ? 1 : 0;
+    piePath = `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+  }
+
   return `
     <div class="time-pie">
       <svg viewBox="0 0 40 40">
-        <circle class="time-pie-bg" cx="20" cy="20" r="${radius}"/>
-        <circle class="time-pie-fill ${colorClass}" id="${hpc}-pie-fill" cx="20" cy="20" r="${radius}"
-          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+        <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
+        <path class="time-pie-fill ${colorClass}" id="${hpc}-pie-fill" d="${piePath}"
+          data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
       </svg>
       <span class="time-pie-text ${colorClass}" id="${hpc}-countdown-value">${formatTime(remaining)}</span>
     </div>
@@ -178,6 +192,22 @@ async function fetchStatus() {
 }
 
 /**
+ * Calculate SVG path for pie wedge
+ */
+function calcPiePath(percent, cx, cy, radius) {
+  if (percent >= 1) {
+    return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
+  } else if (percent > 0) {
+    const angle = percent * 2 * Math.PI;
+    const endX = cx + radius * Math.sin(angle);
+    const endY = cy - radius * Math.cos(angle);
+    const largeArc = percent > 0.5 ? 1 : 0;
+    return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+  }
+  return '';
+}
+
+/**
  * Client-side countdown tick
  */
 function tickCountdowns() {
@@ -196,8 +226,10 @@ function tickCountdowns() {
       const pieEl = document.getElementById(hpc + '-pie-fill');
       if (pieEl) {
         const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-        const circumference = 2 * Math.PI * 16;
-        pieEl.setAttribute('stroke-dashoffset', circumference * (1 - percent));
+        const cx = parseFloat(pieEl.dataset.cx) || 20;
+        const cy = parseFloat(pieEl.dataset.cy) || 20;
+        const radius = parseFloat(pieEl.dataset.radius) || 16;
+        pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
         pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
       }
 

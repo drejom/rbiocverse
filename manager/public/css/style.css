@@ -36,29 +36,25 @@
 .time-pie svg {
   width: 40px;
   height: 40px;
-  transform: rotate(-90deg);
 }
 
 .time-pie-bg {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 4;
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: none;
 }
 
 .time-pie-fill {
-  fill: none;
-  stroke: #4ade80;
-  stroke-width: 4;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+  fill: #4ade80;
+  stroke: none;
+  transition: d 0.5s ease-out, fill 0.3s;
 }
 
 .time-pie-fill.warning {
-  stroke: #fbbf24;
+  fill: #fbbf24;
 }
 
 .time-pie-fill.critical {
-  stroke: #ef4444;
+  fill: #ef4444;
 }
 
 .time-pie-text {

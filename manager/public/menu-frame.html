@@ -77,22 +77,17 @@
     .time-pie svg {
       width: 36px;
       height: 36px;
-      transform: rotate(-90deg);
     }
     .time-pie-bg {
-      fill: none;
-      stroke: rgba(255,255,255,0.1);
-      stroke-width: 4;
+      fill: rgba(255,255,255,0.1);
+      stroke: none;
     }
     .time-pie-fill {
-      fill: none;
-      stroke: #4ade80;
-      stroke-width: 4;
-      stroke-linecap: round;
-      transition: stroke-dashoffset 1s linear, stroke 0.3s;
+      fill: #4ade80;
+      stroke: none;
     }
-    .time-pie-fill.warning { stroke: #fbbf24; }
-    .time-pie-fill.critical { stroke: #ef4444; }
+    .time-pie-fill.warning { fill: #fbbf24; }
+    .time-pie-fill.critical { fill: #ef4444; }
     .time-pie-text {
       font-size: 1.3rem;
       font-weight: 600;
@@ -303,25 +298,42 @@
     }
 
     /**
+     * Calculate SVG path for pie wedge
+     */
+    function calcPiePath(percent, cx, cy, radius) {
+      if (percent >= 1) {
+        return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
+      } else if (percent > 0) {
+        const angle = percent * 2 * Math.PI;
+        const endX = cx + radius * Math.sin(angle);
+        const endY = cy - radius * Math.cos(angle);
+        const largeArc = percent > 0.5 ? 1 : 0;
+        return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+      }
+      return '';
+    }
+
+    /**
      * Generate SVG pie chart for time remaining
-     * Pie starts full and empties as time passes
+     * Solid filled pie that "opens up" as time passes
      */
     function renderTimePie(remaining, total) {
-      const percent = total > 0 ? Math.max(0, remaining / total) : 0;
+      const percent = total > 0 ? Math.max(0, remaining / total) : 1;
       const radius = 14;
-      const circumference = 2 * Math.PI * radius;
-      const offset = circumference * (1 - percent);
+      const cx = 18, cy = 18;
 
       let colorClass = '';
       if (remaining < 600) colorClass = 'critical';
       else if (remaining < 1800) colorClass = 'warning';
 
+      const piePath = calcPiePath(percent, cx, cy, radius);
+
       return `
         <div class="time-pie">
           <svg viewBox="0 0 36 36">
-            <circle class="time-pie-bg" cx="18" cy="18" r="${radius}"/>
-            <circle class="time-pie-fill ${colorClass}" id="pie-fill" cx="18" cy="18" r="${radius}"
-              stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+            <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
+            <path class="time-pie-fill ${colorClass}" id="pie-fill" d="${piePath}"
+              data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
           </svg>
           <span class="time-pie-text ${colorClass}" id="countdown-value">${formatTime(remaining)}</span>
         </div>
@@ -417,8 +429,10 @@
         const pieEl = document.getElementById('pie-fill');
         if (pieEl) {
           const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-          const circumference = 2 * Math.PI * 14;
-          pieEl.setAttribute('stroke-dashoffset', circumference * (1 - percent));
+          const cx = parseFloat(pieEl.dataset.cx) || 18;
+          const cy = parseFloat(pieEl.dataset.cy) || 18;
+          const radius = parseFloat(pieEl.dataset.radius) || 14;
+          pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
           pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
         }
 
