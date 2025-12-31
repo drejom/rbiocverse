@@ -1,6 +1,6 @@
 # HPC Code Server Manager: Refactoring Specification
 
-> **Status**: ✅ Phase 1-3 Complete | **Target**: Week 1-2 Implementation | **Focus**: Testability & Reliability
+> **Status**: ✅ Phase 1-4 Complete | **Target**: Week 1-2 Implementation | **Focus**: Testability & Reliability
 
 ## Executive Summary
 
@@ -25,7 +25,7 @@ This specification outlines a phased refactoring of the HPC Code Server Manager 
 | **Security validation** | Inline | lib/validation.js | ✅ Tested |
 | **State management** | In-memory only | Persistent + reconciliation | ✅ Survives restarts |
 | **Frontend organization** | Embedded in JS | public/ directory | ✅ Maintainable |
-| **Test coverage** | 0% | 167 tests | ✅ Comprehensive |
+| **Test coverage** | 0% | 182 tests (167 unit + 15 E2E) | ✅ Comprehensive |
 | **Multi-HPC support** | Yes | Yes | ✅ Working |
 | **Error handling** | Ad-hoc | Custom error classes | ✅ Structured |
 | **Logging** | console.log | Winston structured | ✅ Searchable |
@@ -1221,10 +1221,10 @@ docker compose build && docker compose up -d
 - [x] Logs aggregated and searchable - **Winston logger with domain methods (ssh, job, tunnel, lock, api, ui, state, proxy)**
 - [x] Zero SSH connection leaks - **TunnelService manages all tunnels**
 
-**Phase 4 Success Metrics:**
-- [x] E2E tests cover 3 critical paths
-- [x] Chrome extension tests passing
-- [x] Documentation complete and accurate
+**Phase 4 Success Metrics:** ✅ COMPLETE
+- [x] E2E tests cover 3 critical paths - **15 Puppeteer tests passing**
+- [x] Browser tests work with system Chrome (macOS LNP workaround)
+- [x] Documentation complete and accurate - **ARCHITECTURE.md, API.md**
 - [x] New developers can onboard in <1 day
 
 ---
@@ -1392,6 +1392,6 @@ This provides immediate reliability improvements while setting up the foundation
 
 ---
 
-**Document Version**: 1.1
-**Last Updated**: 2025-12-30
-**Status**: Phase 1-3 Complete | Phase 4 Pending (E2E tests, documentation)
+**Document Version**: 1.2
+**Last Updated**: 2025-12-31
+**Status**: Phase 1-4 Complete | All refactoring goals achieved

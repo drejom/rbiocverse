@@ -6,9 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "mocha test/**/*.test.js",
-    "test:watch": "mocha --watch test/**/*.test.js",
-    "test:coverage": "c8 mocha test/**/*.test.js"
+    "test": "mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:watch": "mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:coverage": "c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:e2e": "mocha 'test/e2e/**/*.test.js' --timeout 60000",
+    "test:all": "mocha 'test/**/*.test.js' --timeout 60000"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -19,6 +21,7 @@
     "c8": "^9.0.0",
     "chai": "^4.3.10",
     "mocha": "^10.2.0",
+    "puppeteer": "^24.34.0",
     "sinon": "^17.0.1",
     "sinon-chai": "^3.7.0",
     "supertest": "^6.3.3"
