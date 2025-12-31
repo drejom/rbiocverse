@@ -188,10 +188,13 @@ async function fetchStatus(forceRefresh = false) {
     const data = await res.json();
     clusterStatus = data;
 
-    // Track cache info
-    if (data.updatedAt) {
-      lastStatusUpdate = new Date(data.updatedAt);
-    } else if (!data.cached) {
+    // Track cache info - use client time minus server's reported cache age
+    // This avoids client/server time drift issues
+    if (data.cacheAge !== undefined) {
+      // Server tells us how old the cache is, so subtract that from now
+      lastStatusUpdate = new Date(Date.now() - (data.cacheAge * 1000));
+    } else {
+      // Fresh data, set to now
       lastStatusUpdate = new Date();
     }
     if (data.cacheTtl) {
