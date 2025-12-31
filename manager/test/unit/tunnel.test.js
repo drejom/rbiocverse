@@ -183,7 +183,9 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
-      const consoleStub = sinon.stub(console, 'log');
+      // Stub the logger's ssh method to verify it gets called
+      const { log } = require('../../lib/logger');
+      const sshStub = sinon.stub(log, 'ssh');
 
       const promise = tunnelService.start('gemini', 'node01');
 
@@ -192,9 +194,9 @@ describe('TunnelService', () => {
 
       await promise;
 
-      expect(consoleStub).to.have.been.calledWith(sinon.match(/SSH:/));
+      expect(sshStub).to.have.been.calledWith('SSH warning', sinon.match({ hpc: 'gemini' }));
 
-      consoleStub.restore();
+      sshStub.restore();
     });
   });
 

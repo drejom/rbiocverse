@@ -6,6 +6,7 @@
 const { spawn } = require('child_process');
 const net = require('net');
 const { config, clusters } = require('../config');
+const { log } = require('../lib/logger');
 
 class TunnelService {
   constructor() {
@@ -67,7 +68,7 @@ class TunnelService {
     }
 
     const allPorts = [port, ...config.additionalPorts].join(', ');
-    console.log(`Starting tunnel: localhost:{${allPorts}} -> ${node}:{${allPorts}} via ${cluster.host}`);
+    log.tunnel(`Starting: localhost:{${allPorts}} -> ${node}:{${allPorts}}`, { hpc: hpcName, host: cluster.host });
 
     const tunnel = spawn('ssh', [
       '-o', 'StrictHostKeyChecking=no',
@@ -81,16 +82,16 @@ class TunnelService {
     // Log SSH errors
     tunnel.stderr.on('data', (data) => {
       const line = data.toString().trim();
-      if (line) console.log(`SSH: ${line}`);
+      if (line) log.ssh(line, { hpc: hpcName });
     });
 
     tunnel.on('error', (err) => {
-      console.error('Tunnel spawn error:', err);
+      log.error('Tunnel spawn error', { hpc: hpcName, error: err.message });
       this.tunnels.delete(hpcName);
     });
 
     tunnel.on('exit', (code) => {
-      console.log(`Tunnel for ${hpcName} exited with code ${code}`);
+      log.tunnel(`Exited`, { hpc: hpcName, code });
       this.tunnels.delete(hpcName);
       if (onExit) {
         onExit(code);
@@ -106,9 +107,11 @@ class TunnelService {
         throw new Error(`Tunnel exited with code ${tunnel.exitCode}`);
       }
 
-      // Check if port is open
-      if (await this.checkPort(port)) {
-        console.log(`Tunnel established on port ${port}`);
+      // Check if port is open (debug level to avoid poll noise)
+      const portOpen = await this.checkPort(port);
+      log.portCheck(port, portOpen, { hpc: hpcName, attempt: i + 1 });
+      if (portOpen) {
+        log.tunnel(`Established on port ${port}`, { hpc: hpcName });
         this.tunnels.set(hpcName, tunnel);
         return tunnel;
       }

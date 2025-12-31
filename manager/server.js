@@ -14,6 +14,7 @@ const StateManager = require('./lib/state');
 const { config } = require('./config');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
+const { log } = require('./lib/logger');
 
 const app = express();
 app.use(express.json());
@@ -35,9 +36,9 @@ const state = stateManager.state;
 
 // Load persisted state on startup
 stateManager.load().then(() => {
-  console.log('State manager initialized');
+  log.info('State manager initialized');
 }).catch(err => {
-  console.error('Failed to load state:', err.message);
+  log.error('Failed to load state', { error: err.message });
 });
 
 // Mount API routes
@@ -54,7 +55,7 @@ const proxy = httpProxy.createProxyServer({
 });
 
 proxy.on('error', (err, req, res) => {
-  console.error('Proxy error:', err.message);
+  log.proxyError('Code-server proxy error', { error: err.message });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Code server not available</h1><p><a href="/">Back to launcher</a></p>');
@@ -69,7 +70,7 @@ const liveServerProxy = httpProxy.createProxyServer({
 });
 
 liveServerProxy.on('error', (err, req, res) => {
-  console.error('Live Server proxy error:', err.message);
+  log.proxyError('Live Server proxy error', { error: err.message });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
@@ -85,18 +86,18 @@ function hasRunningSession() {
 app.get('/', (req, res) => {
   // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
   if (req.query.menu) {
-    console.log('[UI] Main menu opened via ?menu=1');
+    log.ui('Main menu opened via ?menu=1');
   }
   if (!req.query.menu && hasRunningSession()) {
     return res.redirect('/code/');
   }
-  console.log('[UI] Serving launcher page');
+  log.ui('Serving launcher page');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Serve the menu iframe content
 app.get('/hpc-menu-frame', (req, res) => {
-  console.log('[UI] Serving floating menu iframe');
+  log.ui('Serving floating menu iframe');
   res.sendFile(path.join(__dirname, 'public', 'menu-frame.html'));
 });
 
@@ -137,22 +138,22 @@ app.use('/vscode-direct', (req, res, next) => {
 // Proxy to Live Server (port 5500) - access at /live/
 app.use('/live', (req, res, next) => {
   if (!hasRunningSession()) {
-    console.log('[Live Server] Rejected - no running session');
+    log.proxy('Live Server rejected - no running session');
     return res.redirect('/');
   }
-  console.log(`[Live Server] Proxying ${req.method} ${req.path}`);
+  log.proxy(`Live Server: ${req.method} ${req.path}`);
   liveServerProxy.web(req, res);
 });
 
 // Global error handler - catches HpcError and returns structured JSON
 app.use((err, req, res, next) => {
   if (err instanceof HpcError) {
-    console.error(`[Error] ${err.name}: ${err.message}`, err.details);
+    log.error(`${err.name}: ${err.message}`, err.details);
     return res.status(err.code).json(err.toJSON());
   }
 
   // Unexpected errors
-  console.error('[Error] Unexpected:', err);
+  log.error('Unexpected error', { error: err.message, stack: err.stack });
   res.status(500).json({
     error: 'Internal Server Error',
     code: 500,
@@ -164,13 +165,13 @@ app.use((err, req, res, next) => {
 // Start server
 const PORT = 3000;
 const server = app.listen(PORT, () => {
-  console.log(`HPC Code Server Manager listening on port ${PORT}`);
-  console.log(`Default HPC: ${config.defaultHpc}`);
+  log.info(`HPC Code Server Manager listening on port ${PORT}`);
+  log.info(`Default HPC: ${config.defaultHpc}`);
 });
 
 // Handle WebSocket upgrades for code-server and Live Server
 server.on('upgrade', (req, socket, head) => {
-  console.log(`WebSocket: ${req.url}`);
+  log.proxy(`WebSocket upgrade: ${req.url}`);
   if (hasRunningSession()) {
     // Live Server WebSocket (for hot reload)
     if (req.url.startsWith('/live')) {
@@ -185,11 +186,11 @@ server.on('upgrade', (req, socket, head) => {
         req.url.startsWith('/?')) {
       proxy.ws(req, socket, head);
     } else {
-      console.log(`WebSocket rejected: ${req.url}`);
+      log.proxy(`WebSocket rejected: ${req.url}`);
       socket.destroy();
     }
   } else {
-    console.log('WebSocket rejected: no session');
+    log.proxy('WebSocket rejected: no session');
     socket.destroy();
   }
 });

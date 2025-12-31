@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { LockError } = require('./errors');
+const { log } = require('./logger');
 
 class StateManager {
   constructor() {
@@ -35,7 +36,7 @@ class StateManager {
       throw new LockError('Operation already in progress', { operation });
     }
     this.locks.set(operation, Date.now());
-    console.log(`[Lock] Acquired: ${operation}`);
+    log.lock(`Acquired: ${operation}`);
   }
 
   /**
@@ -45,7 +46,7 @@ class StateManager {
   releaseLock(operation) {
     if (this.locks.has(operation)) {
       const held = Date.now() - this.locks.get(operation);
-      console.log(`[Lock] Released: ${operation} (held ${held}ms)`);
+      log.lock(`Released: ${operation}`, { heldMs: held });
       this.locks.delete(operation);
     }
   }
@@ -77,7 +78,7 @@ class StateManager {
     try {
       const data = await fs.readFile(this.stateFile, 'utf8');
       this.state = JSON.parse(data);
-      console.log('State loaded from', this.stateFile);
+      log.state('Loaded from disk', { file: this.stateFile });
 
       // Ensure tunnelProcess is null for all sessions (can't be restored from disk)
       for (const [hpc, session] of Object.entries(this.state.sessions)) {
@@ -89,7 +90,7 @@ class StateManager {
       await this.reconcile();
     } catch (e) {
       if (e.code !== 'ENOENT') {
-        console.error('Failed to load state:', e.message);
+        log.error('Failed to load state', { error: e.message });
       }
       // File doesn't exist yet - normal on first run
     }
@@ -124,7 +125,7 @@ class StateManager {
 
       await fs.writeFile(this.stateFile, JSON.stringify(cleanState, null, 2));
     } catch (e) {
-      console.error('Failed to save state:', e.message);
+      log.error('Failed to save state', { error: e.message });
     }
   }
 
@@ -138,7 +139,7 @@ class StateManager {
       if (session?.status === 'running' && session.jobId) {
         const exists = await this.checkJobExists(hpc, session.jobId);
         if (!exists) {
-          console.log(`Job ${session.jobId} no longer exists, marking as idle`);
+          log.state(`Job ${session.jobId} no longer exists, marking as idle`, { hpc });
           this.state.sessions[hpc] = null;
         }
       }

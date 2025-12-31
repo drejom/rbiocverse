@@ -10,6 +10,7 @@ const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
 const { config } = require('../config');
+const { log } = require('../lib/logger');
 
 // Shared tunnel service instance
 const tunnelService = new TunnelService();
@@ -68,7 +69,7 @@ function createApiRouter(stateManager) {
   // Logging middleware for user actions
   router.use((req, res, next) => {
     if (req.method !== 'GET') {
-      console.log(`[API] ${req.method} ${req.path}`, req.body || {});
+      log.api(`${req.method} ${req.path}`, req.body || {});
     }
     next();
   });
@@ -96,7 +97,7 @@ function createApiRouter(stateManager) {
             stateChanged = true;
           }
         } catch (e) {
-          console.error(`Error checking job status for ${hpc}:`, e);
+          log.error(`Error checking job status for ${hpc}`, { error: e.message });
         }
       }
     }
@@ -239,18 +240,18 @@ function createApiRouter(stateManager) {
 
       if (!jobInfo) {
         // Submit new job
-        console.log(`Submitting new job on ${hpc}...`);
+        log.job(`Submitting new job`, { hpc, cpus, mem, time });
         session.jobId = await hpcService.submitJob(cpus, mem, time);
-        console.log(`Submitted job ${session.jobId}`);
+        log.job(`Submitted`, { hpc, jobId: session.jobId });
       } else {
         session.jobId = jobInfo.jobId;
-        console.log(`Found existing job ${session.jobId}`);
+        log.job(`Found existing job`, { hpc, jobId: session.jobId });
       }
 
       // Wait for job to get a node
-      console.log('Waiting for node assignment...');
+      log.job('Waiting for node assignment...', { hpc, jobId: session.jobId });
       session.node = await hpcService.waitForNode(session.jobId);
-      console.log(`Job running on ${session.node}`);
+      log.job(`Running on node`, { hpc, node: session.node });
 
       // Wait a moment for code-server to start
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -263,7 +264,7 @@ function createApiRouter(stateManager) {
       // Start tunnel and wait for it to establish
       session.tunnelProcess = await tunnelService.start(hpc, session.node, (code) => {
         // Tunnel exit callback
-        console.log(`Tunnel for ${hpc} exited with code ${code}`);
+        log.tunnel(`Exit callback`, { hpc, code });
         if (session.status === 'running') {
           session.status = 'idle';
         }
@@ -283,7 +284,7 @@ function createApiRouter(stateManager) {
       });
 
     } catch (error) {
-      console.error('Launch error:', error);
+      log.error('Launch error', { hpc, error: error.message });
       // Access session via state (session variable is scoped inside try block)
       const session = state.sessions[hpc];
       if (session) {
@@ -327,9 +328,10 @@ function createApiRouter(stateManager) {
 
       state.activeHpc = hpc;
       await stateManager.save();
+      log.api(`Switched to ${hpc}`, { hpc });
       res.json({ status: 'switched', hpc });
     } catch (error) {
-      console.error('Switch error:', error);
+      log.error('Switch error', { hpc, error: error.message });
       res.status(500).json({ error: error.message });
     }
   });
@@ -365,10 +367,10 @@ function createApiRouter(stateManager) {
 
         if (jobId) {
           await hpcService.cancelJob(jobId);
-          console.log(`Cancelled job ${jobId} on ${hpc}`);
+          log.job(`Cancelled`, { hpc, jobId });
         }
       } catch (e) {
-        console.error('Failed to cancel job:', e);
+        log.error('Failed to cancel job', { hpc, error: e.message });
       }
     }
 

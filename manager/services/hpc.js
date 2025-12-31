@@ -5,6 +5,7 @@
 
 const { exec } = require('child_process');
 const { config, clusters } = require('../config');
+const { log } = require('../lib/logger');
 
 class HpcService {
   constructor(clusterName) {
@@ -23,11 +24,13 @@ class HpcService {
    */
   sshExec(command) {
     return new Promise((resolve, reject) => {
+      log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
       exec(
         `ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} "${command}"`,
         { timeout: 30000 },
         (error, stdout, stderr) => {
           if (error) {
+            log.error('SSH command failed', { cluster: this.clusterName, error: stderr || error.message });
             reject(new Error(stderr || error.message));
           } else {
             resolve(stdout.trim());
@@ -110,6 +113,7 @@ class HpcService {
       throw new Error('Failed to parse job ID from: ' + output);
     }
 
+    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], cpus, mem, time });
     return match[1];
   }
 
@@ -119,6 +123,7 @@ class HpcService {
    * @returns {Promise<void>}
    */
   async cancelJob(jobId) {
+    log.job(`Cancelling`, { cluster: this.clusterName, jobId });
     await this.sshExec(`scancel ${jobId}`);
   }
 
