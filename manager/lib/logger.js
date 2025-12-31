@@ -67,9 +67,9 @@ const log = {
   // State operations
   state: (action, meta = {}) => logger.info(`[State] ${action}`, meta),
 
-  // Proxy events - debug level for routine operations
+  // Proxy events - debug level for routine operations (connection refused is expected)
   proxy: (action, meta = {}) => logger.debug(`[Proxy] ${action}`, meta),
-  proxyError: (msg, meta = {}) => logger.error(`[Proxy] ${msg}`, meta),
+  proxyError: (msg, meta = {}) => logger.debug(`[Proxy] ${msg}`, meta),
 };
 
 module.exports = { logger, log };
