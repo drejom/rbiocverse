@@ -147,14 +147,16 @@ generate_slurm <- function(jobs = 20, output_dir = "slurm_install") {
   # Split into chunks
   chunks <- split(all_pkgs, cut(seq_along(all_pkgs), jobs, labels = FALSE))
 
-  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  # Use absolute path for output directory
+  output_dir_abs <- normalizePath(output_dir, mustWork = FALSE)
+  dir.create(output_dir_abs, showWarnings = FALSE, recursive = TRUE)
 
   # Write package lists
   for (i in seq_along(chunks)) {
-    writeLines(chunks[[i]], file.path(output_dir, sprintf("pkgs_%03d.txt", i)))
+    writeLines(chunks[[i]], file.path(output_dir_abs, sprintf("pkgs_%03d.txt", i)))
   }
 
-  # Generate SLURM script
+  # Generate SLURM script with absolute paths
   slurm_script <- sprintf('#!/bin/bash
 #SBATCH --job-name=rbiocverse_install
 #SBATCH --array=1-%d
@@ -195,15 +197,15 @@ singularity exec \\
       )
     }
   "
-', jobs, output_dir, DEFAULT_SINGULARITY_IMAGE, DEFAULT_BIND_PATHS, lib, output_dir)
+', jobs, output_dir_abs, DEFAULT_SINGULARITY_IMAGE, DEFAULT_BIND_PATHS, lib, output_dir_abs)
 
-  script_path <- file.path(output_dir, "install.slurm")
+  script_path <- file.path(output_dir_abs, "install.slurm")
   writeLines(slurm_script, script_path)
 
   message("Generated SLURM job array:")
   message("  Jobs: ", jobs)
   message("  Packages per job: ~", ceiling(length(all_pkgs) / jobs))
-  message("  Output: ", output_dir, "/")
+  message("  Output: ", output_dir_abs, "/")
   message("")
   message("Submit with:")
   message("  sbatch ", script_path)
