@@ -256,4 +256,50 @@ describe('StateManager Integration Tests', () => {
       expect(reconcileCalled).to.be.false;
     });
   });
+
+  describe('Operation Locks', () => {
+    it('should acquire and release locks', () => {
+      stateManager.acquireLock('launch:gemini');
+      expect(stateManager.isLocked('launch:gemini')).to.be.true;
+
+      stateManager.releaseLock('launch:gemini');
+      expect(stateManager.isLocked('launch:gemini')).to.be.false;
+    });
+
+    it('should throw error when acquiring held lock', () => {
+      stateManager.acquireLock('launch:gemini');
+
+      expect(() => stateManager.acquireLock('launch:gemini'))
+        .to.throw('Operation already in progress');
+
+      stateManager.releaseLock('launch:gemini');
+    });
+
+    it('should allow different lock names', () => {
+      stateManager.acquireLock('launch:gemini');
+      stateManager.acquireLock('launch:apollo');
+
+      expect(stateManager.isLocked('launch:gemini')).to.be.true;
+      expect(stateManager.isLocked('launch:apollo')).to.be.true;
+
+      stateManager.releaseLock('launch:gemini');
+      stateManager.releaseLock('launch:apollo');
+    });
+
+    it('should list active locks', () => {
+      stateManager.acquireLock('launch:gemini');
+      stateManager.acquireLock('stop:apollo');
+
+      const locks = stateManager.getActiveLocks();
+      expect(locks).to.include('launch:gemini');
+      expect(locks).to.include('stop:apollo');
+
+      stateManager.releaseLock('launch:gemini');
+      stateManager.releaseLock('stop:apollo');
+    });
+
+    it('should safely release non-existent lock', () => {
+      expect(() => stateManager.releaseLock('nonexistent')).to.not.throw();
+    });
+  });
 });

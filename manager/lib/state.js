@@ -19,6 +19,51 @@ class StateManager {
       },
       activeHpc: null,
     };
+
+    // Operation locks to prevent race conditions
+    this.locks = new Map();
+  }
+
+  /**
+   * Acquire lock for an operation
+   * @param {string} operation - Lock name (e.g., 'launch:gemini')
+   * @throws {Error} If lock already held
+   */
+  acquireLock(operation) {
+    if (this.locks.has(operation)) {
+      throw new Error(`Operation already in progress: ${operation}`);
+    }
+    this.locks.set(operation, Date.now());
+    console.log(`[Lock] Acquired: ${operation}`);
+  }
+
+  /**
+   * Release lock for an operation
+   * @param {string} operation - Lock name
+   */
+  releaseLock(operation) {
+    if (this.locks.has(operation)) {
+      const held = Date.now() - this.locks.get(operation);
+      console.log(`[Lock] Released: ${operation} (held ${held}ms)`);
+      this.locks.delete(operation);
+    }
+  }
+
+  /**
+   * Check if lock is held
+   * @param {string} operation - Lock name
+   * @returns {boolean}
+   */
+  isLocked(operation) {
+    return this.locks.has(operation);
+  }
+
+  /**
+   * Get all active locks (for debugging)
+   * @returns {Array} Active lock names
+   */
+  getActiveLocks() {
+    return Array.from(this.locks.keys());
   }
 
   /**

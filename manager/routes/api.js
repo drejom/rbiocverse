@@ -165,60 +165,73 @@ function createApiRouter(stateManager) {
       time = config.defaultTime
     } = req.body;
 
-    // Initialize session if needed
-    if (!state.sessions[hpc]) {
-      state.sessions[hpc] = createSession();
-    }
+    const lockName = `launch:${hpc}`;
 
-    const session = state.sessions[hpc];
-
-    // If already running, just switch to this session (reconnect)
-    if (session.status === 'running') {
-      // Stop any other active tunnel
-      if (state.activeHpc && state.activeHpc !== hpc) {
-        tunnelService.stop(state.activeHpc);
-      }
-
-      // Ensure tunnel is running for this session
-      if (!session.tunnelProcess) {
-        try {
-          session.tunnelProcess = await tunnelService.start(hpc, session.node, (code) => {
-            // Tunnel exit callback
-            if (session.status === 'running') {
-              session.status = 'idle';
-            }
-            session.tunnelProcess = null;
-          });
-        } catch (error) {
-          return res.status(500).json({ error: error.message });
-        }
-      }
-
-      state.activeHpc = hpc;
-      await stateManager.save();
-      return res.json({ status: 'connected', hpc, jobId: session.jobId, node: session.node });
-    }
-
-    // Reject if starting/pending (in progress)
-    if (session.status !== 'idle') {
-      return res.status(400).json({ error: `${hpc} is already ${session.status}` });
-    }
-
-    // SECURITY: Validate inputs before using in shell command
+    // Acquire lock to prevent concurrent launches
     try {
-      validateSbatchInputs(cpus, mem, time);
+      stateManager.acquireLock(lockName);
     } catch (e) {
-      return res.status(400).json({ error: e.message });
+      return res.status(429).json({ error: e.message });
     }
 
-    session.status = 'starting';
-    session.error = null;
-    session.cpus = cpus;
-    session.memory = mem;
-    session.walltime = time;
-    await stateManager.save();
-
     try {
+      // Initialize session if needed
+      if (!state.sessions[hpc]) {
+        state.sessions[hpc] = createSession();
+      }
+
+      const session = state.sessions[hpc];
+
+      // If already running, just switch to this session (reconnect)
+      if (session.status === 'running') {
+        // Stop any other active tunnel
+        if (state.activeHpc && state.activeHpc !== hpc) {
+          tunnelService.stop(state.activeHpc);
+        }
+
+        // Ensure tunnel is running for this session
+        if (!session.tunnelProcess) {
+          try {
+            session.tunnelProcess = await tunnelService.start(hpc, session.node, (code) => {
+              // Tunnel exit callback
+              if (session.status === 'running') {
+                session.status = 'idle';
+              }
+              session.tunnelProcess = null;
+            });
+          } catch (error) {
+            stateManager.releaseLock(lockName);
+            return res.status(500).json({ error: error.message });
+          }
+        }
+
+        state.activeHpc = hpc;
+        await stateManager.save();
+        stateManager.releaseLock(lockName);
+        return res.json({ status: 'connected', hpc, jobId: session.jobId, node: session.node });
+      }
+
+      // Reject if starting/pending (in progress)
+      if (session.status !== 'idle') {
+        stateManager.releaseLock(lockName);
+        return res.status(400).json({ error: `${hpc} is already ${session.status}` });
+      }
+
+      // SECURITY: Validate inputs before using in shell command
+      try {
+        validateSbatchInputs(cpus, mem, time);
+      } catch (e) {
+        stateManager.releaseLock(lockName);
+        return res.status(400).json({ error: e.message });
+      }
+
+      session.status = 'starting';
+      session.error = null;
+      session.cpus = cpus;
+      session.memory = mem;
+      session.walltime = time;
+      await stateManager.save();
+
       const hpcService = new HpcService(hpc);
 
       // Check for existing job
@@ -278,6 +291,8 @@ function createApiRouter(stateManager) {
       if (!res.headersSent) {
         res.status(500).json({ error: error.message });
       }
+    } finally {
+      stateManager.releaseLock(lockName);
     }
   });
 
