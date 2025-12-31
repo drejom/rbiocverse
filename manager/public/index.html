@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HPC Code Server</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="launcher">
+    <h1>HPC Code Server</h1>
+    <p class="subtitle">VS Code on SLURM compute nodes</p>
+
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div id="gemini-card" class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-name">Gemini</span>
+        <div class="cluster-status">
+          <span class="status-dot" id="gemini-dot"></span>
+          <span id="gemini-status-text">Loading...</span>
+        </div>
+      </div>
+      <div id="gemini-content"></div>
+    </div>
+
+    <div id="apollo-card" class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-name">Apollo</span>
+        <div class="cluster-status">
+          <span class="status-dot" id="apollo-dot"></span>
+          <span id="apollo-status-text">Loading...</span>
+        </div>
+      </div>
+      <div id="apollo-content"></div>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="loading-overlay" style="display:none;">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <div id="loading-text">Connecting...</div>
+    </div>
+  </div>
+
+  <script src="/js/launcher.js"></script>
+</body>
+</html>

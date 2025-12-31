@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+    #toggle {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(30,30,40,0.95);
+      border: 2px solid #4ade80;
+      color: #fff;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: absolute;
+      top: 0;
+      right: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #toggle:hover { transform: scale(1.05); }
+    #toggle:active { cursor: grabbing; }
+    #toggle.open { background: rgba(74,222,128,0.8); }
+    #toggle.warning { border-color: #fbbf24; }
+    #toggle.critical { border-color: #ef4444; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    #panel {
+      display: none;
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 240px;
+      background: rgba(30,30,40,0.98);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      color: #fff;
+    }
+    #panel.open { display: block; }
+    .cluster-name {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cluster-name .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+    .countdown {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #4ade80;
+      margin-bottom: 6px;
+    }
+    .countdown.warning { color: #fbbf24; }
+    .countdown.critical { color: #ef4444; }
+    .resources {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+    }
+    .node {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .actions button {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .actions button:hover { background: rgba(255,255,255,0.1); }
+    .actions button.danger {
+      border-color: rgba(239,68,68,0.5);
+      color: #fca5a5;
+    }
+    .actions button.danger:hover { background: rgba(239,68,68,0.2); }
+    .actions button.live-server {
+      border-color: rgba(74,222,128,0.5);
+      color: #4ade80;
+    }
+    .actions button.live-server:hover { background: rgba(74,222,128,0.2); }
+    .actions button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Live Server Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+    }
+    .modal-overlay.show { display: flex; align-items: center; justify-content: center; }
+    .modal {
+      background: rgba(30,30,40,0.98);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 300px;
+      width: 90%;
+      color: #fff;
+    }
+    .modal h3 {
+      margin-bottom: 12px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal h3::before {
+      content: '🌐';
+    }
+    .modal-url {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      word-break: break-all;
+      margin-bottom: 12px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .modal-actions button {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .modal-actions button:hover { background: rgba(255,255,255,0.1); }
+    .modal-actions button.primary {
+      background: #4ade80;
+      border-color: #4ade80;
+      color: #000;
+    }
+    .modal-actions button.primary:hover { background: #22c55e; }
+    .copy-feedback {
+      font-size: 0.75rem;
+      color: #4ade80;
+      margin-top: 8px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .copy-feedback.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <button id="toggle">✓</button>
+  <div id="panel">
+    <div id="content">Loading...</div>
+  </div>
+
+  <!-- Live Server Modal -->
+  <div id="live-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Live Server URL</h3>
+      <div id="live-url" class="modal-url">/live/</div>
+      <div class="modal-actions">
+        <button onclick="copyLiveUrl()">Copy URL</button>
+        <button class="primary" onclick="openLiveServer()">Open</button>
+      </div>
+      <div id="copy-feedback" class="copy-feedback">Copied!</div>
+      <div style="margin-top:12px;font-size:0.75rem;color:rgba(255,255,255,0.5);">
+        Start Live Server in VS Code (port 5500) then access via this URL
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const toggle = document.getElementById('toggle');
+    const panel = document.getElementById('panel');
+    let open = false;
+    let countdown = null;
+    let activeHpc = null;
+    let liveServerAvailable = false;
+
+    // Drag functionality
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    let hasMoved = false;
+
+    function onDragStart(e) {
+      isDragging = true;
+      hasMoved = false;
+      const touch = e.touches ? e.touches[0] : e;
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+      e.preventDefault();
+    }
+
+    function onDragMove(e) {
+      if (!isDragging) return;
+      const touch = e.touches ? e.touches[0] : e;
+      const dx = touch.clientX - dragStartX;
+      const dy = touch.clientY - dragStartY;
+
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMoved = true;
+        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, '*');
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+      }
+    }
+
+    function onDragEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      if (!hasMoved) {
+        open = !open;
+        toggle.classList.toggle('open', open);
+        panel.classList.toggle('open', open);
+      }
+    }
+
+    // Mouse events
+    toggle.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+
+    // Touch events (for iPad)
+    toggle.addEventListener('touchstart', onDragStart, { passive: false });
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
+
+    function formatTime(seconds) {
+      if (!seconds || seconds <= 0) return '0m';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    function render() {
+      const content = document.getElementById('content');
+      if (!activeHpc) {
+        content.innerHTML = '<div style="color:rgba(255,255,255,0.5)">No active session</div>';
+        return;
+      }
+
+      let countdownClass = 'countdown';
+      if (countdown < 600) countdownClass += ' critical';
+      else if (countdown < 1800) countdownClass += ' warning';
+
+      // Update toggle button appearance
+      toggle.className = '';
+      if (countdown < 600) toggle.classList.add('critical');
+      else if (countdown < 1800) toggle.classList.add('warning');
+      if (open) toggle.classList.add('open');
+
+      const liveServerBtn = liveServerAvailable
+        ? '<button class="live-server" onclick="showLiveModal()">🌐 Live Server</button>'
+        : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)">🌐 Live Server</button>';
+
+      content.innerHTML =
+        '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
+        '<div class="' + countdownClass + '" id="countdown">' + formatTime(countdown) + '</div>' +
+        '<div class="resources" id="resources"></div>' +
+        '<div class="node" id="node"></div>' +
+        '<div class="actions">' +
+        liveServerBtn +
+        '<button onclick="goToMenu()">← Main Menu</button>' +
+        '<button class="danger" onclick="killJob()">Kill Job</button>' +
+        '</div>';
+    }
+
+    async function checkLiveServer() {
+      try {
+        const res = await fetch('/live/', { method: 'HEAD' });
+        liveServerAvailable = res.ok;
+      } catch (e) {
+        liveServerAvailable = false;
+      }
+      render();
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/cluster-status');
+        const data = await res.json();
+        activeHpc = data.activeHpc;
+
+        if (activeHpc && data[activeHpc] && data[activeHpc].status === 'running') {
+          const status = data[activeHpc];
+          if (countdown === null && status.timeLeftSeconds) {
+            countdown = status.timeLeftSeconds;
+          }
+          render();
+          const resourcesEl = document.getElementById('resources');
+          const nodeEl = document.getElementById('node');
+          if (resourcesEl) resourcesEl.textContent = (status.cpus || '?') + ' CPUs • ' + (status.memory || '?');
+          if (nodeEl) nodeEl.textContent = status.node || '';
+        } else {
+          countdown = null;
+          render();
+        }
+      } catch(e) {
+        console.error('Status error:', e);
+      }
+    }
+
+    function tickCountdown() {
+      if (countdown !== null && countdown > 0) {
+        countdown--;
+        const el = document.getElementById('countdown');
+        if (el) {
+          el.textContent = formatTime(countdown);
+          el.className = 'countdown';
+          if (countdown < 600) el.classList.add('critical');
+          else if (countdown < 1800) el.classList.add('warning');
+        }
+        toggle.className = open ? 'open' : '';
+        if (countdown < 600) toggle.classList.add('critical');
+        else if (countdown < 1800) toggle.classList.add('warning');
+      }
+    }
+
+    function goToMenu() {
+      window.top.location.href = '/?menu=1';
+    }
+
+    async function killJob() {
+      if (!activeHpc || !confirm('Kill the ' + activeHpc + ' job?')) return;
+      const btn = document.querySelector('button.danger');
+      if (btn) {
+        btn.textContent = 'Killing...';
+        btn.disabled = true;
+      }
+      try {
+        const resp = await fetch('/api/stop/' + activeHpc, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({cancelJob: true})
+        });
+        if (!resp.ok) {
+          const data = await resp.json();
+          alert('Failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch(e) {
+        console.error('Kill error:', e);
+        alert('Failed to kill job: ' + e.message);
+      }
+      window.top.location.href = '/?menu=1';
+    }
+
+    // Live Server Modal functions
+    function showLiveModal() {
+      const liveUrl = window.location.origin + '/live/';
+      document.getElementById('live-url').textContent = liveUrl;
+      document.getElementById('live-modal').classList.add('show');
+    }
+
+    function hideLiveModal() {
+      document.getElementById('live-modal').classList.remove('show');
+      document.getElementById('copy-feedback').classList.remove('show');
+    }
+
+    function copyLiveUrl() {
+      const url = document.getElementById('live-url').textContent;
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('copy-feedback').classList.add('show');
+        setTimeout(() => {
+          document.getElementById('copy-feedback').classList.remove('show');
+        }, 2000);
+      });
+    }
+
+    function openLiveServer() {
+      window.top.location.href = '/live/';
+    }
+
+    // Close modal on click outside
+    document.getElementById('live-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideLiveModal();
+    });
+
+    // Initialize
+    fetchStatus();
+    checkLiveServer();
+    setInterval(fetchStatus, 60000);
+    setInterval(checkLiveServer, 10000);  // Check Live Server availability
+    setInterval(tickCountdown, 1000);
+  </script>
+</body>
+</html>

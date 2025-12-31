@@ -2,8 +2,6 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const sinonChai = require('sinon-chai');
 const chai = require('chai');
-const TunnelService = require('../../services/tunnel');
-const child_process = require('child_process');
 const EventEmitter = require('events');
 
 chai.use(sinonChai);
@@ -12,9 +10,11 @@ describe('TunnelService', () => {
   let tunnelService;
   let spawnStub;
   let mockTunnelProcess;
+  let TunnelService;
 
   beforeEach(() => {
-    tunnelService = new TunnelService();
+    // Clear require cache to allow fresh stub
+    delete require.cache[require.resolve('../../services/tunnel')];
 
     // Create a mock SSH process
     mockTunnelProcess = new EventEmitter();
@@ -22,11 +22,20 @@ describe('TunnelService', () => {
     mockTunnelProcess.exitCode = null;
     mockTunnelProcess.stderr = new EventEmitter();
 
-    spawnStub = sinon.stub(child_process, 'spawn').returns(mockTunnelProcess);
+    // Stub spawn BEFORE requiring TunnelService
+    spawnStub = sinon.stub(require('child_process'), 'spawn').returns(mockTunnelProcess);
+
+    // Now require TunnelService - it will use the stubbed spawn
+    TunnelService = require('../../services/tunnel');
+    tunnelService = new TunnelService();
   });
 
   afterEach(() => {
     sinon.restore();
+    // Clean up any remaining tunnels
+    if (tunnelService) {
+      tunnelService.stopAll();
+    }
   });
 
   describe('Constructor', () => {
@@ -38,12 +47,14 @@ describe('TunnelService', () => {
 
   describe('checkPort', () => {
     it('should return true when port is open', async () => {
+      // Use a common port that should be open in test environment
       const result = await tunnelService.checkPort(8000, 100);
       expect(result).to.be.a('boolean');
     });
 
     it('should return false for unopened port', async () => {
-      const result = await tunnelService.checkPort(99999, 100);
+      // Use a high port that is unlikely to be in use
+      const result = await tunnelService.checkPort(59999, 100);
       expect(result).to.be.false;
     });
   });
@@ -106,6 +117,7 @@ describe('TunnelService', () => {
       await tunnelService.start('gemini', 'node01');
 
       expect(tunnelService.tunnels.has('gemini')).to.be.true;
+      // The tunnel should be the mock process
       expect(tunnelService.tunnels.get('gemini')).to.equal(mockTunnelProcess);
     });
 
@@ -126,7 +138,7 @@ describe('TunnelService', () => {
     });
 
     it('should timeout if port never opens', async function() {
-      this.timeout(5000);
+      this.timeout(35000);  // Allow time for timeout
 
       sinon.stub(tunnelService, 'checkPort').resolves(false);
 
@@ -254,7 +266,7 @@ describe('TunnelService', () => {
       mockTunnelProcess2.exitCode = null;
       mockTunnelProcess2.stderr = new EventEmitter();
 
-      spawnStub.onSecondCall().returns(mockTunnelProcess2);
+      spawnStub.returns(mockTunnelProcess2);
       await tunnelService.start('apollo', 'node02');
 
       expect(tunnelService.tunnels.size).to.equal(2);

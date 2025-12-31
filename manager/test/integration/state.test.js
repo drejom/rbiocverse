@@ -39,11 +39,12 @@ describe('StateManager Integration Tests', () => {
       const newManager = new StateManager();
       await newManager.load();
 
-      // Verify state was persisted
+      // Verify state was persisted (tunnelProcess is null after load)
       expect(newManager.getSession('gemini')).to.deep.equal({
         status: 'running',
         jobId: '12345',
         node: 'node01',
+        tunnelProcess: null,
       });
     });
 
