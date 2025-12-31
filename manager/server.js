@@ -13,6 +13,7 @@ const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
 const { config } = require('./config');
 const createApiRouter = require('./routes/api');
+const { HpcError } = require('./lib/errors');
 
 const app = express();
 app.use(express.json());
@@ -141,6 +142,23 @@ app.use('/live', (req, res, next) => {
   }
   console.log(`[Live Server] Proxying ${req.method} ${req.path}`);
   liveServerProxy.web(req, res);
+});
+
+// Global error handler - catches HpcError and returns structured JSON
+app.use((err, req, res, next) => {
+  if (err instanceof HpcError) {
+    console.error(`[Error] ${err.name}: ${err.message}`, err.details);
+    return res.status(err.code).json(err.toJSON());
+  }
+
+  // Unexpected errors
+  console.error('[Error] Unexpected:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    code: 500,
+    type: 'UnexpectedError',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Start server

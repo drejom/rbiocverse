@@ -266,11 +266,17 @@ describe('StateManager Integration Tests', () => {
       expect(stateManager.isLocked('launch:gemini')).to.be.false;
     });
 
-    it('should throw error when acquiring held lock', () => {
+    it('should throw LockError when acquiring held lock', () => {
       stateManager.acquireLock('launch:gemini');
 
-      expect(() => stateManager.acquireLock('launch:gemini'))
-        .to.throw('Operation already in progress');
+      try {
+        stateManager.acquireLock('launch:gemini');
+        expect.fail('Should have thrown');
+      } catch (err) {
+        expect(err.name).to.equal('LockError');
+        expect(err.code).to.equal(429);
+        expect(err.details.operation).to.equal('launch:gemini');
+      }
 
       stateManager.releaseLock('launch:gemini');
     });

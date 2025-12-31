@@ -5,6 +5,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { LockError } = require('./errors');
 
 class StateManager {
   constructor() {
@@ -31,7 +32,7 @@ class StateManager {
    */
   acquireLock(operation) {
     if (this.locks.has(operation)) {
-      throw new Error(`Operation already in progress: ${operation}`);
+      throw new LockError('Operation already in progress', { operation });
     }
     this.locks.set(operation, Date.now());
     console.log(`[Lock] Acquired: ${operation}`);
