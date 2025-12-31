@@ -218,6 +218,7 @@
     let countdown = null;
     let activeHpc = null;
     let liveServerAvailable = false;
+    let currentStatus = null;  // Store current HPC status for render()
 
     // Drag functionality
     let isDragging = false;
@@ -296,11 +297,19 @@
         ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
         : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>';
 
+      // Build resources HTML from stored status
+      let resourcesHtml = '';
+      let nodeText = '';
+      if (currentStatus) {
+        resourcesHtml = '<i data-lucide="cpu" class="resource-icon"></i> ' + (currentStatus.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (currentStatus.memory || '?');
+        nodeText = currentStatus.node || '';
+      }
+
       content.innerHTML =
         '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
         '<div class="' + countdownClass + '" id="countdown"><i data-lucide="timer" class="lucide"></i> <span id="countdown-value">' + formatTime(countdown) + '</span></div>' +
-        '<div class="resources" id="resources"></div>' +
-        '<div class="node" id="node"></div>' +
+        '<div class="resources">' + resourcesHtml + '</div>' +
+        '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
         liveServerBtn +
         '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
@@ -328,22 +337,15 @@
         activeHpc = data.activeHpc;
 
         if (activeHpc && data[activeHpc] && data[activeHpc].status === 'running') {
-          const status = data[activeHpc];
-          if (countdown === null && status.timeLeftSeconds) {
-            countdown = status.timeLeftSeconds;
+          currentStatus = data[activeHpc];
+          if (countdown === null && currentStatus.timeLeftSeconds) {
+            countdown = currentStatus.timeLeftSeconds;
           }
-          render();
-          const resourcesEl = document.getElementById('resources');
-          const nodeEl = document.getElementById('node');
-          if (resourcesEl) {
-            resourcesEl.innerHTML = '<i data-lucide="cpu" class="resource-icon"></i> ' + (status.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (status.memory || '?');
-            lucide.createIcons();
-          }
-          if (nodeEl) nodeEl.textContent = status.node || '';
         } else {
+          currentStatus = null;
           countdown = null;
-          render();
         }
+        render();
       } catch(e) {
         console.error('Status error:', e);
       }
