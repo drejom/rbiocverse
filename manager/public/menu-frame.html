@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -143,8 +144,19 @@
       align-items: center;
       gap: 8px;
     }
-    .modal h3::before {
-      content: '🌐';
+    /* Lucide icon styling */
+    .lucide {
+      width: 1em;
+      height: 1em;
+      vertical-align: -0.125em;
+      stroke-width: 2;
+    }
+    .resource-icon {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      margin-right: 2px;
+      opacity: 0.7;
     }
     .modal-url {
       background: rgba(255,255,255,0.1);
@@ -189,7 +201,7 @@
   </style>
 </head>
 <body>
-  <button id="toggle">✓</button>
+  <button id="toggle"><i data-lucide="panel-right"></i></button>
   <div id="panel">
     <div id="content">Loading...</div>
   </div>
@@ -197,7 +209,7 @@
   <!-- Live Server Modal -->
   <div id="live-modal" class="modal-overlay">
     <div class="modal">
-      <h3>Live Server URL</h3>
+      <h3><i data-lucide="globe" style="width:18px;height:18px;"></i> Live Server URL</h3>
       <div id="live-url" class="modal-url">/live/</div>
       <div class="modal-actions">
         <button onclick="copyLiveUrl()">Copy URL</button>
@@ -292,19 +304,22 @@
       if (open) toggle.classList.add('open');
 
       const liveServerBtn = liveServerAvailable
-        ? '<button class="live-server" onclick="showLiveModal()">🌐 Live Server</button>'
-        : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)">🌐 Live Server</button>';
+        ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
+        : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>';
 
       content.innerHTML =
         '<div class="cluster-name"><span class="dot"></span>' + activeHpc.charAt(0).toUpperCase() + activeHpc.slice(1) + '</div>' +
-        '<div class="' + countdownClass + '" id="countdown">' + formatTime(countdown) + '</div>' +
+        '<div class="' + countdownClass + '" id="countdown"><i data-lucide="timer" class="lucide"></i> ' + formatTime(countdown) + '</div>' +
         '<div class="resources" id="resources"></div>' +
         '<div class="node" id="node"></div>' +
         '<div class="actions">' +
         liveServerBtn +
-        '<button onclick="goToMenu()">← Main Menu</button>' +
-        '<button class="danger" onclick="killJob()">Kill Job</button>' +
+        '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
+        '<button class="danger" onclick="killJob()"><i data-lucide="square" class="lucide"></i> Kill Job</button>' +
         '</div>';
+
+      // Re-render Lucide icons after DOM update
+      lucide.createIcons();
     }
 
     async function checkLiveServer() {
@@ -331,7 +346,10 @@
           render();
           const resourcesEl = document.getElementById('resources');
           const nodeEl = document.getElementById('node');
-          if (resourcesEl) resourcesEl.textContent = (status.cpus || '?') + ' CPUs • ' + (status.memory || '?');
+          if (resourcesEl) {
+            resourcesEl.innerHTML = '<i data-lucide="cpu" class="resource-icon"></i>' + (status.cpus || '?') + ' CPUs &nbsp; <i data-lucide="memory-stick" class="resource-icon"></i>' + (status.memory || '?');
+            lucide.createIcons();
+          }
           if (nodeEl) nodeEl.textContent = status.node || '';
         } else {
           countdown = null;
@@ -423,6 +441,9 @@
     setInterval(fetchStatus, 60000);
     setInterval(checkLiveServer, 10000);  // Check Live Server availability
     setInterval(tickCountdown, 1000);
+
+    // Initialize Lucide icons
+    lucide.createIcons();
   </script>
 </body>
 </html>
