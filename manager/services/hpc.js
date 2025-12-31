@@ -101,6 +101,7 @@ class HpcService {
       `--port ${config.codeServerPort}`,
       '--without-connection-token',
       '--accept-server-license-terms',
+      '--disable-telemetry',
       '--server-base-path /vscode-direct',
       '--server-data-dir ~/.vscode-slurm/.vscode-server',
       '--extensions-dir ~/.vscode-slurm/.vscode-server/extensions',
