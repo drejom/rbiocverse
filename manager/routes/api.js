@@ -65,6 +65,14 @@ function createApiRouter(stateManager) {
     res.json({ status: 'ok' });
   });
 
+  // Logging middleware for user actions
+  router.use((req, res, next) => {
+    if (req.method !== 'GET') {
+      console.log(`[API] ${req.method} ${req.path}`, req.body || {});
+    }
+    next();
+  });
+
   // Get session status
   router.get('/status', async (req, res) => {
     // Check actual job status for running sessions

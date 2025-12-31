@@ -83,14 +83,19 @@ function hasRunningSession() {
 // Landing page - serve static index.html or redirect to /code/ if session running
 app.get('/', (req, res) => {
   // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
+  if (req.query.menu) {
+    console.log('[UI] Main menu opened via ?menu=1');
+  }
   if (!req.query.menu && hasRunningSession()) {
     return res.redirect('/code/');
   }
+  console.log('[UI] Serving launcher page');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Serve the menu iframe content
 app.get('/hpc-menu-frame', (req, res) => {
+  console.log('[UI] Serving floating menu iframe');
   res.sendFile(path.join(__dirname, 'public', 'menu-frame.html'));
 });
 
@@ -131,8 +136,10 @@ app.use('/vscode-direct', (req, res, next) => {
 // Proxy to Live Server (port 5500) - access at /live/
 app.use('/live', (req, res, next) => {
   if (!hasRunningSession()) {
+    console.log('[Live Server] Rejected - no running session');
     return res.redirect('/');
   }
+  console.log(`[Live Server] Proxying ${req.method} ${req.path}`);
   liveServerProxy.web(req, res);
 });
 

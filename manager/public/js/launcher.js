@@ -165,6 +165,7 @@ function tickCountdowns() {
  * Launch session
  */
 async function launch(hpc) {
+  console.log('[Launcher] Launch requested for', hpc);
   const overlay = document.getElementById('loading-overlay');
   const loadingText = document.getElementById('loading-text');
   const errorEl = document.getElementById('error');
@@ -209,6 +210,7 @@ async function launch(hpc) {
  * Connect to existing session
  */
 async function connect(hpc) {
+  console.log('[Launcher] Connect requested for', hpc);
   const overlay = document.getElementById('loading-overlay');
   overlay.style.display = 'flex';
   document.getElementById('loading-text').textContent = 'Connecting to ' + hpc + '...';
@@ -239,6 +241,7 @@ async function connect(hpc) {
  */
 async function killJob(hpc) {
   if (!confirm('Kill the ' + hpc + ' job?')) return;
+  console.log('[Launcher] Kill job requested for', hpc);
 
   // Show killing state
   const dot = document.getElementById(hpc + '-dot');
