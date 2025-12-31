@@ -390,6 +390,17 @@
       render();
     }
 
+    /**
+     * Calculate original walltime from startTime and timeLeftSeconds
+     */
+    function calculateWalltime(status) {
+      if (!status.startTime || !status.timeLeftSeconds) return null;
+      const startTime = new Date(status.startTime);
+      const now = new Date();
+      const elapsedSeconds = Math.floor((now - startTime) / 1000);
+      return elapsedSeconds + status.timeLeftSeconds;
+    }
+
     async function fetchStatus() {
       try {
         const res = await fetch('/api/cluster-status');
@@ -400,8 +411,8 @@
           currentStatus = data[activeHpc];
           if (countdown === null && currentStatus.timeLeftSeconds) {
             countdown = currentStatus.timeLeftSeconds;
-            // Store initial walltime for pie calculation
-            walltime = currentStatus.timeLeftSeconds;
+            // Calculate original walltime from startTime + remaining time
+            walltime = calculateWalltime(currentStatus) || currentStatus.timeLeftSeconds;
           }
         } else {
           currentStatus = null;
