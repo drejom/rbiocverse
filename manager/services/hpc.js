@@ -100,7 +100,8 @@ class HpcService {
       '--server-base-path /vscode-direct',
       '--server-data-dir ~/.vscode-slurm/.vscode-server',
       '--extensions-dir ~/.vscode-slurm/.vscode-server/extensions',
-      "--user-data-dir ~/.vscode-slurm/user-data'",
+      '--user-data-dir ~/.vscode-slurm/user-data',
+      "--password-store=basic'",
     ].join(' ');
 
     const output = await this.sshExec(submitCmd);
