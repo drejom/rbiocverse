@@ -132,8 +132,6 @@ Suggests:
     testthat (>= 3.0.0),
     roxygen2,
     pkgdown
-# GitHub packages pinned to specific commits/tags for reproducibility
-# Update these periodically and test before deploying
 Remotes:
     cole-trapnell-lab/monocle3@v1.4.26,
     satijalab/seurat-data@3e51f44,

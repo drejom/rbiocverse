@@ -282,8 +282,12 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
   remote_pkgs <- sapply(current_remotes, function(r) basename(r$repo))
 
   # Get installed packages (non-base)
-  installed <- installed.packages()[, c("Package", "Repository")]
-  installed <- as.data.frame(installed, stringsAsFactors = FALSE)
+  ip <- installed.packages()
+  installed <- data.frame(
+    Package = ip[, "Package"],
+    Repository = if ("Repository" %in% colnames(ip)) ip[, "Repository"] else NA_character_,
+    stringsAsFactors = FALSE
+  )
   base_pkgs <- rownames(installed.packages(priority = c("base", "recommended")))
   installed <- installed[!installed$Package %in% base_pkgs, ]
   installed <- installed[!installed$Package %in% exclude, ]
@@ -292,11 +296,11 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
   # Classify by source
   installed$Source <- ifelse(
     grepl("bioconductor", installed$Repository, ignore.case = TRUE), "Bioconductor",
-    ifelse(is.na(installed$Repository) | installed$Repository == "", "GitHub/Local", "CRAN")
+    ifelse(is.na(installed$Repository) | installed$Repository == "", "Unknown", "CRAN")
   )
 
-  # Only include CRAN and Bioconductor packages (GitHub handled via Remotes)
-  cran_bioc <- installed[installed$Source %in% c("CRAN", "Bioconductor"), "Package"]
+  # Include CRAN, Bioconductor, and Unknown (likely CRAN/Bioc installed without repo info)
+  cran_bioc <- installed[installed$Source %in% c("CRAN", "Bioconductor", "Unknown"), "Package"]
 
   # Find what's new vs current
   new_pkgs <- setdiff(cran_bioc, current_imports)
