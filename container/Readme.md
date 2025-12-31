@@ -116,7 +116,7 @@ R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23
 - ctrdata: libjq-dev, php, php-xml
 
 ### Genomics Tools
-bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, freebayes, sra-tools
+bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, sra-tools
 
 ### Python
 - radian (better R console)
