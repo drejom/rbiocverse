@@ -381,6 +381,11 @@ generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
   core_deps <- get_core_deps()
   core_deps <- intersect(core_deps, all_pkgs)  # Only include deps we actually need
 
+  # Add packages with special remotes (URL/GitHub) to core deps
+  # These must be installed first so their dependents can find them
+  remote_pkgs <- names(pkgs$remote_map)
+  core_deps <- unique(c(core_deps, intersect(remote_pkgs, all_pkgs)))
+
   # Remaining packages after core deps
   leaf_pkgs <- setdiff(all_pkgs, core_deps)
 
