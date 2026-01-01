@@ -353,12 +353,10 @@ singularity exec \\
 #' This avoids lock contention by installing shared deps in phase 1
 generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
                                   cluster = detect_cluster(), bioc_version = "3.22") {
-  lib <- Sys.getenv("R_LIBS_SITE")
-  if (lib == "") {
-    stop("R_LIBS_SITE must be set for SLURM generation", call. = FALSE)
-  }
-
   config <- get_cluster_config(cluster, bioc_version)
+
+  # Use config lib path (not environment - we're generating scripts, not installing)
+  lib <- config$lib
   pkgs <- parse_description()
 
   # Helper to convert package name to install spec (using remote if available)

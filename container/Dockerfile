@@ -127,6 +127,10 @@ RUN bash /tmp/slurm-wrappers.sh && rm /tmp/slurm-wrappers.sh
 # Install pak for fast package installation (baked into container)
 RUN Rscript -e "install.packages('pak', repos = 'https://cloud.r-project.org')"
 
+# Set R_LIBS to ensure container packages are always found
+# This is critical when R_LIBS_SITE is overridden for external library mounts
+ENV R_LIBS=/usr/local/lib/R/site-library
+
 # VSCode R session watcher
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
 
