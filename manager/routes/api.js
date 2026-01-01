@@ -23,6 +23,82 @@ let statusCache = {
 };
 
 /**
+ * Invalidate the cluster status cache
+ * Call after job state changes (cancel, submit) to force fresh poll
+ */
+function invalidateStatusCache() {
+  statusCache.timestamp = 0;
+  log.debug('Status cache invalidated');
+}
+
+/**
+ * Fetch fresh cluster status and update cache
+ * @param {Object} state - Current state object
+ * @returns {Promise<Object>} Fresh cluster status data
+ */
+async function fetchClusterStatus(state) {
+  const now = Date.now();
+  log.info('Fetching fresh cluster status');
+
+  const geminiService = new HpcService('gemini');
+  const apolloService = new HpcService('apollo');
+
+  // Get all IDE jobs for both clusters in parallel
+  const [geminiJobs, apolloJobs] = await Promise.all([
+    geminiService.getAllJobs(),
+    apolloService.getAllJobs(),
+  ]);
+
+  const formatJobStatus = (job) => {
+    if (!job) return { status: 'idle' };
+
+    const timeLeftSeconds = parseTimeToSeconds(job.timeLeft);
+    const timeLimitSeconds = parseTimeToSeconds(job.timeLimit);
+
+    return {
+      status: job.state === 'RUNNING' ? 'running' : 'pending',
+      ide: job.ide,
+      jobId: job.jobId,
+      node: job.node,
+      timeLeft: job.timeLeft,
+      timeLeftSeconds,
+      timeLeftHuman: formatHumanTime(timeLeftSeconds),
+      timeLimit: job.timeLimit,
+      timeLimitSeconds,
+      cpus: job.cpus,
+      memory: job.memory,
+      startTime: job.startTime,
+    };
+  };
+
+  const formatClusterStatus = (jobs) => {
+    const result = {};
+    for (const [ide, job] of Object.entries(jobs)) {
+      result[ide] = formatJobStatus(job);
+    }
+    return result;
+  };
+
+  const freshData = {
+    gemini: formatClusterStatus(geminiJobs),
+    apollo: formatClusterStatus(apolloJobs),
+    activeSession: state.activeSession,
+    ides: Object.fromEntries(
+      Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Update cache
+  statusCache = {
+    data: freshData,
+    timestamp: now,
+  };
+
+  return freshData;
+}
+
+/**
  * Initialize router with state manager dependency
  * @param {StateManager} stateManager - State manager instance
  * @returns {express.Router} Configured router
@@ -167,63 +243,7 @@ function createApiRouter(stateManager) {
     }
 
     try {
-      log.info('Fetching fresh cluster status', { forceRefresh, cacheAge: cacheAge ? Math.floor(cacheAge / 1000) : null });
-
-      const geminiService = new HpcService('gemini');
-      const apolloService = new HpcService('apollo');
-
-      // Get all IDE jobs for both clusters in parallel
-      const [geminiJobs, apolloJobs] = await Promise.all([
-        geminiService.getAllJobs(),
-        apolloService.getAllJobs(),
-      ]);
-
-      const formatJobStatus = (job) => {
-        if (!job) return { status: 'idle' };
-
-        const timeLeftSeconds = parseTimeToSeconds(job.timeLeft);
-        const timeLimitSeconds = parseTimeToSeconds(job.timeLimit);
-
-        return {
-          status: job.state === 'RUNNING' ? 'running' : 'pending',
-          ide: job.ide,
-          jobId: job.jobId,
-          node: job.node,
-          timeLeft: job.timeLeft,
-          timeLeftSeconds,
-          timeLeftHuman: formatHumanTime(timeLeftSeconds),
-          timeLimit: job.timeLimit,
-          timeLimitSeconds,
-          cpus: job.cpus,
-          memory: job.memory,
-          startTime: job.startTime,
-        };
-      };
-
-      // Format cluster status grouped by IDE
-      const formatClusterStatus = (jobs) => {
-        const result = {};
-        for (const [ide, job] of Object.entries(jobs)) {
-          result[ide] = formatJobStatus(job);
-        }
-        return result;
-      };
-
-      const freshData = {
-        gemini: formatClusterStatus(geminiJobs),
-        apollo: formatClusterStatus(apolloJobs),
-        activeSession: state.activeSession,  // { hpc, ide } or null
-        ides: Object.fromEntries(
-          Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-
-      // Update cache
-      statusCache = {
-        data: freshData,
-        timestamp: now,
-      };
+      const freshData = await fetchClusterStatus(state);
 
       res.json({
         ...freshData,
@@ -429,6 +449,7 @@ function createApiRouter(stateManager) {
   });
 
   // Stop session for specific HPC/IDE
+  // When cancelJob=true, also refreshes cluster status cache so UI sees freed slot
   router.post('/stop/:hpc/:ide', async (req, res) => {
     const { cancelJob = false } = req.body;
     const { hpc, ide } = req.params;
@@ -445,6 +466,7 @@ function createApiRouter(stateManager) {
     tunnelService.stop(hpc, ide);
 
     // Cancel SLURM job if requested
+    let jobCancelled = false;
     if (cancelJob) {
       try {
         const hpcService = new HpcService(hpc);
@@ -462,6 +484,7 @@ function createApiRouter(stateManager) {
         if (jobId) {
           await hpcService.cancelJob(jobId);
           log.job(`Cancelled`, { hpc, ide, jobId });
+          jobCancelled = true;
         }
       } catch (e) {
         log.error('Failed to cancel job', { hpc, ide, error: e.message });
@@ -478,7 +501,26 @@ function createApiRouter(stateManager) {
 
     await stateManager.save();
 
-    res.json({ status: 'stopped', hpc, ide });
+    // If we cancelled a job, invalidate cache and fetch fresh status
+    // This ensures the UI immediately sees the freed slot
+    let clusterStatus = null;
+    if (jobCancelled) {
+      invalidateStatusCache();
+      try {
+        // Small delay to let SLURM process the cancellation
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        clusterStatus = await fetchClusterStatus(state);
+      } catch (e) {
+        log.error('Failed to refresh cluster status after cancel', { error: e.message });
+      }
+    }
+
+    res.json({
+      status: 'stopped',
+      hpc,
+      ide,
+      clusterStatus,  // Include fresh status if job was cancelled
+    });
   });
 
   return router;
