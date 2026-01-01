@@ -377,12 +377,22 @@ function createApiRouter(stateManager) {
       state.activeSession = { hpc, ide };
       await stateManager.save();
 
+      // Invalidate cache and fetch fresh status after successful launch
+      invalidateStatusCache();
+      let clusterStatus = null;
+      try {
+        clusterStatus = await fetchClusterStatus(state);
+      } catch (e) {
+        log.error('Failed to refresh cluster status after launch', { error: e.message });
+      }
+
       res.json({
         status: 'running',
         jobId: session.jobId,
         node: session.node,
         hpc,
         ide,
+        clusterStatus,
       });
 
     } catch (error) {
