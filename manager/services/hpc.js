@@ -151,7 +151,7 @@ class HpcService {
       'exec 2>>~/.rstudio-slurm/rsession.log',
       'set -x',  // trace commands
       'export R_HOME=/usr/local/lib/R',
-      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:$LD_LIBRARY_PATH',
+      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:\\\\$LD_LIBRARY_PATH',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
       'export R_LIBS_USER=~/R/bioc-3.19',
