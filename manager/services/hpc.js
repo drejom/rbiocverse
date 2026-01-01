@@ -158,17 +158,17 @@ class HpcService {
       'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      // Just exec rsession - rserver handles passing args via its own mechanism
-      'exec /usr/lib/rstudio-server/bin/rsession',
+      // Pass args via "$@" - \\$ survives SSH double-quotes to become $
+      'exec /usr/lib/rstudio-server/bin/rsession "\\$@"',
       '',  // trailing newline
     ].join('\\\\012');
 
-    // Use printf "%b" with escaped inner quotes (\") - survives SSH double-quote wrapping
+    // Use printf '%b' with single quotes - no shell expansion inside, simpler escaping
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `printf "%b" \\"${dbConf}\\" > ${workdir}/database.conf`,
-      `printf "%b" \\"${rserverConf}\\" > ${workdir}/rserver.conf`,
-      `printf "%b" \\"${rsessionSh}\\" > ${workdir}/rsession.sh`,
+      `printf '%b' '${dbConf}' > ${workdir}/database.conf`,
+      `printf '%b' '${rserverConf}' > ${workdir}/rserver.conf`,
+      `printf '%b' '${rsessionSh}' > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
