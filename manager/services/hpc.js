@@ -141,10 +141,9 @@ class HpcService {
       '',
     ].join('\\\\012');
 
-    // Use heredoc for rsession.sh - cleaner than printf escaping
-    // \\$@ in JS becomes \$@ in string, which heredoc interprets as literal $@
-    const rsessionShHeredoc = `cat > ${workdir}/rsession.sh << RSESSION
-#!/bin/sh
+    // Build rsession.sh using base64 encoding to avoid ALL escaping issues
+    // See docs/ESCAPING.md for test results and rationale
+    const rsessionScript = `#!/bin/sh
 exec 2>>~/.rstudio-slurm/rsession.log
 set -x
 export R_HOME=/usr/local/lib/R
@@ -154,15 +153,16 @@ export R_LIBS_SITE=${this.cluster.rLibsSite}
 export R_LIBS_USER=~/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
-exec /usr/lib/rstudio-server/bin/rsession "\\$@"
-RSESSION
-chmod +x ${workdir}/rsession.sh`;
+exec /usr/lib/rstudio-server/bin/rsession "$@"
+`;
+    const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
+    const rsessionShCmd = `echo '${rsessionBase64}' | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`;
 
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
       `printf '%b' '${dbConf}' > ${workdir}/database.conf`,
       `printf '%b' '${rserverConf}' > ${workdir}/rserver.conf`,
-      rsessionShHeredoc,
+      rsessionShCmd,
     ].join(' && ');
 
     // Build singularity bind paths for RStudio
