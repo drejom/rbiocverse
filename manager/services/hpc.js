@@ -121,25 +121,26 @@ class HpcService {
     // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
     const workdir = '\\$HOME/.rstudio-slurm/workdir';
 
-    // database.conf content - \\n becomes \n after shell, printf %b interprets it
-    const dbConf = 'provider=sqlite\\ndirectory=/var/lib/rstudio-server';
+    // Use octal \012 for newlines - works with printf %b and avoids quoting issues
+    // Single quotes in printf '%b' would break sbatch --wrap='...'
+    const dbConf = 'provider=sqlite\\012directory=/var/lib/rstudio-server';
 
-    // rsession.sh content - \\n for newlines, \\$VAR for variables
+    // rsession.sh content - \012 for newlines, \\$VAR for variables preserved to compute node
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
-      `export R_LIBS_SITE="${this.cluster.rLibsSite}"`,
-      'export R_LIBS_USER="\\$HOME/R/bioc-3.19"',
-      'export TMPDIR="/tmp"',
-      'export TZ="America/Los_Angeles"',
-      'exec /usr/lib/rstudio-server/bin/rsession "\\$@"',
-    ].join('\\n');
+      `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      'export R_LIBS_USER=\\$HOME/R/bioc-3.19',
+      'export TMPDIR=/tmp',
+      'export TZ=America/Los_Angeles',
+      'exec /usr/lib/rstudio-server/bin/rsession \\$@',
+    ].join('\\012');
 
-    // Use printf '%b' instead of echo -e for POSIX portability
+    // Use printf "%b" with double quotes - no single quotes that would break --wrap='...'
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `printf '%b' "${dbConf}" > ${workdir}/database.conf`,
-      `printf '%b' "${rsessionSh}" > ${workdir}/rsession.sh`,
+      `printf "%b" "${dbConf}" > ${workdir}/database.conf`,
+      `printf "%b" "${rsessionSh}" > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
