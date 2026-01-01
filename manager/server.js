@@ -81,6 +81,12 @@ rstudioProxy.on('error', (err, req, res) => {
 // This tells RStudio to generate correct URLs for redirects and resources
 rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
+  // Debug: log outgoing request details
+  log.debug(`RStudio proxyReq`, {
+    method: req.method,
+    url: req.url,
+    cookies: req.headers.cookie ? req.headers.cookie.substring(0, 100) : 'none',
+  });
 });
 
 // Rewrite RStudio redirects to use proxy paths
@@ -88,10 +94,16 @@ rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
+  const setCookies = proxyRes.headers['set-cookie'];
 
-  // Log all redirects for debugging
-  if (status >= 300 && status < 400) {
-    log.proxy(`RStudio ${status} redirect`, { from: req.url, to: location });
+  // Debug: log all responses with cookies or redirects
+  if (status >= 300 && status < 400 || setCookies) {
+    log.debug(`RStudio proxyRes`, {
+      status,
+      url: req.url,
+      location: location || 'none',
+      setCookies: setCookies ? setCookies.map(c => c.substring(0, 60) + '...') : 'none',
+    });
   }
 
   if (location) {
@@ -107,12 +119,11 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
     // that aren't already prefixed with our proxy path
     if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
       rewritten = '/rstudio-direct' + rewritten;
-      log.proxy(`RStudio redirect prefixed: ${location} -> ${rewritten}`);
     }
 
     if (rewritten !== location) {
       proxyRes.headers['location'] = rewritten;
-      log.proxy(`RStudio redirect rewritten: ${location} -> ${rewritten}`);
+      log.debug(`RStudio redirect rewritten: ${location} -> ${rewritten}`);
     }
   }
 });
