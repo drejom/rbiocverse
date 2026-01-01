@@ -121,11 +121,12 @@ class HpcService {
     // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
     const workdir = '\\$HOME/.rstudio-slurm/workdir';
 
-    // Use octal \012 for newlines - works with printf %b and avoids quoting issues
-    // Single quotes in printf '%b' would break sbatch --wrap='...'
-    const dbConf = 'provider=sqlite\\012directory=/var/lib/rstudio-server';
+    // Use \\\\012 (double-escaped octal) for newlines:
+    // JS \\\\012 -> string \\012 -> survives SSH double quotes -> \012 for printf %b
+    // Use \\" for inner quotes to survive SSH double-quote wrapping
+    const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server';
 
-    // rsession.sh content - \012 for newlines, \\$VAR for variables preserved to compute node
+    // rsession.sh content - \\\\012 for newlines, \\$VAR preserved to compute node
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
@@ -134,13 +135,13 @@ class HpcService {
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
       'exec /usr/lib/rstudio-server/bin/rsession \\$@',
-    ].join('\\012');
+    ].join('\\\\012');
 
-    // Use printf "%b" with double quotes - no single quotes that would break --wrap='...'
+    // Use printf "%b" with escaped inner quotes (\") - survives SSH double-quote wrapping
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `printf "%b" "${dbConf}" > ${workdir}/database.conf`,
-      `printf "%b" "${rsessionSh}" > ${workdir}/rsession.sh`,
+      `printf "%b" \\"${dbConf}\\" > ${workdir}/database.conf`,
+      `printf "%b" \\"${rsessionSh}\\" > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
