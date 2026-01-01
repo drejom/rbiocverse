@@ -82,9 +82,12 @@ function createApiRouter(stateManager) {
     return sessions;
   }
 
-  // Health check
+  // Health check - returns 503 if state manager not ready
   router.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+    if (!stateManager.isReady()) {
+      return res.status(503).json({ status: 'starting', ready: false });
+    }
+    res.json({ status: 'ok', ready: true });
   });
 
   // Logging middleware for user actions

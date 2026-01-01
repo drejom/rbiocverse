@@ -24,6 +24,17 @@ class StateManager {
 
     // Operation locks to prevent race conditions
     this.locks = new Map();
+
+    // Ready flag - set to true after load() completes
+    this.ready = false;
+  }
+
+  /**
+   * Check if state manager is ready (loaded)
+   * @returns {boolean}
+   */
+  isReady() {
+    return this.ready;
   }
 
   /**
@@ -73,7 +84,10 @@ class StateManager {
    * Reconcile with squeue to detect orphaned jobs
    */
   async load() {
-    if (!this.enablePersistence) return;
+    if (!this.enablePersistence) {
+      this.ready = true;
+      return;
+    }
 
     try {
       const data = await fs.readFile(this.stateFile, 'utf8');
@@ -94,6 +108,8 @@ class StateManager {
       }
       // File doesn't exist yet - normal on first run
     }
+
+    this.ready = true;
   }
 
   /**
