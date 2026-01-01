@@ -34,13 +34,6 @@ app.use((req, res, next) => {
 const stateManager = new StateManager();
 const state = stateManager.state;
 
-// Load persisted state on startup
-stateManager.load().then(() => {
-  log.info('State manager initialized');
-}).catch(err => {
-  log.error('Failed to load state', { error: err.message });
-});
-
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
 
@@ -294,40 +287,48 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Start server only after state manager is ready
 const PORT = 3000;
-const server = app.listen(PORT, () => {
-  log.info(`HPC Code Server Manager listening on port ${PORT}`);
-  log.info(`Default HPC: ${config.defaultHpc}`);
-});
+let server;
 
-// Handle WebSocket upgrades for VS Code, RStudio, and Live Server
-server.on('upgrade', (req, socket, head) => {
-  log.proxy(`WebSocket upgrade: ${req.url}`);
-  if (hasRunningSession()) {
-    // Live Server WebSocket (for hot reload)
-    if (req.url.startsWith('/live')) {
-      liveServerProxy.ws(req, socket, head);
-    }
-    // RStudio WebSocket
-    else if (req.url.startsWith('/rstudio')) {
-      rstudioProxy.ws(req, socket, head);
-    }
-    // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
-    else if (req.url.startsWith('/code') ||
-        req.url.startsWith('/vscode-direct') ||
-        req.url.startsWith('/stable-') ||
-        req.url.startsWith('/vscode-') ||
-        req.url.startsWith('/oss-dev') ||
-        req.url === '/' ||
-        req.url.startsWith('/?')) {
-      vscodeProxy.ws(req, socket, head);
+stateManager.load().then(() => {
+  log.info('State manager initialized');
+  server = app.listen(PORT, () => {
+    log.info(`HPC Code Server Manager listening on port ${PORT}`);
+    log.info(`Default HPC: ${config.defaultHpc}`);
+  });
+
+  // Handle WebSocket upgrades for VS Code, RStudio, and Live Server
+  server.on('upgrade', (req, socket, head) => {
+    log.proxy(`WebSocket upgrade: ${req.url}`);
+    if (hasRunningSession()) {
+      // Live Server WebSocket (for hot reload)
+      if (req.url.startsWith('/live')) {
+        liveServerProxy.ws(req, socket, head);
+      }
+      // RStudio WebSocket
+      else if (req.url.startsWith('/rstudio')) {
+        rstudioProxy.ws(req, socket, head);
+      }
+      // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
+      else if (req.url.startsWith('/code') ||
+          req.url.startsWith('/vscode-direct') ||
+          req.url.startsWith('/stable-') ||
+          req.url.startsWith('/vscode-') ||
+          req.url.startsWith('/oss-dev') ||
+          req.url === '/' ||
+          req.url.startsWith('/?')) {
+        vscodeProxy.ws(req, socket, head);
+      } else {
+        log.proxy(`WebSocket rejected: ${req.url}`);
+        socket.destroy();
+      }
     } else {
-      log.proxy(`WebSocket rejected: ${req.url}`);
+      log.proxy('WebSocket rejected: no session');
       socket.destroy();
     }
-  } else {
-    log.proxy('WebSocket rejected: no session');
-    socket.destroy();
-  }
+  });
+}).catch(err => {
+  log.error('Failed to load state', { error: err.message });
+  process.exit(1);
 });
