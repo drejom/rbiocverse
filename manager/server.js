@@ -63,10 +63,14 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Proxy for forwarding to RStudio when tunnel is active
+// proxyTimeout: 5 minutes for long-polling (RStudio uses HTTP long-poll for updates)
+// timeout: 5 minutes for connection timeout
 const rstudioProxy = httpProxy.createProxyServer({
   ws: true,
   target: `http://127.0.0.1:${ides.rstudio.port}`,
   changeOrigin: true,
+  proxyTimeout: 5 * 60 * 1000,  // 5 minutes for long-polling
+  timeout: 5 * 60 * 1000,       // 5 minutes connection timeout
 });
 
 rstudioProxy.on('error', (err, req, res) => {
