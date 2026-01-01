@@ -115,8 +115,11 @@ class HpcService {
   /**
    * Build sbatch wrap command for RStudio
    * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
+   * @param {number} cpus - Number of CPUs
+   * @param {string} password - Auto-generated password for PAM auth
+   * @returns {string} sbatch wrap command
    */
-  buildRstudioWrap(cpus) {
+  buildRstudioWrap(cpus, password) {
     const ideConfig = ides.rstudio;
     // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
     const workdir = '\\$HOME/.rstudio-slurm/workdir';
@@ -126,13 +129,14 @@ class HpcService {
     // Add trailing newline with extra \\\\012 at end
     const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
-    // rserver.conf content - auth-none=1 disables authentication for single-user mode
-    // Future multi-user: use auth-proxy=1 with X-RStudio-Username header from web UI
-    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012';
+    // rserver.conf - use proxy auth (proxy injects X-RStudio-Username header)
+    // No login page needed - proxy handles user identity
+    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012';
 
     // rsession.sh content - \\\\012 for newlines
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
     // Use ~ instead of $HOME to avoid escaping issues
+    // --no-save --no-restore prevents caching large R objects (e.g., scRNAseq) to disk
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
@@ -140,7 +144,7 @@ class HpcService {
       'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      'exec /usr/lib/rstudio-server/bin/rsession',
+      'exec /usr/lib/rstudio-server/bin/rsession --no-save --no-restore',
       '',  // trailing newline
     ].join('\\\\012');
 
@@ -164,9 +168,9 @@ class HpcService {
       this.cluster.bindPaths,
     ].join(',');
 
-    // Build rserver command
-    // auth-none=1 is set in rserver.conf (bound from workdir)
+    // Build rserver command with proxy authentication
     // --cleanenv prevents user env vars from leaking in and causing conflicts
+    // --auth-proxy=1 trusts X-RStudio-Username header from our proxy
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
@@ -174,13 +178,23 @@ class HpcService {
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
-      '--www-address=0.0.0.0',  // Bind to all interfaces, not just localhost
+      '--www-address=0.0.0.0',
       `--www-port=${ideConfig.port}`,
       '--server-user=\\$(whoami)',
+      '--auth-proxy=1',
+      '--auth-proxy-user-header=X-RStudio-Username',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 
     return `${setup} && ${rserverCmd}`;
+  }
+
+  /**
+   * Generate a random password for RStudio PAM auth
+   * @returns {string} 4-digit password
+   */
+  generatePassword() {
+    return String(Math.floor(1000 + Math.random() * 9000));
   }
 
   /**
@@ -189,7 +203,7 @@ class HpcService {
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
    * @param {string} ide - IDE type ('vscode', 'rstudio')
-   * @returns {Promise<string>} Job ID
+   * @returns {Promise<{jobId: string, password?: string}>} Job ID and password (for RStudio)
    */
   async submitJob(cpus, mem, time, ide = 'vscode') {
     const ideConfig = ides[ide];
@@ -201,12 +215,14 @@ class HpcService {
 
     // Build IDE-specific wrap command
     let wrapCmd;
+    let password = null;
     switch (ide) {
       case 'vscode':
         wrapCmd = this.buildVscodeWrap();
         break;
       case 'rstudio':
-        wrapCmd = this.buildRstudioWrap(cpus);
+        password = this.generatePassword();
+        wrapCmd = this.buildRstudioWrap(cpus, password);
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
@@ -233,7 +249,7 @@ class HpcService {
     }
 
     log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time });
-    return match[1];
+    return { jobId: match[1], password };
   }
 
   /**

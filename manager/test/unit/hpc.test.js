@@ -103,9 +103,10 @@ describe('HpcService', () => {
     it('should submit job and return job ID', async () => {
       sshExecStub.resolves('Submitted batch job 12345');
 
-      const jobId = await hpcService.submitJob('4', '40G', '12:00:00');
+      const result = await hpcService.submitJob('4', '40G', '12:00:00');
 
-      expect(jobId).to.equal('12345');
+      expect(result.jobId).to.equal('12345');
+      expect(result.password).to.be.null;  // VS Code doesn't need password
       expect(sshExecStub).to.have.been.calledOnce;
     });
 
