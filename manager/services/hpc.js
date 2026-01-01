@@ -158,7 +158,9 @@ class HpcService {
       this.cluster.bindPaths,
     ].join(',');
 
-    // Build rserver command (no auth since we're behind proxy)
+    // Build rserver command
+    // Use --config-file to load the image's disable_auth_rserver.conf which has auth-none=1
+    // This is cleaner than command-line args and the config file exists in the image
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
@@ -166,10 +168,10 @@ class HpcService {
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
+      '--config-file=/etc/rstudio/disable_auth_rserver.conf',
       '--www-address=0.0.0.0',  // Bind to all interfaces, not just localhost
       `--www-port=${ideConfig.port}`,
       '--server-user=\\$(whoami)',
-      '--auth-none=1',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 

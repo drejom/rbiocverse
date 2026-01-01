@@ -97,14 +97,17 @@ function hasRunningSession() {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
 }
 
-// Landing page - serve static index.html or redirect to /code/ if session running
+// Landing page - serve static index.html or redirect to active IDE if session running
 app.get('/', (req, res) => {
   // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
   if (req.query.menu) {
     log.ui('Main menu opened via ?menu=1');
   }
   if (!req.query.menu && hasRunningSession()) {
-    return res.redirect('/code/');
+    // Redirect to the active IDE's proxy path
+    const activeIde = state.activeSession?.ide || 'vscode';
+    const proxyPath = ides[activeIde]?.proxyPath || '/code/';
+    return res.redirect(proxyPath);
   }
   log.ui('Serving launcher page');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
