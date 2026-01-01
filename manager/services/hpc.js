@@ -118,20 +118,22 @@ class HpcService {
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
-    const workdir = '$HOME/.rstudio-slurm/workdir';
+    // Use \\$HOME to escape $ through SSH and sbatch --wrap
+    const workdir = '\\$HOME/.rstudio-slurm/workdir';
 
     // database.conf content
     const dbConf = 'provider=sqlite\\ndirectory=/var/lib/rstudio-server';
 
     // rsession.sh content (escape for echo -e)
+    // Use \\$HOME and \\$@ to preserve $ for compute node execution
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE="${this.cluster.rLibsSite}"`,
-      'export R_LIBS_USER="$HOME/R/bioc-3.19"',
+      'export R_LIBS_USER="\\$HOME/R/bioc-3.19"',
       'export TMPDIR="/tmp"',
       'export TZ="America/Los_Angeles"',
-      'exec /usr/lib/rstudio-server/bin/rsession "$@"',
+      'exec /usr/lib/rstudio-server/bin/rsession "\\$@"',
     ].join('\\n');
 
     // Create setup commands using echo -e (avoids heredoc issues in --wrap)
