@@ -24,6 +24,8 @@ services:
       # State persistence (Phase 1.4)
       - STATE_FILE=/data/state.json
       - ENABLE_STATE_PERSISTENCE=${ENABLE_STATE_PERSISTENCE:-false}
+      # Logging level (debug for troubleshooting RStudio proxy)
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
 
     volumes:
       # SSH keys copied from studio to TrueNAS (mount to apps user home)
