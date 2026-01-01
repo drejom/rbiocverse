@@ -129,9 +129,10 @@ class HpcService {
     // Add trailing newline with extra \\\\012 at end
     const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
-    // rserver.conf - use proxy auth (proxy injects X-RStudio-Username header)
-    // No login page needed - proxy handles user identity
-    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012';
+    // rserver.conf - auth-none=1 disables login (single-user mode)
+    // Note: RStudio 2024.04 has a bug where it still redirects to /auth-sign-in
+    // Our proxy rewrites these redirects - see server.js proxyRes handler
+    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012';
 
     // rsession.sh content - \\\\012 for newlines
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
@@ -168,9 +169,9 @@ class HpcService {
       this.cluster.bindPaths,
     ].join(',');
 
-    // Build rserver command with proxy authentication
+    // Build rserver command
     // --cleanenv prevents user env vars from leaking in and causing conflicts
-    // --auth-proxy=1 trusts X-RStudio-Username header from our proxy
+    // auth-none=1 is set in rserver.conf (bound from workdir)
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
@@ -181,8 +182,6 @@ class HpcService {
       '--www-address=0.0.0.0',
       `--www-port=${ideConfig.port}`,
       '--server-user=\\$(whoami)',
-      '--auth-proxy=1',
-      '--auth-proxy-user-header=X-RStudio-Username',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 

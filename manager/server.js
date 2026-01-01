@@ -77,21 +77,33 @@ rstudioProxy.on('error', (err, req, res) => {
   }
 });
 
-// Inject X-RStudio-Username header for proxy authentication
-// RStudio Server with --auth-proxy=1 trusts this header for user identity
-rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
-  proxyReq.setHeader('X-RStudio-Username', config.hpcUser);
-});
-
 // Rewrite RStudio redirects to use proxy paths
+// RStudio 2024.04 bug: redirects to /auth-sign-in even with auth-none=1
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
+  const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
+
+  // Log all redirects for debugging
+  if (status >= 300 && status < 400) {
+    log.proxy(`RStudio ${status} redirect`, { from: req.url, to: location });
+  }
+
   if (location) {
+    let rewritten = location;
+
     // Rewrite absolute URLs pointing to the internal RStudio port
-    const rewritten = location.replace(
-      /^https?:\/\/127\.0\.0\.1:8787\//,
-      '/rstudio-direct/'
+    rewritten = rewritten.replace(
+      /^https?:\/\/127\.0\.0\.1:8787/,
+      '/rstudio-direct'
     );
+
+    // Also handle relative redirects to auth-sign-in - just go to main page
+    // This handles the RStudio 2024.04 bug where auth-none still redirects
+    if (rewritten === '/auth-sign-in' || rewritten.endsWith('/auth-sign-in')) {
+      rewritten = '/rstudio-direct/';
+      log.proxy(`RStudio auth redirect bypassed: ${location} -> ${rewritten}`);
+    }
+
     if (rewritten !== location) {
       proxyRes.headers['location'] = rewritten;
       log.proxy(`RStudio redirect rewritten: ${location} -> ${rewritten}`);
