@@ -123,18 +123,21 @@ class HpcService {
 
     // Use \\\\012 (double-escaped octal) for newlines:
     // JS \\\\012 -> string \\012 -> survives SSH double quotes -> \012 for printf %b
-    // Use \\" for inner quotes to survive SSH double-quote wrapping
-    const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server';
+    // Add trailing newline with extra \\\\012 at end
+    const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
-    // rsession.sh content - \\\\012 for newlines, \\$VAR preserved to compute node
+    // rsession.sh content - \\\\012 for newlines
+    // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
+    // Use ~ instead of $HOME to avoid escaping issues
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
-      'export R_LIBS_USER=\\$HOME/R/bioc-3.19',
+      'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      'exec /usr/lib/rstudio-server/bin/rsession \\$@',
+      'exec /usr/lib/rstudio-server/bin/rsession',
+      '',  // trailing newline
     ].join('\\\\012');
 
     // Use printf "%b" with escaped inner quotes (\") - survives SSH double-quote wrapping
