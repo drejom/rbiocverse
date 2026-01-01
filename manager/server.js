@@ -78,7 +78,8 @@ rstudioProxy.on('error', (err, req, res) => {
 });
 
 // Rewrite RStudio redirects to use proxy paths
-// RStudio 2024.04 bug: redirects to /auth-sign-in even with auth-none=1
+// RStudio 2024.04 with auth-none=1: redirects to /auth-sign-in to set session cookies
+// We need to let this happen (not bypass it) so cookies get set properly
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
@@ -96,14 +97,6 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       /^https?:\/\/127\.0\.0\.1:8787/,
       '/rstudio-direct'
     );
-
-    // Also handle redirects to auth-sign-in - just go to main page
-    // This handles the RStudio 2024.04 bug where auth-none still redirects
-    // Match with or without query string (e.g., /auth-sign-in?appUri=%2F)
-    if (rewritten.includes('/auth-sign-in')) {
-      rewritten = '/rstudio-direct/';
-      log.proxy(`RStudio auth redirect bypassed: ${location} -> ${rewritten}`);
-    }
 
     if (rewritten !== location) {
       proxyRes.headers['location'] = rewritten;
