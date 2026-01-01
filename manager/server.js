@@ -97,9 +97,10 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       '/rstudio-direct'
     );
 
-    // Also handle relative redirects to auth-sign-in - just go to main page
+    // Also handle redirects to auth-sign-in - just go to main page
     // This handles the RStudio 2024.04 bug where auth-none still redirects
-    if (rewritten === '/auth-sign-in' || rewritten.endsWith('/auth-sign-in')) {
+    // Match with or without query string (e.g., /auth-sign-in?appUri=%2F)
+    if (rewritten.includes('/auth-sign-in')) {
       rewritten = '/rstudio-direct/';
       log.proxy(`RStudio auth redirect bypassed: ${location} -> ${rewritten}`);
     }
