@@ -21,12 +21,39 @@ function parseAdditionalPorts(envValue, defaultValue = '5500') {
 const config = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
   defaultHpc: process.env.DEFAULT_HPC || 'gemini',
-  codeServerPort: parseInt(process.env.CODE_SERVER_PORT) || 8000,
+  defaultIde: process.env.DEFAULT_IDE || 'vscode',
   defaultCpus: process.env.DEFAULT_CPUS || '2',
   defaultMem: process.env.DEFAULT_MEM || '40G',
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
   // Additional ports to forward through SSH tunnel (e.g., Live Server: 5500, React: 3000)
   additionalPorts: parseAdditionalPorts(process.env.ADDITIONAL_PORTS),
+};
+
+// IDE definitions - extensible for future Jupyter support
+// Icons from Lucide: https://lucide.dev/icons/
+const ides = {
+  vscode: {
+    name: 'VS Code',
+    icon: 'file-code',  // code file icon
+    port: 8000,
+    jobName: 'hpc-vscode',
+    proxyPath: '/code/',
+  },
+  rstudio: {
+    name: 'RStudio',
+    icon: 'chart-line',  // statistics/R visualization
+    port: 8787,
+    jobName: 'hpc-rstudio',
+    proxyPath: '/rstudio/',
+  },
+  // Future: jupyter
+  // jupyter: {
+  //   name: 'Jupyter',
+  //   icon: 'notebook-pen',  // notebook icon
+  //   port: 8888,
+  //   jobName: 'hpc-jupyter',
+  //   proxyPath: '/jupyter/',
+  // },
 };
 
 const clusters = {
@@ -36,7 +63,8 @@ const clusters = {
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
     singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
     rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
-    bindPaths: '/packages,/run,/scratch,/ref_genomes',
+    // Include /run and /var/lib/rstudio-server for RStudio
+    bindPaths: '/packages,/run,/var/lib/rstudio-server,/scratch,/ref_genomes',
   },
   apollo: {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
@@ -44,8 +72,9 @@ const clusters = {
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
     singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
     rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
-    bindPaths: '/opt,/run,/labs',
+    // Include /run and /var/lib/rstudio-server for RStudio
+    bindPaths: '/opt,/run,/var/lib/rstudio-server,/labs',
   },
 };
 
-module.exports = { config, clusters };
+module.exports = { config, clusters, ides };

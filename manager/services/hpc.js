@@ -4,7 +4,7 @@
  */
 
 const { exec } = require('child_process');
-const { config, clusters } = require('../config');
+const { config, clusters, ides } = require('../config');
 const { log } = require('../lib/logger');
 
 class HpcService {
@@ -41,13 +41,19 @@ class HpcService {
   }
 
   /**
-   * Get job information from SLURM queue
+   * Get job information from SLURM queue for a specific IDE
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
    * @returns {Promise<Object|null>} Job info or null if no job found
    */
-  async getJobInfo() {
+  async getJobInfo(ide = 'vscode') {
+    const ideConfig = ides[ide];
+    if (!ideConfig) {
+      throw new Error(`Unknown IDE: ${ide}`);
+    }
+
     try {
       const output = await this.sshExec(
-        `squeue --user=${config.hpcUser} --name=code-server --states=R,PD -h -O JobID,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
+        `squeue --user=${config.hpcUser} --name=${ideConfig.jobName} --states=R,PD -h -O JobID,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
       );
 
       if (!output) return null;
@@ -58,6 +64,7 @@ class HpcService {
 
       return {
         jobId,
+        ide,
         state: jobState,
         node: node === '(null)' ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
@@ -72,41 +79,89 @@ class HpcService {
   }
 
   /**
-   * Submit a new SLURM job for code-server
+   * Get job information for all IDEs on this cluster
+   * @returns {Promise<Object>} Map of ide -> job info (or null)
+   */
+  async getAllJobs() {
+    const results = {};
+    for (const ide of Object.keys(ides)) {
+      results[ide] = await this.getJobInfo(ide);
+    }
+    return results;
+  }
+
+  /**
+   * Build IDE-specific command for Singularity exec
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
+   * @returns {string[]} Command arguments
+   */
+  buildIdeCommand(ide) {
+    const ideConfig = ides[ide];
+
+    switch (ide) {
+      case 'vscode':
+        return [
+          'code serve-web',
+          '--host 0.0.0.0',
+          `--port ${ideConfig.port}`,
+          '--without-connection-token',
+          '--accept-server-license-terms',
+          '--disable-telemetry',
+          '--server-base-path /vscode-direct',
+          '--server-data-dir ~/.vscode-slurm/.vscode-server',
+          '--extensions-dir ~/.vscode-slurm/.vscode-server/extensions',
+          '--user-data-dir ~/.vscode-slurm/user-data',
+        ];
+
+      case 'rstudio':
+        return [
+          'rserver',
+          '--www-address=0.0.0.0',
+          `--www-port=${ideConfig.port}`,
+          '--server-user=$(whoami)',
+          '--auth-none=1',
+          '--server-data-dir=~/.rstudio-slurm',
+        ];
+
+      default:
+        throw new Error(`Unknown IDE: ${ide}`);
+    }
+  }
+
+  /**
+   * Submit a new SLURM job for an IDE
    * @param {string} cpus - Number of CPUs
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
    * @returns {Promise<string>} Job ID
    */
-  async submitJob(cpus, mem, time) {
-    const logDir = `/home/${config.hpcUser}/vscode-slurm-logs`;
+  async submitJob(cpus, mem, time, ide = 'vscode') {
+    const ideConfig = ides[ide];
+    if (!ideConfig) {
+      throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    const logDir = `/home/${config.hpcUser}/hpc-slurm-logs`;
+    const ideCommand = this.buildIdeCommand(ide);
 
     const submitCmd = [
       'sbatch',
-      '--job-name=code-server',
+      `--job-name=${ideConfig.jobName}`,
       '--nodes=1',
       `--cpus-per-task=${cpus}`,
       `--mem=${mem}`,
       `--partition=${this.cluster.partition}`,
       `--time=${time}`,
-      `--output=${logDir}/code-server_%j.log`,
-      `--error=${logDir}/code-server_%j.err`,
+      `--output=${logDir}/${ideConfig.jobName}_%j.log`,
+      `--error=${logDir}/${ideConfig.jobName}_%j.err`,
       `--wrap='mkdir -p ${logDir} && ${this.cluster.singularityBin} exec`,
       '--env TERM=xterm-256color',
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       `-B ${this.cluster.bindPaths}`,
       `${this.cluster.singularityImage}`,
-      'code serve-web',
-      '--host 0.0.0.0',
-      `--port ${config.codeServerPort}`,
-      '--without-connection-token',
-      '--accept-server-license-terms',
-      '--disable-telemetry',
-      '--server-base-path /vscode-direct',
-      '--server-data-dir ~/.vscode-slurm/.vscode-server',
-      '--extensions-dir ~/.vscode-slurm/.vscode-server/extensions',
-      "--user-data-dir ~/.vscode-slurm/user-data'",
-    ].join(' ');
+      ...ideCommand,
+    ].join(' ') + "'";
 
     const output = await this.sshExec(submitCmd);
     const match = output.match(/Submitted batch job (\d+)/);
@@ -115,7 +170,7 @@ class HpcService {
       throw new Error('Failed to parse job ID from: ' + output);
     }
 
-    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], cpus, mem, time });
+    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time });
     return match[1];
   }
 
@@ -132,16 +187,17 @@ class HpcService {
   /**
    * Wait for job to get node assignment
    * @param {string} jobId - Job ID to monitor
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
    * @param {number} maxAttempts - Maximum polling attempts (default 60 = 5 minutes)
    * @returns {Promise<string>} Node name
    */
-  async waitForNode(jobId, maxAttempts = 60) {
+  async waitForNode(jobId, ide = 'vscode', maxAttempts = 60) {
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-      const jobInfo = await this.getJobInfo();
+      const jobInfo = await this.getJobInfo(ide);
 
-      if (!jobInfo) {
+      if (!jobInfo || jobInfo.jobId !== jobId) {
         throw new Error('Job disappeared from queue');
       }
 
