@@ -145,11 +145,13 @@ class HpcService {
     // Use ~ instead of $HOME to avoid escaping issues
     // --no-save --no-restore prevents caching large R objects (e.g., scRNAseq) to disk
     // Log to ~/.rstudio-slurm/rsession.log for debugging
-    // NOTE: Avoid $@ - escaping through SSH+printf is fragile
+    // CRITICAL: LD_LIBRARY_PATH must include R lib dir for libR.so
     const rsessionSh = [
       '#!/bin/sh',
       'exec 2>>~/.rstudio-slurm/rsession.log',
       'set -x',  // trace commands
+      'export R_HOME=/usr/local/lib/R',
+      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:$LD_LIBRARY_PATH',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
       'export R_LIBS_USER=~/R/bioc-3.19',
