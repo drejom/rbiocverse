@@ -317,10 +317,14 @@ echo "Installing packages from: $PKGFILE"
 echo "Target library: $R_LIBS_SITE"
 
 singularity exec \\
+  --env R_LIBS=/usr/local/lib/R/site-library \\
   --env R_LIBS_SITE=$R_LIBS_SITE \\
+  --env SLURM_CPUS=$SLURM_CPUS_PER_TASK \\
   -B $BIND_PATHS \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
+    ncpus <- as.integer(Sys.getenv(\\"SLURM_CPUS\\", parallel::detectCores()))
+    options(Ncpus = ncpus)
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
     pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
@@ -417,13 +421,17 @@ echo "Packages: %d core dependencies"
 echo ""
 
 singularity exec \\
+  --env R_LIBS=/usr/local/lib/R/site-library \\
   --env R_LIBS_SITE=$R_LIBS_SITE \\
+  --env SLURM_CPUS=$SLURM_CPUS_PER_TASK \\
   -B $BIND_PATHS \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
+    ncpus <- as.integer(Sys.getenv(\\"SLURM_CPUS\\", parallel::detectCores()))
+    options(Ncpus = ncpus)
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
     pkgs <- readLines(\\"%s/pkgs_deps.txt\\")
-    message(\\"Installing \\", length(pkgs), \\" core dependencies...\\")
+    message(\\"Installing \\", length(pkgs), \\" core dependencies using \\", ncpus, \\" CPUs...\\")
     tryCatch(
       pak::pkg_install(pkgs, lib = lib, upgrade = FALSE),
       error = function(e) {
@@ -472,11 +480,20 @@ echo "=== Phase 2: Installing leaf packages (task $SLURM_ARRAY_TASK_ID) ==="
 echo "Package file: $PKGFILE"
 echo "Library: $R_LIBS_SITE"
 
+# Use job-local cache to avoid NFS lock contention
+export PAK_CACHE_DIR=/tmp/pak_cache_$SLURM_ARRAY_TASK_ID
+mkdir -p $PAK_CACHE_DIR
+
 singularity exec \\
+  --env R_LIBS=/usr/local/lib/R/site-library \\
   --env R_LIBS_SITE=$R_LIBS_SITE \\
-  -B $BIND_PATHS \\
+  --env SLURM_CPUS=$SLURM_CPUS_PER_TASK \\
+  --env R_USER_CACHE_DIR=$PAK_CACHE_DIR \\
+  -B $BIND_PATHS,/tmp \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
+    ncpus <- as.integer(Sys.getenv(\\"SLURM_CPUS\\", parallel::detectCores()))
+    options(Ncpus = ncpus)
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
     pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
