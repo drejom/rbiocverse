@@ -41,7 +41,7 @@ const ides = {
   },
   rstudio: {
     name: 'RStudio',
-    icon: 'devicon-rstudio-original',  // devicon.dev
+    icon: 'devicon-rstudio-plain',  // devicon.dev
     port: 8787,
     jobName: 'hpc-rstudio',
     proxyPath: '/rstudio/',
