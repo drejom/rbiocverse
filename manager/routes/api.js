@@ -211,7 +211,7 @@ function createApiRouter(stateManager) {
         apollo: formatClusterStatus(apolloJobs),
         activeSession: state.activeSession,  // { hpc, ide } or null
         ides: Object.fromEntries(
-          Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon }])
+          Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
         ),
         updatedAt: new Date().toISOString(),
       };
