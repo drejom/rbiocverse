@@ -180,15 +180,18 @@ class HpcService {
     ].join(',');
 
     // Build rserver command
-    // --cleanenv prevents user env vars from leaking in and causing conflicts
-    // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
+    // Use SINGULARITYENV_ prefix to pass env vars into container (required for pam-helper)
     // PAM auth with auto-generated password (auth-none=1 broken in RStudio 2024.x)
-    // Password is sent to user via session.password for proxy auto-login
-    const rserverCmd = [
+    // Note: --cleanenv removes user env vars but SINGULARITYENV_ vars are preserved
+    const envSetup = [
+      'export SINGULARITYENV_USER=\\$(whoami)',
+      `export SINGULARITYENV_PASSWORD=${password}`,
+      'export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0',
+    ].join(' && ');
+
+    const singularityCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
-      '--env USER=\\$(whoami)',
-      `--env PASSWORD=${password}`,
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
@@ -201,6 +204,8 @@ class HpcService {
       '--auth-timeout-minutes=0',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
+
+    const rserverCmd = `${envSetup} && ${singularityCmd}`;
 
     return `${setup} && ${rserverCmd}`;
   }
