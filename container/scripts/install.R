@@ -7,7 +7,10 @@
 #   singularity exec --env R_LIBS_SITE=/path/to/rlibs container.sif \
 #     Rscript /opt/rbiocverse/scripts/install.R
 #
-# Or for HPC parallel install:
+# Or for HPC parallel install (two-phase: deps first, then leaves):
+#   Rscript /opt/rbiocverse/scripts/install.R --slurm-smart 20
+#
+# Or legacy single-phase (may have lock contention):
 #   Rscript /opt/rbiocverse/scripts/install.R --slurm 20
 
 # =============================================================================
@@ -16,19 +19,65 @@
 
 # Path to DESCRIPTION (in container at /opt/rbiocverse)
 DESCRIPTION_PATH <- Sys.getenv(
-"RBIOCVERSE_DESCRIPTION",
+  "RBIOCVERSE_DESCRIPTION",
   "/opt/rbiocverse/DESCRIPTION"
 )
 
-# SLURM configuration (for --slurm mode)
-DEFAULT_SINGULARITY_IMAGE <- Sys.getenv(
-  "RBIOC_SINGULARITY_IMAGE",
-  "/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif"
-)
-DEFAULT_BIND_PATHS <- Sys.getenv(
-  "RBIOC_BIND_PATHS",
-  "/packages,/scratch"
-)
+# =============================================================================
+# Cluster Configuration
+# =============================================================================
+
+#' Detect which HPC cluster we're on
+detect_cluster <- function() {
+  # Check for Gemini paths first
+
+if (dir.exists("/packages/singularity")) return("gemini")
+  # Check for Apollo paths
+  if (dir.exists("/opt/singularity-images")) return("apollo")
+  # Default to gemini if can't detect (e.g., local dev)
+  "gemini"
+}
+
+#' Get cluster-specific configuration
+#' @param cluster Cluster name ("gemini" or "apollo")
+#' @param bioc_version Bioconductor version (e.g., "3.22")
+get_cluster_config <- function(cluster = detect_cluster(), bioc_version = "3.22") {
+  configs <- list(
+    gemini = list(
+      name = "Gemini",
+      sif = sprintf("/packages/singularity/shared_cache/rbioc/vscode-rbioc_%s.sif", bioc_version),
+      lib = sprintf("/packages/singularity/shared_cache/rbioc/rlibs/bioc-%s", bioc_version),
+      bind = "/packages,/scratch",
+      # Phase 1: core deps - high CPU for parallel compilation
+      phase1_cpus = 32,
+      phase1_mem = "64G",
+      phase1_time = "4:00:00",
+      # Phase 2: leaf packages - moderate CPU
+      phase2_cpus = 8,
+      phase2_mem = "16G",
+      phase2_time = "2:00:00"
+    ),
+    apollo = list(
+      name = "Apollo",
+      sif = sprintf("/opt/singularity-images/rbioc/vscode-rbioc_%s.sif", bioc_version),
+      lib = sprintf("/opt/singularity-images/rbioc/rlibs/bioc-%s", bioc_version),
+      bind = "/opt,/labs,/run,/ref_genome",
+      # Apollo has smaller nodes (median 28 CPUs)
+      phase1_cpus = 24,
+      phase1_mem = "48G",
+      phase1_time = "4:00:00",
+      phase2_cpus = 4,
+      phase2_mem = "16G",
+      phase2_time = "2:00:00"
+    )
+  )
+
+  if (!cluster %in% names(configs)) {
+    stop("Unknown cluster: ", cluster, ". Use 'gemini' or 'apollo'.", call. = FALSE)
+  }
+
+  configs[[cluster]]
+}
 
 # =============================================================================
 # Helper Functions
@@ -69,7 +118,7 @@ parse_description <- function(path = DESCRIPTION_PATH) {
   # Remove version constraints
   imports <- gsub("\\s*\\([^)]+\\)", "", imports)
 
- # Parse Remotes
+  # Parse Remotes
   remotes <- character(0)
   if (!is.null(desc$Remotes) && !is.na(desc$Remotes)) {
     remotes <- strsplit(desc$Remotes, ",\\s*")[[1]]
@@ -82,6 +131,61 @@ parse_description <- function(path = DESCRIPTION_PATH) {
     imports = imports,
     remotes = remotes
   )
+}
+
+#' Get core dependencies that should be installed first
+#' These are packages that many other packages depend on
+get_core_deps <- function() {
+  # Core Bioconductor infrastructure (install order matters)
+  bioc_core <- c(
+    "BiocGenerics", "S4Vectors", "IRanges", "GenomeInfoDb", "XVector",
+    "GenomicRanges", "Biostrings", "Rsamtools", "GenomicAlignments",
+    "SummarizedExperiment", "SingleCellExperiment", "DelayedArray",
+    "HDF5Array", "rhdf5", "Rhdf5lib", "BiocParallel", "BiocFileCache",
+    "AnnotationDbi", "AnnotationHub", "ExperimentHub", "biomaRt",
+    "GenomicFeatures", "rtracklayer", "BSgenome", "Biobase"
+  )
+
+  # Core tidyverse/data manipulation
+  tidyverse_core <- c(
+    "rlang", "vctrs", "cli", "glue", "lifecycle", "pillar", "tibble",
+    "dplyr", "tidyr", "purrr", "stringr", "forcats", "lubridate",
+    "readr", "readxl", "haven", "ggplot2", "scales", "tidyverse"
+  )
+
+  # Core data.table and matrix operations
+  data_core <- c(
+    "data.table", "Matrix", "MatrixGenerics", "sparseMatrixStats",
+    "DelayedMatrixStats", "matrixStats", "Rcpp", "RcppArmadillo",
+    "RcppEigen", "RcppParallel"
+  )
+
+  # Core stats/ML
+  stats_core <- c(
+    "MASS", "lattice", "nlme", "mgcv", "survival", "lme4",
+    "caret", "randomForest", "xgboost", "glmnet"
+  )
+
+  # Single-cell core (Seurat deps)
+  sc_core <- c(
+    "Seurat", "SeuratObject", "sctransform", "future", "future.apply",
+    "irlba", "RANN", "uwot", "leiden", "igraph", "scran", "scater",
+    "scuttle", "DropletUtils", "batchelor"
+  )
+
+  # Visualization
+  viz_core <- c(
+    "ggplot2", "cowplot", "patchwork", "gridExtra", "ggrepel",
+    "ComplexHeatmap", "circlize", "RColorBrewer", "viridis", "pheatmap"
+  )
+
+  # Development tools
+dev_core <- c(
+    "devtools", "usethis", "testthat", "roxygen2", "pkgdown",
+    "knitr", "rmarkdown", "pak"
+  )
+
+  unique(c(bioc_core, tidyverse_core, data_core, stats_core, sc_core, viz_core, dev_core))
 }
 
 # =============================================================================
@@ -134,13 +238,15 @@ install_all <- function(ncpus = parallel::detectCores()) {
   message("Library: ", lib)
 }
 
-#' Generate SLURM job array for parallel HPC install
-generate_slurm <- function(jobs = 20, output_dir = "slurm_install") {
+#' Generate legacy SLURM job array (single phase, may have lock contention)
+generate_slurm <- function(jobs = 20, output_dir = "slurm_install",
+                           cluster = detect_cluster(), bioc_version = "3.22") {
   lib <- Sys.getenv("R_LIBS_SITE")
   if (lib == "") {
     stop("R_LIBS_SITE must be set for SLURM generation", call. = FALSE)
   }
 
+  config <- get_cluster_config(cluster, bioc_version)
   pkgs <- parse_description()
   all_pkgs <- c(pkgs$imports, pkgs$remotes)
 
@@ -160,12 +266,12 @@ generate_slurm <- function(jobs = 20, output_dir = "slurm_install") {
   slurm_script <- sprintf('#!/bin/bash
 #SBATCH --job-name=rbiocverse_install
 #SBATCH --array=1-%d
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=4:00:00
+#SBATCH --cpus-per-task=%d
+#SBATCH --mem=%s
+#SBATCH --time=%s
 #SBATCH --output=%s/install_%%a.log
 
-# Configuration - edit for your HPC
+# Cluster: %s
 SINGULARITY_IMAGE="%s"
 BIND_PATHS="%s"
 R_LIBS_SITE="%s"
@@ -188,11 +294,6 @@ singularity exec \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
-    # Bootstrap pak if needed
-    if (!requireNamespace(\\"pak\\", quietly = TRUE)) {
-      message(\\"Installing pak...\\")
-      install.packages(\\"pak\\", lib = lib, repos = \\"https://cloud.r-project.org\\")
-    }
     pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
       message(sprintf(\\"Installing %%s...\\", pkg))
@@ -202,12 +303,14 @@ singularity exec \\
       )
     }
   "
-', jobs, output_dir_abs, DEFAULT_SINGULARITY_IMAGE, DEFAULT_BIND_PATHS, lib, output_dir_abs)
+', jobs, config$phase2_cpus, config$phase2_mem, config$phase2_time,
+   output_dir_abs, config$name, config$sif, config$bind, lib, output_dir_abs)
 
   script_path <- file.path(output_dir_abs, "install.slurm")
   writeLines(slurm_script, script_path)
 
-  message("Generated SLURM job array:")
+  message("Generated SLURM job array (legacy mode):")
+  message("  Cluster: ", config$name)
   message("  Jobs: ", jobs)
   message("  Packages per job: ~", ceiling(length(all_pkgs) / jobs))
   message("  Output: ", output_dir_abs, "/")
@@ -218,17 +321,196 @@ singularity exec \\
   invisible(script_path)
 }
 
+#' Generate two-phase SLURM install (deps first, then leaves)
+#' This avoids lock contention by installing shared deps in phase 1
+generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
+                                  cluster = detect_cluster(), bioc_version = "3.22") {
+  lib <- Sys.getenv("R_LIBS_SITE")
+  if (lib == "") {
+    stop("R_LIBS_SITE must be set for SLURM generation", call. = FALSE)
+  }
+
+  config <- get_cluster_config(cluster, bioc_version)
+  pkgs <- parse_description()
+  all_pkgs <- c(pkgs$imports, pkgs$remotes)
+
+  # Get core deps to install first
+  core_deps <- get_core_deps()
+  core_deps <- intersect(core_deps, all_pkgs)  # Only include deps we actually need
+
+  # Remaining packages after core deps
+  leaf_pkgs <- setdiff(all_pkgs, core_deps)
+
+  # Use absolute path for output directory
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  output_dir_abs <- normalizePath(output_dir)
+
+  # Write core deps list
+  writeLines(core_deps, file.path(output_dir_abs, "pkgs_deps.txt"))
+
+  # Split leaf packages into chunks
+  chunks <- split(leaf_pkgs, cut(seq_along(leaf_pkgs), jobs, labels = FALSE))
+  for (i in seq_along(chunks)) {
+    writeLines(chunks[[i]], file.path(output_dir_abs, sprintf("pkgs_leaf_%03d.txt", i)))
+  }
+
+  # Phase 1: Install core dependencies (single job, high resources)
+  phase1_script <- sprintf('#!/bin/bash
+#SBATCH --job-name=rbioc_deps
+#SBATCH --cpus-per-task=%d
+#SBATCH --mem=%s
+#SBATCH --time=%s
+#SBATCH --output=%s/install_deps.log
+
+# Phase 1: Install core dependencies
+# Cluster: %s
+SINGULARITY_IMAGE="%s"
+BIND_PATHS="%s"
+R_LIBS_SITE="%s"
+
+module load singularity 2>/dev/null || true
+
+echo "=== Phase 1: Installing core dependencies ==="
+echo "Cluster: %s"
+echo "Container: $SINGULARITY_IMAGE"
+echo "Library: $R_LIBS_SITE"
+echo "Packages: %d core dependencies"
+echo ""
+
+singularity exec \\
+  --env R_LIBS_SITE=$R_LIBS_SITE \\
+  -B $BIND_PATHS \\
+  "$SINGULARITY_IMAGE" \\
+  Rscript -e "
+    lib <- Sys.getenv(\\"R_LIBS_SITE\\")
+    pkgs <- readLines(\\"%s/pkgs_deps.txt\\")
+    message(\\"Installing \\", length(pkgs), \\" core dependencies...\\")
+    tryCatch(
+      pak::pkg_install(pkgs, lib = lib, upgrade = FALSE),
+      error = function(e) {
+        message(\\"Batch install failed, trying one by one...\\")
+        for (pkg in pkgs) {
+          tryCatch(
+            pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
+            error = function(e) message(sprintf(\\"  FAILED: %%s - %%s\\", pkg, conditionMessage(e)))
+          )
+        }
+      }
+    )
+    message(\\"Phase 1 complete\\")
+  "
+', config$phase1_cpus, config$phase1_mem, config$phase1_time, output_dir_abs,
+   config$name, config$sif, config$bind, lib, config$name, length(core_deps), output_dir_abs)
+
+  phase1_path <- file.path(output_dir_abs, "install_phase1_deps.slurm")
+  writeLines(phase1_script, phase1_path)
+
+  # Phase 2: Install leaf packages (job array, depends on phase 1)
+  phase2_script <- sprintf('#!/bin/bash
+#SBATCH --job-name=rbioc_leaves
+#SBATCH --array=1-%d
+#SBATCH --cpus-per-task=%d
+#SBATCH --mem=%s
+#SBATCH --time=%s
+#SBATCH --output=%s/install_leaf_%%a.log
+
+# Phase 2: Install leaf packages (depends on phase 1)
+# Cluster: %s
+SINGULARITY_IMAGE="%s"
+BIND_PATHS="%s"
+R_LIBS_SITE="%s"
+
+module load singularity 2>/dev/null || true
+
+PKGFILE=%s/pkgs_leaf_$(printf "%%03d" $SLURM_ARRAY_TASK_ID).txt
+
+if [ ! -f "$PKGFILE" ]; then
+    echo "Package file not found: $PKGFILE"
+    exit 1
+fi
+
+echo "=== Phase 2: Installing leaf packages (task $SLURM_ARRAY_TASK_ID) ==="
+echo "Package file: $PKGFILE"
+echo "Library: $R_LIBS_SITE"
+
+singularity exec \\
+  --env R_LIBS_SITE=$R_LIBS_SITE \\
+  -B $BIND_PATHS \\
+  "$SINGULARITY_IMAGE" \\
+  Rscript -e "
+    lib <- Sys.getenv(\\"R_LIBS_SITE\\")
+    pkgs <- readLines(\\"$PKGFILE\\")
+    for (pkg in pkgs) {
+      message(sprintf(\\"Installing %%s...\\", pkg))
+      tryCatch(
+        pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
+        error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e)))
+      )
+    }
+  "
+', jobs, config$phase2_cpus, config$phase2_mem, config$phase2_time, output_dir_abs,
+   config$name, config$sif, config$bind, lib, output_dir_abs)
+
+  phase2_path <- file.path(output_dir_abs, "install_phase2_leaves.slurm")
+  writeLines(phase2_script, phase2_path)
+
+  # Generate submission script
+  submit_script <- sprintf('#!/bin/bash
+# Submit two-phase installation
+# Phase 1 must complete before Phase 2 starts
+
+echo "Submitting Phase 1 (core dependencies)..."
+JOB1=$(sbatch %s | awk \'{print $4}\')
+echo "Phase 1 job ID: $JOB1"
+
+echo "Submitting Phase 2 (leaf packages) with dependency on Phase 1..."
+JOB2=$(sbatch --dependency=afterok:$JOB1 %s | awk \'{print $4}\')
+echo "Phase 2 job ID: $JOB2"
+
+echo ""
+echo "Monitor with: squeue -u $USER"
+echo "Logs in: %s/"
+', phase1_path, phase2_path, output_dir_abs)
+
+  submit_path <- file.path(output_dir_abs, "submit_install.sh")
+  writeLines(submit_script, submit_path)
+  Sys.chmod(submit_path, "755")
+
+  message("Generated two-phase SLURM install:")
+  message("  Cluster: ", config$name)
+  message("  Phase 1: ", length(core_deps), " core dependencies (",
+          config$phase1_cpus, " CPUs, ", config$phase1_mem, ")")
+  message("  Phase 2: ", length(leaf_pkgs), " leaf packages in ", jobs, " jobs (",
+          config$phase2_cpus, " CPUs each)")
+  message("  Output: ", output_dir_abs, "/")
+  message("")
+  message("Submit with:")
+  message("  ", submit_path)
+  message("")
+  message("Or manually:")
+  message("  JOB1=$(sbatch ", phase1_path, " | awk '{print $4}')")
+  message("  sbatch --dependency=afterok:$JOB1 ", phase2_path)
+
+  invisible(submit_path)
+}
+
 #' Show what would be installed (dry run)
 show_packages <- function() {
   pkgs <- parse_description()
+  core_deps <- get_core_deps()
+  core_deps <- intersect(core_deps, c(pkgs$imports, pkgs$remotes))
+  leaf_pkgs <- setdiff(c(pkgs$imports, pkgs$remotes), core_deps)
 
   message("=== rbiocverse ", pkgs$version, " ===")
   message("")
-  message("Imports (", length(pkgs$imports), "):")
-  cat(paste("  ", pkgs$imports, collapse = "\n"), "\n")
+  message("Total packages: ", length(pkgs$imports) + length(pkgs$remotes))
+  message("  Core deps (phase 1): ", length(core_deps))
+  message("  Leaf packages (phase 2): ", length(leaf_pkgs))
+  message("  GitHub remotes: ", length(pkgs$remotes))
   message("")
-  message("Remotes (", length(pkgs$remotes), "):")
-  cat(paste("  ", pkgs$remotes, collapse = "\n"), "\n")
+  message("Core dependencies:")
+  cat(paste("  ", head(core_deps, 20), collapse = "\n"), "\n")
+  if (length(core_deps) > 20) message("  ... and ", length(core_deps) - 20, " more")
 }
 
 # =============================================================================
@@ -240,43 +522,69 @@ if (!interactive()) {
 
   # Parse arguments
   slurm_mode <- "--slurm" %in% args
+  slurm_smart_mode <- "--slurm-smart" %in% args
   dry_run <- "--dry-run" %in% args || "-n" %in% args
+
+  # Get cluster override
+  cluster <- detect_cluster()
+  cluster_idx <- which(args == "--cluster")
+  if (length(cluster_idx) > 0 && length(args) > cluster_idx) {
+    cluster <- args[cluster_idx + 1]
+  }
+
+  # Get bioc version
+  bioc_version <- "3.22"
+  bioc_idx <- which(args == "--bioc-version")
+  if (length(bioc_idx) > 0 && length(args) > bioc_idx) {
+    bioc_version <- args[bioc_idx + 1]
+  }
 
   # Get jobs count if specified
   jobs <- 20
-  slurm_idx <- which(args == "--slurm")
-  if (length(slurm_idx) > 0 && length(args) > slurm_idx) {
-    next_arg <- args[slurm_idx + 1]
-    if (!startsWith(next_arg, "-")) {
-      jobs <- as.integer(next_arg)
+  for (flag in c("--slurm", "--slurm-smart")) {
+    flag_idx <- which(args == flag)
+    if (length(flag_idx) > 0 && length(args) > flag_idx) {
+      next_arg <- args[flag_idx + 1]
+      if (!startsWith(next_arg, "-")) {
+        jobs <- as.integer(next_arg)
+      }
     }
   }
 
   if (dry_run) {
     show_packages()
+  } else if (slurm_smart_mode) {
+    generate_slurm_smart(jobs = jobs, cluster = cluster, bioc_version = bioc_version)
   } else if (slurm_mode) {
-    generate_slurm(jobs = jobs)
+    generate_slurm(jobs = jobs, cluster = cluster, bioc_version = bioc_version)
   } else if (length(args) == 0 || args[1] == "install") {
     install_all()
   } else if (args[1] == "--help" || args[1] == "-h") {
     message("Usage: Rscript install.R [options]")
     message("")
     message("Options:")
-    message("  (none)           Install all packages directly")
-    message("  --dry-run, -n    Show packages without installing")
-    message("  --slurm [jobs]   Generate SLURM job array (default: 20 jobs)")
+    message("  (none)              Install all packages directly")
+    message("  --dry-run, -n       Show packages without installing")
+    message("  --slurm [N]         Generate legacy SLURM job array (N jobs, default 20)")
+    message("  --slurm-smart [N]   Generate two-phase SLURM install (recommended)")
+    message("  --cluster NAME      Override cluster detection (gemini|apollo)")
+    message("  --bioc-version X.Y  Bioconductor version (default: 3.22)")
     message("")
     message("Environment:")
-    message("  R_LIBS_SITE      Target library path (required)")
-    message("  RBIOCVERSE_DESCRIPTION  Path to DESCRIPTION (default: /opt/rbiocverse/DESCRIPTION)")
+    message("  R_LIBS_SITE                Target library path (required for SLURM)")
+    message("  RBIOCVERSE_DESCRIPTION     Path to DESCRIPTION")
     message("")
     message("Examples:")
-    message("  # Direct install")
+    message("  # Direct install (in container)")
     message("  singularity exec --env R_LIBS_SITE=/path/to/rlibs container.sif \\")
     message("    Rscript /opt/rbiocverse/scripts/install.R")
     message("")
-    message("  # Generate SLURM jobs")
-    message("  R_LIBS_SITE=/path/to/rlibs Rscript install.R --slurm 20")
+    message("  # Two-phase SLURM install (recommended)")
+    message("  R_LIBS_SITE=/path/to/rlibs Rscript install.R --slurm-smart 20")
+    message("")
+    message("  # Specify cluster and version")
+    message("  R_LIBS_SITE=/path/to/rlibs Rscript install.R --slurm-smart 20 \\")
+    message("    --cluster apollo --bioc-version 3.22")
   } else {
     stop("Unknown option: ", args[1], call. = FALSE)
   }
