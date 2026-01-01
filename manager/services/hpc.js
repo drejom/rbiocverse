@@ -159,6 +159,7 @@ class HpcService {
     ].join(',');
 
     // Build rserver command (no auth since we're behind proxy)
+    // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
@@ -167,7 +168,7 @@ class HpcService {
       `rserver`,
       '--www-address=0.0.0.0',  // Bind to all interfaces, not just localhost
       `--www-port=${ideConfig.port}`,
-      '--server-user=$(whoami)',
+      '--server-user=\\$(whoami)',
       '--auth-none=1',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
