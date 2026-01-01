@@ -142,9 +142,8 @@ class HpcService {
     ].join('\\\\012');
 
     // Use heredoc for rsession.sh - cleaner than printf escaping
-    // Quoted delimiter 'RSESSION' prevents variable expansion
-    // \\$ in JS becomes \$ in SSH, which stays literal in heredoc (but we use quoted delimiter anyway)
-    const rsessionShHeredoc = `cat > ${workdir}/rsession.sh << 'RSESSION'
+    // \\$@ in JS becomes \$@ in string, which heredoc interprets as literal $@
+    const rsessionShHeredoc = `cat > ${workdir}/rsession.sh << RSESSION
 #!/bin/sh
 exec 2>>~/.rstudio-slurm/rsession.log
 set -x
