@@ -5,15 +5,24 @@
 
 /**
  * Parse time string to seconds
- * @param {string} timeStr - Time in format "HH:MM:SS" or "D-HH:MM:SS"
+ * Handles: "HH:MM:SS", "D-HH:MM:SS", "MM:SS" (SLURM short format)
+ * @param {string} timeStr - Time string from SLURM
  * @returns {number|null} Total seconds, or null if invalid
  */
 function parseTimeToSeconds(timeStr) {
   if (!timeStr) return null;
   const parts = timeStr.split(':');
+
+  // MM:SS format (SLURM uses this when time < 1 hour)
+  if (parts.length === 2) {
+    const [m, s] = parts;
+    return parseInt(m) * 60 + parseInt(s);
+  }
+
+  // HH:MM:SS or D-HH:MM:SS format
   if (parts.length === 3) {
-    // Check for days (D-HH:MM:SS)
     const [h, m, s] = parts;
+    // Check for days (D-HH:MM:SS)
     if (h.includes('-')) {
       const [days, hours] = h.split('-');
       return parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(m) * 60 + parseInt(s);
