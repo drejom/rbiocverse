@@ -118,15 +118,13 @@ class HpcService {
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
-    // Use \\$HOME to escape $ through SSH and sbatch --wrap double quotes
+    // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
     const workdir = '\\$HOME/.rstudio-slurm/workdir';
 
-    // database.conf content
-    // Use \\\\n (4 backslashes) so: JS->\\n, shell double quotes->\n, echo -e interprets
-    const dbConf = 'provider=sqlite\\\\ndirectory=/var/lib/rstudio-server';
+    // database.conf content - \\n becomes \n after shell, printf %b interprets it
+    const dbConf = 'provider=sqlite\\ndirectory=/var/lib/rstudio-server';
 
-    // rsession.sh content
-    // \\\\n for newlines, \\$VAR for variables that should expand on compute node
+    // rsession.sh content - \\n for newlines, \\$VAR for variables
     const rsessionSh = [
       '#!/bin/sh',
       `export OMP_NUM_THREADS=${cpus}`,
@@ -135,13 +133,13 @@ class HpcService {
       'export TMPDIR="/tmp"',
       'export TZ="America/Los_Angeles"',
       'exec /usr/lib/rstudio-server/bin/rsession "\\$@"',
-    ].join('\\\\n');
+    ].join('\\n');
 
-    // Create setup commands using echo -e (avoids heredoc issues in --wrap)
+    // Use printf '%b' instead of echo -e for POSIX portability
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `echo -e "${dbConf}" > ${workdir}/database.conf`,
-      `echo -e "${rsessionSh}" > ${workdir}/rsession.sh`,
+      `printf '%b' "${dbConf}" > ${workdir}/database.conf`,
+      `printf '%b' "${rsessionSh}" > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
