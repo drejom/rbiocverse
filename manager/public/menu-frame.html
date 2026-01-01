@@ -3,6 +3,7 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -373,7 +374,7 @@
 
       content.innerHTML =
         '<div class="cluster-name"><span class="dot"></span>' + hpc.charAt(0).toUpperCase() + hpc.slice(1) + '</div>' +
-        '<div class="ide-badge"><i data-lucide="' + ideInfo.icon + '" class="resource-icon"></i> ' + ideInfo.name + '</div>' +
+        '<div class="ide-badge"><i class="' + ideInfo.icon + ' resource-icon"></i> ' + ideInfo.name + '</div>' +
         renderTimePie(countdown || 0, walltime || countdown || 1) +
         '<div class="resources">' + resourcesHtml + '</div>' +
         '<div class="node">' + nodeText + '</div>' +

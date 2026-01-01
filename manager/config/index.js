@@ -34,14 +34,14 @@ const config = {
 const ides = {
   vscode: {
     name: 'VS Code',
-    icon: 'file-code',  // code file icon
+    icon: 'devicon-vscode-plain',  // devicon.dev
     port: 8000,
     jobName: 'hpc-vscode',
     proxyPath: '/code/',
   },
   rstudio: {
     name: 'RStudio',
-    icon: 'chart-line',  // statistics/R visualization
+    icon: 'devicon-rstudio-original',  // devicon.dev
     port: 8787,
     jobName: 'hpc-rstudio',
     proxyPath: '/rstudio/',
@@ -49,7 +49,7 @@ const ides = {
   // Future: jupyter
   // jupyter: {
   //   name: 'Jupyter',
-  //   icon: 'notebook-pen',  // notebook icon
+  //   icon: 'devicon-jupyter-plain',  // devicon.dev
   //   port: 8888,
   //   jobName: 'hpc-jupyter',
   //   proxyPath: '/jupyter/',
