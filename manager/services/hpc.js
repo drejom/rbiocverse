@@ -124,25 +124,20 @@ class HpcService {
     // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
     const workdir = '\\$HOME/.rstudio-slurm/workdir';
 
-    // Use \\\\012 (double-escaped octal) for newlines:
-    // JS \\\\012 -> string \\012 -> survives SSH double quotes -> \012 for printf %b
-    // Add trailing newline with extra \\\\012 at end
-    const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
+    // Use base64 encoding for ALL config files to avoid escaping issues
+    // See docs/ESCAPING.md for rationale
 
-    // rserver.conf settings:
-    // rsession-which-r: Path to R binary
-    // www-root-path: Proxy base path for URL rewriting
-    // auth-cookies-force-secure=0: Allow cookies without Secure flag (needed behind proxy)
-    // NOTE: auth-none=1 is BROKEN in RStudio 2024.x - use PAM auth instead
-    const rserverConf = [
-      'rsession-which-r=/usr/local/bin/R',
-      'www-root-path=/rstudio-direct',
-      'auth-cookies-force-secure=0',
-      '',
-    ].join('\\\\012');
+    const dbConf = `provider=sqlite
+directory=/var/lib/rstudio-server
+`;
+    const dbConfBase64 = Buffer.from(dbConf).toString('base64');
 
-    // Build rsession.sh using base64 encoding to avoid ALL escaping issues
-    // See docs/ESCAPING.md for test results and rationale
+    const rserverConf = `rsession-which-r=/usr/local/bin/R
+www-root-path=/rstudio-direct
+auth-cookies-force-secure=0
+`;
+    const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
+
     const rsessionScript = `#!/bin/sh
 exec 2>>~/.rstudio-slurm/rsession.log
 set -x
@@ -156,13 +151,12 @@ export TZ=America/Los_Angeles
 exec /usr/lib/rstudio-server/bin/rsession "$@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
-    const rsessionShCmd = `echo '${rsessionBase64}' | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`;
 
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `printf '%b' '${dbConf}' > ${workdir}/database.conf`,
-      `printf '%b' '${rserverConf}' > ${workdir}/rserver.conf`,
-      rsessionShCmd,
+      `echo '${dbConfBase64}' | base64 -d > ${workdir}/database.conf`,
+      `echo '${rserverConfBase64}' | base64 -d > ${workdir}/rserver.conf`,
+      `echo '${rsessionBase64}' | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
     // Build singularity bind paths for RStudio
