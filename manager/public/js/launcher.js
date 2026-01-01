@@ -198,7 +198,7 @@ function renderRunningIdeSection(hpc, ide, status) {
   return `
     <div class="ide-session running">
       <div class="ide-session-header">
-        <span class="ide-name"><i class="${ideInfo.icon} icon-sm"></i>&nbsp; ${ideInfo.name}</span>
+        <span class="ide-name"><i class="${ideInfo.icon} icon-sm"></i> ${ideInfo.name}</span>
         <span class="ide-node"><i data-lucide="server" class="icon-xs"></i> ${status.node || 'node'}</span>
       </div>
       <div class="ide-session-info">
@@ -233,7 +233,7 @@ function renderPendingIdeSection(hpc, ide, status) {
   return `
     <div class="ide-session pending">
       <div class="ide-session-header">
-        <span class="ide-name"><i class="${ideInfo.icon} icon-sm"></i>&nbsp; ${ideInfo.name}</span>
+        <span class="ide-name"><i class="${ideInfo.icon} icon-sm"></i> ${ideInfo.name}</span>
         <span class="spinner"></span>
       </div>
       <div class="cluster-info">Waiting for resources...</div>

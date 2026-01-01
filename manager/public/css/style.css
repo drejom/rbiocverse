@@ -26,6 +26,11 @@
   opacity: 0.7;
 }
 
+/* Devicon icons need more margin (font-based vs SVG) */
+.icon-sm[class*="devicon-"] {
+  margin-right: 8px;
+}
+
 /* Time pie chart */
 .time-pie {
   display: inline-flex;
