@@ -126,6 +126,10 @@ class HpcService {
     // Add trailing newline with extra \\\\012 at end
     const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
+    // rserver.conf content - auth-none=1 disables authentication for single-user mode
+    // Future multi-user: use auth-proxy=1 with X-RStudio-Username header from web UI
+    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012';
+
     // rsession.sh content - \\\\012 for newlines
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
     // Use ~ instead of $HOME to avoid escaping issues
@@ -144,6 +148,7 @@ class HpcService {
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
       `printf "%b" \\"${dbConf}\\" > ${workdir}/database.conf`,
+      `printf "%b" \\"${rserverConf}\\" > ${workdir}/rserver.conf`,
       `printf "%b" \\"${rsessionSh}\\" > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
@@ -153,14 +158,15 @@ class HpcService {
       `${workdir}/run:/run`,
       `${workdir}/tmp:/tmp`,
       `${workdir}/database.conf:/etc/rstudio/database.conf`,
+      `${workdir}/rserver.conf:/etc/rstudio/rserver.conf`,
       `${workdir}/rsession.sh:/etc/rstudio/rsession.sh`,
       `${workdir}/var/lib/rstudio-server:/var/lib/rstudio-server`,
       this.cluster.bindPaths,
     ].join(',');
 
     // Build rserver command
-    // Use --config-file to load the image's disable_auth_rserver.conf which has auth-none=1
-    // This is cleaner than command-line args and the config file exists in the image
+    // auth-none=1 is set in rserver.conf (bound from workdir)
+    // --cleanenv prevents user env vars from leaking in and causing conflicts
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
@@ -168,7 +174,6 @@ class HpcService {
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
-      '--config-file=/etc/rstudio/disable_auth_rserver.conf',
       '--www-address=0.0.0.0',  // Bind to all interfaces, not just localhost
       `--www-port=${ideConfig.port}`,
       '--server-user=\\$(whoami)',
