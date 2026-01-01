@@ -408,3 +408,164 @@ h1 {
   width: 12px;
   height: 12px;
 }
+
+/* IDE Selector */
+.ide-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ide-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ide-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.ide-btn.selected {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.ide-btn .icon-sm {
+  margin-right: 0;
+  opacity: 0.9;
+}
+
+/* IDE Session sections (when running) */
+.ide-session {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.ide-session.running {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.ide-session.pending {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.ide-session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ide-name {
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.ide-node {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+}
+
+.ide-session-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 8px;
+}
+
+.resources-inline {
+  display: flex;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+}
+
+.resources-inline span {
+  display: flex;
+  align-items: center;
+}
+
+/* Smaller buttons for IDE sessions */
+.btn-group-sm {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* Smaller time pie for IDE sessions */
+.time-pie-sm svg {
+  width: 36px;
+  height: 36px;
+}
+
+.time-pie-sm .time-pie-text {
+  font-size: 1rem;
+}
+
+/* Section divider */
+.section-divider {
+  text-align: center;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 15px 0 10px;
+  position: relative;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 30%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.section-divider::before {
+  left: 0;
+}
+
+.section-divider::after {
+  right: 0;
+}
+
+/* Extra small icon */
+.icon-xs {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  margin-right: 3px;
+  opacity: 0.6;
+}
+
+/* Launch section when running IDEs exist */
+.launch-section {
+  margin-top: 5px;
+}

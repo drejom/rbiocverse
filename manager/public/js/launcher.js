@@ -1,6 +1,7 @@
 /**
  * HPC Code Server - Launcher Page JavaScript
  * Handles cluster status display, launch form, and session management
+ * Supports multiple IDEs (VS Code, RStudio) per cluster
  */
 
 // Default configuration - will be overwritten by server config
@@ -10,11 +11,31 @@ let defaultConfig = {
   time: '12:00:00',
 };
 
-let clusterStatus = { gemini: null, apollo: null };
-let countdowns = { gemini: null, apollo: null };
-let walltimes = { gemini: null, apollo: null };  // Total walltime for pie calculation
-let lastStatusUpdate = null;  // Timestamp of last status fetch
-let statusCacheTtl = 120;     // Cache TTL in seconds (from server)
+// Available IDEs from server
+let availableIdes = {};
+
+// Selected IDE per cluster (for launch form)
+let selectedIde = {
+  gemini: 'vscode',
+  apollo: 'vscode',
+};
+
+// Cluster status keyed by hpc (contains ides)
+let clusterStatus = { gemini: {}, apollo: {} };
+
+// Countdowns and walltimes keyed by hpc-ide
+let countdowns = {};
+let walltimes = {};
+
+let lastStatusUpdate = null;
+let statusCacheTtl = 120;
+
+/**
+ * Get session key for countdown/walltime tracking
+ */
+function getSessionKey(hpc, ide) {
+  return `${hpc}-${ide}`;
+}
 
 /**
  * Format seconds to human readable (e.g., "11h 45m")
@@ -29,25 +50,19 @@ function formatTime(seconds) {
 
 /**
  * Generate SVG pie chart for time remaining
- * Solid filled pie that "opens up" (gap grows) as time passes
- * @param {number} remaining - Seconds remaining
- * @param {number} total - Total walltime in seconds
- * @param {string} hpc - Cluster name for IDs
  */
-function renderTimePie(remaining, total, hpc) {
+function renderTimePie(remaining, total, hpc, ide) {
   const percent = total > 0 ? Math.max(0, remaining / total) : 1;
-  const radius = 16;
-  const cx = 20, cy = 20;
+  const radius = 14;
+  const cx = 18, cy = 18;
+  const key = getSessionKey(hpc, ide);
 
   let colorClass = '';
   if (remaining < 600) colorClass = 'critical';
   else if (remaining < 1800) colorClass = 'warning';
 
-  // Calculate pie wedge path
-  // Starts from top (12 o'clock), goes clockwise for remaining percent
   let piePath = '';
   if (percent >= 1) {
-    // Full circle
     piePath = `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
   } else if (percent > 0) {
     const angle = percent * 2 * Math.PI;
@@ -58,88 +73,198 @@ function renderTimePie(remaining, total, hpc) {
   }
 
   return `
-    <div class="time-pie">
-      <svg viewBox="0 0 40 40">
+    <div class="time-pie time-pie-sm">
+      <svg viewBox="0 0 36 36">
         <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
-        <path class="time-pie-fill ${colorClass}" id="${hpc}-pie-fill" d="${piePath}"
+        <path class="time-pie-fill ${colorClass}" id="${key}-pie-fill" d="${piePath}"
           data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
       </svg>
-      <span class="time-pie-text ${colorClass}" id="${hpc}-countdown-value">${formatTime(remaining)}</span>
+      <span class="time-pie-text ${colorClass}" id="${key}-countdown-value">${formatTime(remaining)}</span>
     </div>
   `;
 }
 
 /**
- * Render idle state with launch form
+ * Render IDE selector buttons
  */
-function renderIdleContent(hpc) {
+function renderIdeSelector(hpc) {
+  const buttons = Object.entries(availableIdes).map(([ide, info]) => {
+    const selected = selectedIde[hpc] === ide ? 'selected' : '';
+    return `
+      <button class="ide-btn ${selected}" data-ide="${ide}" onclick="selectIde('${hpc}', '${ide}')">
+        <i data-lucide="${info.icon}" class="icon-sm"></i>
+        <span>${info.name}</span>
+      </button>
+    `;
+  }).join('');
+
+  return `<div class="ide-selector">${buttons}</div>`;
+}
+
+/**
+ * Render idle state with IDE selector and launch form
+ */
+function renderIdleContent(hpc, runningIdes) {
+  // If there are running IDEs, show them first, then offer to launch another
+  let runningSection = '';
+  if (runningIdes.length > 0) {
+    runningSection = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
+  }
+
+  // Determine which IDEs are available to launch
+  const runningIdeNames = runningIdes.map(r => r.ide);
+  const idleIdes = Object.keys(availableIdes).filter(ide => !runningIdeNames.includes(ide));
+
+  let launchSection = '';
+  if (idleIdes.length > 0) {
+    // Auto-select first idle IDE if current selection is running
+    if (runningIdeNames.includes(selectedIde[hpc])) {
+      selectedIde[hpc] = idleIdes[0];
+    }
+
+    launchSection = `
+      <div class="launch-section">
+        ${runningIdes.length > 0 ? '<div class="section-divider">Launch another IDE</div>' : ''}
+        ${renderIdeSelector(hpc)}
+        <div class="launch-form">
+          <div class="form-input">
+            <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
+            <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
+          </div>
+          <div class="form-input">
+            <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
+            <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
+          </div>
+          <div class="form-input">
+            <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
+            <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="launch('${hpc}')">
+            <i data-lucide="play" class="lucide"></i> Launch ${availableIdes[selectedIde[hpc]]?.name || 'IDE'}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (runningIdes.length === 0) {
+    return `
+      <div class="cluster-info">No active sessions</div>
+      ${renderIdeSelector(hpc)}
+      <div class="launch-form">
+        <div class="form-input">
+          <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
+          <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
+        </div>
+        <div class="form-input">
+          <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
+          <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
+        </div>
+        <div class="form-input">
+          <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
+          <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="launch('${hpc}')">
+          <i data-lucide="play" class="lucide"></i> Launch ${availableIdes[selectedIde[hpc]]?.name || 'IDE'}
+        </button>
+      </div>
+    `;
+  }
+
+  return runningSection + launchSection;
+}
+
+/**
+ * Render a single running IDE section within a cluster card
+ */
+function renderRunningIdeSection(hpc, ide, status) {
+  const key = getSessionKey(hpc, ide);
+  const seconds = countdowns[key] || status.timeLeftSeconds || 0;
+  const total = walltimes[key] || seconds;
+  const ideInfo = availableIdes[ide] || { name: ide, icon: 'box' };
+
   return `
-    <div class="cluster-info">No active session</div>
-    <div class="launch-form">
-      <div class="form-input">
-        <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
-        <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
+    <div class="ide-session running">
+      <div class="ide-session-header">
+        <span class="ide-name"><i data-lucide="${ideInfo.icon}" class="icon-sm"></i> ${ideInfo.name}</span>
+        <span class="ide-node"><i data-lucide="server" class="icon-xs"></i> ${status.node || 'node'}</span>
       </div>
-      <div class="form-input">
-        <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
-        <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
+      <div class="ide-session-info">
+        ${renderTimePie(seconds, total, hpc, ide)}
+        <div class="resources-inline">
+          <span><i data-lucide="cpu" class="icon-xs"></i>${status.cpus || '?'}</span>
+          <span><i data-lucide="memory-stick" class="icon-xs"></i>${status.memory || '?'}</span>
+        </div>
       </div>
-      <div class="form-input">
-        <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
-        <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-success btn-sm" onclick="connect('${hpc}', '${ide}')">
+          <i data-lucide="plug" class="icon-sm"></i> Connect
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
+          <i data-lucide="square" class="icon-sm"></i> Kill
+        </button>
       </div>
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-primary" onclick="launch('${hpc}')"><i data-lucide="play" class="lucide"></i> Launch Session</button>
     </div>
   `;
 }
 
 /**
- * Render running state with countdown
+ * Render pending IDE section
  */
-function renderRunningContent(hpc, status) {
-  const seconds = countdowns[hpc] || status.timeLeftSeconds || 0;
-  const total = walltimes[hpc] || seconds;  // Use stored walltime or current as fallback
-
-  return `
-    <div class="cluster-info"><i data-lucide="server" class="icon-sm"></i> ${status.node || 'compute node'}</div>
-    ${renderTimePie(seconds, total, hpc)}
-    <div class="resources">
-      <span><i data-lucide="cpu" class="icon-sm"></i>${status.cpus || '?'} CPUs</span>
-      <span><i data-lucide="memory-stick" class="icon-sm"></i>${status.memory || '?'}</span>
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-success" onclick="connect('${hpc}')"><i data-lucide="plug" class="lucide"></i> Connect</button>
-      <button class="btn btn-danger" onclick="killJob('${hpc}')"><i data-lucide="square" class="lucide"></i> Kill Job</button>
-    </div>
-  `;
-}
-
-/**
- * Render pending state
- */
-function renderPendingContent(hpc, status) {
+function renderPendingIdeSection(hpc, ide, status) {
+  const ideInfo = availableIdes[ide] || { name: ide, icon: 'box' };
   let estStart = '';
   if (status.startTime) {
-    estStart = '<div class="estimated-start">Est. start: ' + status.startTime + '</div>';
+    estStart = `<div class="estimated-start">Est: ${status.startTime}</div>`;
   }
+
   return `
-    <div class="cluster-info">
-      <span class="spinner"></span> Waiting for resources...
-    </div>
-    ${estStart}
-    <div class="btn-group">
-      <button class="btn btn-danger" onclick="killJob('${hpc}')"><i data-lucide="x" class="lucide"></i> Cancel</button>
+    <div class="ide-session pending">
+      <div class="ide-session-header">
+        <span class="ide-name"><i data-lucide="${ideInfo.icon}" class="icon-sm"></i> ${ideInfo.name}</span>
+        <span class="spinner"></span>
+      </div>
+      <div class="cluster-info">Waiting for resources...</div>
+      ${estStart}
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
+          <i data-lucide="x" class="icon-sm"></i> Cancel
+        </button>
+      </div>
     </div>
   `;
 }
 
+/**
+ * Select IDE for launching
+ */
+function selectIde(hpc, ide) {
+  selectedIde[hpc] = ide;
+  // Re-render just the launch button text and selector
+  const card = document.getElementById(hpc + '-content');
+  if (card) {
+    // Update selector buttons
+    card.querySelectorAll('.ide-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.ide === ide);
+    });
+    // Update launch button text
+    const launchBtn = card.querySelector('.btn-primary');
+    if (launchBtn) {
+      const ideInfo = availableIdes[ide] || { name: 'IDE' };
+      launchBtn.innerHTML = `<i data-lucide="play" class="lucide"></i> Launch ${ideInfo.name}`;
+      lucide.createIcons();
+    }
+  }
+}
 
 /**
  * Update a single cluster card
  */
-function updateClusterCard(hpc, status) {
+function updateClusterCard(hpc, ideStatuses) {
   const card = document.getElementById(hpc + '-card');
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
@@ -148,59 +273,88 @@ function updateClusterCard(hpc, status) {
   card.className = 'cluster-card';
   dot.className = 'status-dot';
 
-  if (!status || status.status === 'idle') {
-    statusText.textContent = 'No session';
-    content.innerHTML = renderIdleContent(hpc);
-    countdowns[hpc] = null;
-    walltimes[hpc] = null;
-  } else if (status.status === 'running') {
+  // Categorize IDEs by status
+  const runningIdes = [];
+  const pendingIdes = [];
+
+  for (const [ide, status] of Object.entries(ideStatuses || {})) {
+    if (status.status === 'running') {
+      runningIdes.push({ ide, status });
+      // Initialize countdown/walltime if not set
+      const key = getSessionKey(hpc, ide);
+      if (!countdowns[key] && status.timeLeftSeconds) {
+        countdowns[key] = status.timeLeftSeconds;
+        walltimes[key] = status.timeLimitSeconds || status.timeLeftSeconds;
+      }
+    } else if (status.status === 'pending') {
+      pendingIdes.push({ ide, status });
+    }
+  }
+
+  // Determine overall card state
+  if (runningIdes.length > 0) {
     card.classList.add('running');
     dot.classList.add('running');
-    statusText.textContent = 'Running';
-    // Initialize countdown and walltime if not set
-    if (!countdowns[hpc] && status.timeLeftSeconds) {
-      countdowns[hpc] = status.timeLeftSeconds;
-      // Use walltime from SLURM (timeLimitSeconds), fallback to remaining time
-      walltimes[hpc] = status.timeLimitSeconds || status.timeLeftSeconds;
-    }
-    content.innerHTML = renderRunningContent(hpc, status);
-  } else if (status.status === 'pending') {
+    statusText.textContent = runningIdes.length === 1
+      ? `${availableIdes[runningIdes[0].ide]?.name || 'IDE'} running`
+      : `${runningIdes.length} IDEs running`;
+  } else if (pendingIdes.length > 0) {
     card.classList.add('pending');
     dot.classList.add('pending');
     statusText.textContent = 'Pending';
-    content.innerHTML = renderPendingContent(hpc, status);
-    countdowns[hpc] = null;
-    walltimes[hpc] = null;
+  } else {
+    statusText.textContent = 'No session';
   }
 
-  // Render Lucide icons after DOM update
+  // Render content
+  let html = '';
+
+  // Render pending IDEs first
+  pendingIdes.forEach(({ ide, status }) => {
+    html += renderPendingIdeSection(hpc, ide, status);
+  });
+
+  // Render running IDEs and launch form
+  html += renderIdleContent(hpc, runningIdes);
+
+  // Clear stale countdowns for IDEs no longer running
+  const activeKeys = [...runningIdes, ...pendingIdes].map(r => getSessionKey(hpc, r.ide));
+  Object.keys(countdowns).forEach(key => {
+    if (key.startsWith(hpc + '-') && !activeKeys.includes(key)) {
+      delete countdowns[key];
+      delete walltimes[key];
+    }
+  });
+
+  content.innerHTML = html;
   lucide.createIcons();
 }
 
 /**
  * Fetch status from server
- * @param {boolean} forceRefresh - Force cache refresh
  */
 async function fetchStatus(forceRefresh = false) {
   try {
     const url = forceRefresh ? '/api/cluster-status?refresh=true' : '/api/cluster-status';
     const res = await fetch(url);
     const data = await res.json();
-    clusterStatus = data;
 
-    // Track cache info - use client time minus server's reported cache age
-    // This avoids client/server time drift issues
+    // Store available IDEs
+    if (data.ides) {
+      availableIdes = data.ides;
+    }
+
+    // Track cache info
     if (data.cacheAge !== undefined) {
-      // Server tells us how old the cache is, so subtract that from now
       lastStatusUpdate = new Date(Date.now() - (data.cacheAge * 1000));
     } else {
-      // Fresh data, set to now
       lastStatusUpdate = new Date();
     }
     if (data.cacheTtl) {
       statusCacheTtl = data.cacheTtl;
     }
 
+    // Update cluster cards with per-IDE status
     updateClusterCard('gemini', data.gemini);
     updateClusterCard('apollo', data.apollo);
     updateCacheIndicator();
@@ -210,7 +364,7 @@ async function fetchStatus(forceRefresh = false) {
 }
 
 /**
- * Force refresh status (called by refresh button)
+ * Force refresh status
  */
 let isRefreshing = false;
 
@@ -242,7 +396,7 @@ async function refreshStatus() {
  * Update cache age indicator
  */
 function updateCacheIndicator() {
-  if (isRefreshing) return;  // Don't overwrite "Updating..." message
+  if (isRefreshing) return;
 
   const indicator = document.getElementById('cache-indicator');
   if (!indicator || !lastStatusUpdate) return;
@@ -277,33 +431,30 @@ function calcPiePath(percent, cx, cy, radius) {
 }
 
 /**
- * Client-side countdown tick
+ * Client-side countdown tick for all active sessions
  */
 function tickCountdowns() {
-  ['gemini', 'apollo'].forEach(hpc => {
-    if (countdowns[hpc] && countdowns[hpc] > 0) {
-      countdowns[hpc]--;
-      const remaining = countdowns[hpc];
-      const total = walltimes[hpc] || remaining;
+  Object.keys(countdowns).forEach(key => {
+    if (countdowns[key] && countdowns[key] > 0) {
+      countdowns[key]--;
+      const remaining = countdowns[key];
+      const total = walltimes[key] || remaining;
 
-      // Determine color state
       let colorClass = '';
       if (remaining < 600) colorClass = 'critical';
       else if (remaining < 1800) colorClass = 'warning';
 
-      // Update pie chart fill
-      const pieEl = document.getElementById(hpc + '-pie-fill');
+      const pieEl = document.getElementById(key + '-pie-fill');
       if (pieEl) {
         const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-        const cx = parseFloat(pieEl.dataset.cx) || 20;
-        const cy = parseFloat(pieEl.dataset.cy) || 20;
-        const radius = parseFloat(pieEl.dataset.radius) || 16;
+        const cx = parseFloat(pieEl.dataset.cx) || 18;
+        const cy = parseFloat(pieEl.dataset.cy) || 18;
+        const radius = parseFloat(pieEl.dataset.radius) || 14;
         pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
         pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
       }
 
-      // Update time text
-      const valueEl = document.getElementById(hpc + '-countdown-value');
+      const valueEl = document.getElementById(key + '-countdown-value');
       if (valueEl) {
         valueEl.textContent = formatTime(remaining);
         valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
@@ -313,17 +464,20 @@ function tickCountdowns() {
 }
 
 /**
- * Launch session
+ * Launch session with selected IDE
  */
 async function launch(hpc) {
-  console.log('[Launcher] Launch requested for', hpc);
+  const ide = selectedIde[hpc];
+  console.log('[Launcher] Launch requested:', hpc, ide);
+
   const overlay = document.getElementById('loading-overlay');
   const loadingText = document.getElementById('loading-text');
   const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
   overlay.style.display = 'flex';
-  loadingText.textContent = 'Submitting job to ' + hpc + '...';
+  const ideName = availableIdes[ide]?.name || ide;
+  loadingText.textContent = `Submitting ${ideName} job to ${hpc}...`;
 
   try {
     const cpus = document.getElementById(hpc + '-cpus').value;
@@ -333,23 +487,24 @@ async function launch(hpc) {
     const res = await fetch('/api/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, cpus, mem, time })
+      body: JSON.stringify({ hpc, ide, cpus, mem, time })
     });
 
     if (!res.ok) {
       const data = await res.json();
-      // If already running, offer to connect
       if (data.error && data.error.includes('already')) {
         overlay.style.display = 'none';
-        if (confirm(hpc + ' already has a running session. Connect to it?')) {
-          connect(hpc);
+        if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
+          connect(hpc, ide);
         }
         return;
       }
       throw new Error(data.error || 'Launch failed');
     }
 
-    window.location.href = '/code/';
+    // Redirect to IDE
+    const ideConfig = availableIdes[ide];
+    window.location.href = ideConfig?.proxyPath || '/code/';
   } catch (e) {
     overlay.style.display = 'none';
     errorEl.textContent = e.message;
@@ -360,18 +515,18 @@ async function launch(hpc) {
 /**
  * Connect to existing session
  */
-async function connect(hpc) {
-  console.log('[Launcher] Connect requested for', hpc);
+async function connect(hpc, ide) {
+  console.log('[Launcher] Connect requested:', hpc, ide);
   const overlay = document.getElementById('loading-overlay');
   overlay.style.display = 'flex';
-  document.getElementById('loading-text').textContent = 'Connecting to ' + hpc + '...';
+  const ideName = availableIdes[ide]?.name || ide;
+  document.getElementById('loading-text').textContent = `Connecting to ${ideName} on ${hpc}...`;
 
   try {
-    // Launch will reconnect to existing job
     const res = await fetch('/api/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc })
+      body: JSON.stringify({ hpc, ide })
     });
 
     if (!res.ok) {
@@ -379,7 +534,8 @@ async function connect(hpc) {
       throw new Error(data.error || 'Connect failed');
     }
 
-    window.location.href = '/code/';
+    const ideConfig = availableIdes[ide];
+    window.location.href = ideConfig?.proxyPath || '/code/';
   } catch (e) {
     overlay.style.display = 'none';
     document.getElementById('error').textContent = e.message;
@@ -388,40 +544,34 @@ async function connect(hpc) {
 }
 
 /**
- * Kill job with visual feedback
+ * Kill job for specific IDE
  */
-async function killJob(hpc) {
-  if (!confirm('Kill the ' + hpc + ' job?')) return;
-  console.log('[Launcher] Kill job requested for', hpc);
+async function killJob(hpc, ide) {
+  const ideName = availableIdes[ide]?.name || ide;
+  if (!confirm(`Kill ${ideName} on ${hpc}?`)) return;
+  console.log('[Launcher] Kill job requested:', hpc, ide);
 
-  // Show killing state
+  // Show killing state on IDE section
+  const key = getSessionKey(hpc, ide);
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
-  if (dot) {
-    dot.className = 'status-dot killing';
-  }
-  if (statusText) {
-    statusText.textContent = 'Killing job...';
-  }
-  const card = document.getElementById(hpc + '-card');
-  if (card) {
-    const btns = card.querySelectorAll('button');
-    btns.forEach(b => b.disabled = true);
-  }
+
+  if (dot) dot.className = 'status-dot killing';
+  if (statusText) statusText.textContent = 'Killing job...';
 
   try {
-    const resp = await fetch('/api/stop/' + hpc, {
+    const resp = await fetch(`/api/stop/${hpc}/${ide}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cancelJob: true })
     });
     const data = await resp.json();
-    if (resp.ok) {
-      if (dot) dot.className = 'status-dot';
-      if (statusText) statusText.textContent = 'Job killed';
-    } else {
+    if (!resp.ok) {
       alert('Failed to kill job: ' + (data.error || 'Unknown error'));
     }
+    // Clean up countdown
+    delete countdowns[key];
+    delete walltimes[key];
     setTimeout(fetchStatus, 1000);
   } catch (e) {
     console.error('Kill error:', e);
@@ -439,23 +589,23 @@ function initConfig(config) {
     mem: config.defaultMem || '40G',
     time: config.defaultTime || '12:00:00',
   };
+  if (config.defaultIde) {
+    selectedIde.gemini = config.defaultIde;
+    selectedIde.apollo = config.defaultIde;
+  }
 }
 
 /**
- * Tick every second - countdowns and cache age
+ * Tick every second
  */
 function tick() {
   tickCountdowns();
   updateCacheIndicator();
 }
 
-// Interval handles for pause/resume
 let statusInterval = null;
 let tickInterval = null;
 
-/**
- * Start polling intervals
- */
 function startPolling() {
   if (!statusInterval) {
     statusInterval = setInterval(fetchStatus, 60000);
@@ -465,9 +615,6 @@ function startPolling() {
   }
 }
 
-/**
- * Stop polling intervals (when tab is hidden)
- */
 function stopPolling() {
   if (statusInterval) {
     clearInterval(statusInterval);
@@ -479,14 +626,10 @@ function stopPolling() {
   }
 }
 
-/**
- * Handle visibility change - pause polling when hidden
- */
 function handleVisibilityChange() {
   if (document.hidden) {
     stopPolling();
   } else {
-    // Tab became visible - fetch status (uses cache) and resume polling
     fetchStatus();
     startPolling();
   }
@@ -494,9 +637,7 @@ function handleVisibilityChange() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-  fetchStatus();  // Use cached data for fast load
+  fetchStatus();
   startPolling();
-
-  // Pause polling when tab is hidden
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
