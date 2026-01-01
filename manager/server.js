@@ -77,9 +77,14 @@ rstudioProxy.on('error', (err, req, res) => {
   }
 });
 
+// Inject X-RStudio-Root-Path header so RStudio knows its proxy path
+// This tells RStudio to generate correct URLs for redirects and resources
+rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
+  proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
+});
+
 // Rewrite RStudio redirects to use proxy paths
-// RStudio 2024.04 with auth-none=1: redirects to /auth-sign-in to set session cookies
-// We need to let this happen (not bypass it) so cookies get set properly
+// Handle absolute URLs and root-relative redirects
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
@@ -97,6 +102,13 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       /^https?:\/\/127\.0\.0\.1:8787/,
       '/rstudio-direct'
     );
+
+    // Rewrite root-relative redirects (e.g., "/" or "/auth-sign-in")
+    // that aren't already prefixed with our proxy path
+    if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
+      rewritten = '/rstudio-direct' + rewritten;
+      log.proxy(`RStudio redirect prefixed: ${location} -> ${rewritten}`);
+    }
 
     if (rewritten !== location) {
       proxyRes.headers['location'] = rewritten;
