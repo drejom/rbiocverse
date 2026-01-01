@@ -173,9 +173,11 @@ class HpcService {
     // --cleanenv prevents user env vars from leaking in and causing conflicts
     // auth-none=1 is set in rserver.conf (bound from workdir)
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
+    // CRITICAL: --env USER is required for auth-none behind proxy (user-id cookie needs username)
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      '--env USER=\\$(whoami)',
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,

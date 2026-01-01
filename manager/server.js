@@ -77,24 +77,9 @@ rstudioProxy.on('error', (err, req, res) => {
   }
 });
 
-// Inject headers and fake user-id cookie to bypass RStudio's broken auth-none mode
-// RStudio 2024.04 has a bug where auth-none=1 still redirects to /auth-sign-in
-// Workaround: inject a fake user-id cookie so RStudio thinks user is already authenticated
+// Inject X-RStudio-Root-Path header so RStudio knows its proxy path
 rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
-
-  // Inject user-id cookie if not present - this tricks RStudio into thinking
-  // the user is already authenticated, bypassing the auth-sign-in redirect loop
-  const existingCookies = req.headers.cookie || '';
-  if (!existingCookies.includes('user-id=')) {
-    // Format: |expiry|signature - we use a far-future expiry and fake signature
-    // RStudio checks for presence, not validity when auth-none=1
-    const fakeUserId = '|Sat%2C%2001%20Jan%202030%2000%3A00%3A00%20GMT|fakeauth';
-    const newCookies = existingCookies ? `${existingCookies}; user-id=${fakeUserId}` : `user-id=${fakeUserId}`;
-    proxyReq.setHeader('Cookie', newCookies);
-    log.debug('Injected fake user-id cookie');
-  }
-
   log.debug(`RStudio proxyReq`, {
     method: req.method,
     url: req.url,
