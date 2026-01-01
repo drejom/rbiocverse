@@ -129,10 +129,17 @@ class HpcService {
     // Add trailing newline with extra \\\\012 at end
     const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
-    // rserver.conf - auth-none=1 disables login (single-user mode)
-    // www-root-path tells RStudio it's behind a reverse proxy at /rstudio-direct
-    // auth-cookies-force-secure=0 prevents secure flag on cookies (fixes CSRF issues behind proxy)
-    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012www-root-path=/rstudio-direct\\\\012auth-cookies-force-secure=0\\\\012';
+    // rserver.conf settings:
+    // rsession-which-r: Path to R binary
+    // www-root-path: Proxy base path for URL rewriting
+    // auth-cookies-force-secure=0: Allow cookies without Secure flag (needed behind proxy)
+    // NOTE: auth-none=1 is BROKEN in RStudio 2024.x - use PAM auth instead
+    const rserverConf = [
+      'rsession-which-r=/usr/local/bin/R',
+      'www-root-path=/rstudio-direct',
+      'auth-cookies-force-secure=0',
+      '',
+    ].join('\\\\012');
 
     // rsession.sh content - \\\\012 for newlines
     // Use ~ instead of $HOME to avoid escaping issues
@@ -174,19 +181,24 @@ class HpcService {
 
     // Build rserver command
     // --cleanenv prevents user env vars from leaking in and causing conflicts
-    // auth-none=1 is set in rserver.conf (bound from workdir)
     // Use \\$(whoami) to prevent expansion on Dokploy - must expand on compute node
-    // CRITICAL: --env USER is required for auth-none behind proxy (user-id cookie needs username)
+    // PAM auth with auto-generated password (auth-none=1 broken in RStudio 2024.x)
+    // Password is sent to user via session.password for proxy auto-login
     const rserverCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       '--env USER=\\$(whoami)',
+      `--env PASSWORD=${password}`,
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
       '--www-address=0.0.0.0',
       `--www-port=${ideConfig.port}`,
       '--server-user=\\$(whoami)',
+      '--auth-none=0',
+      '--auth-pam-helper-path=pam-helper',
+      '--auth-stay-signed-in-days=30',
+      '--auth-timeout-minutes=0',
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 
