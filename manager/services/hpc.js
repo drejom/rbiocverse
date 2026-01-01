@@ -156,14 +156,14 @@ export R_LIBS_USER=~/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 exec /usr/lib/rstudio-server/bin/rsession "\\$@"
-RSESSION`;
+RSESSION
+chmod +x ${workdir}/rsession.sh`;
 
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
       `printf '%b' '${dbConf}' > ${workdir}/database.conf`,
       `printf '%b' '${rserverConf}' > ${workdir}/rserver.conf`,
       rsessionShHeredoc,
-      `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
     // Build singularity bind paths for RStudio
