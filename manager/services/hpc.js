@@ -135,24 +135,20 @@ class HpcService {
     const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012www-root-path=/rstudio-direct\\\\012auth-cookies-force-secure=0\\\\012';
 
     // rsession.sh content - \\\\012 for newlines
-    // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
     // Use ~ instead of $HOME to avoid escaping issues
     // --no-save --no-restore prevents caching large R objects (e.g., scRNAseq) to disk
     // Log to ~/.rstudio-slurm/rsession.log for debugging
+    // NOTE: Avoid $@ - escaping through SSH+printf is fragile
     const rsessionSh = [
       '#!/bin/sh',
       'exec 2>>~/.rstudio-slurm/rsession.log',
-      'echo "=== rsession.sh started at $(date) ===" >&2',
-      'echo "PWD: $(pwd)" >&2',
-      'echo "USER: $USER" >&2',
-      'echo "Args: $@" >&2',
+      'set -x',  // trace commands
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
       'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      'echo "Starting rsession..." >&2',
-      'exec /usr/lib/rstudio-server/bin/rsession "$@"',
+      'exec /usr/lib/rstudio-server/bin/rsession --no-save --no-restore',
       '',  // trailing newline
     ].join('\\\\012');
 
