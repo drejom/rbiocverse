@@ -111,12 +111,9 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
     proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
       let modified = cookie;
 
-      // URL-encode pipe characters in cookie values - some browsers reject unencoded pipes
-      // Match: name=value; and encode pipes in the value part only
-      modified = modified.replace(/^([^=]+=)([^;]*)(;.*)$/, (match, name, value, attrs) => {
-        const encodedValue = value.replace(/\|/g, '%7C');
-        return name + encodedValue + attrs;
-      });
+      // DO NOT modify cookie values - RStudio signs them with HMAC and any
+      // modification (like URL-encoding pipes) will cause signature validation
+      // to fail, resulting in redirect loops.
 
       // Ensure path matches our proxy mount (with trailing slash for broad matching)
       modified = modified.replace(/path=\/rstudio-direct(?![\/;])/i, 'path=/rstudio-direct/');
