@@ -130,9 +130,9 @@ class HpcService {
     const dbConf = 'provider=sqlite\\\\012directory=/var/lib/rstudio-server\\\\012';
 
     // rserver.conf - auth-none=1 disables login (single-user mode)
-    // Note: RStudio 2024.04 has a bug where it still redirects to /auth-sign-in
-    // Our proxy rewrites these redirects - see server.js proxyRes handler
-    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012';
+    // www-root-path tells RStudio it's behind a reverse proxy at /rstudio-direct
+    // This ensures redirects and resource URLs use the correct path prefix
+    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012www-root-path=/rstudio-direct\\\\012';
 
     // rsession.sh content - \\\\012 for newlines
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
