@@ -86,12 +86,20 @@ function renderTimePie(remaining, total, hpc, ide) {
 
 /**
  * Render IDE selector buttons
+ * @param {string} hpc - Cluster name
+ * @param {string[]} runningIdeNames - List of IDE names that are already running
  */
-function renderIdeSelector(hpc) {
+function renderIdeSelector(hpc, runningIdeNames = []) {
   const buttons = Object.entries(availableIdes).map(([ide, info]) => {
+    const isRunning = runningIdeNames.includes(ide);
     const selected = selectedIde[hpc] === ide ? 'selected' : '';
+    const disabled = isRunning ? 'disabled' : '';
+    const title = isRunning ? `${info.name} is already running` : `Launch ${info.name}`;
+
     return `
-      <button class="ide-btn ${selected}" data-ide="${ide}" onclick="selectIde('${hpc}', '${ide}')">
+      <button class="ide-btn ${selected} ${disabled}" data-ide="${ide}"
+        onclick="${isRunning ? '' : `selectIde('${hpc}', '${ide}')`}"
+        ${disabled} title="${title}">
         <i data-lucide="${info.icon}" class="icon-sm"></i>
         <span>${info.name}</span>
       </button>
@@ -125,7 +133,7 @@ function renderIdleContent(hpc, runningIdes) {
     launchSection = `
       <div class="launch-section">
         ${runningIdes.length > 0 ? '<div class="section-divider">Launch another IDE</div>' : ''}
-        ${renderIdeSelector(hpc)}
+        ${renderIdeSelector(hpc, runningIdeNames)}
         <div class="launch-form">
           <div class="form-input">
             <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>

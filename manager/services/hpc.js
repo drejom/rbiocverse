@@ -118,27 +118,27 @@ class HpcService {
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
-    const workdir = '~/.rstudio-slurm/workdir';
+    const workdir = '$HOME/.rstudio-slurm/workdir';
 
-    // Create setup script that mirrors the proven approach
+    // database.conf content
+    const dbConf = 'provider=sqlite\\ndirectory=/var/lib/rstudio-server';
+
+    // rsession.sh content (escape for echo -e)
+    const rsessionSh = [
+      '#!/bin/sh',
+      `export OMP_NUM_THREADS=${cpus}`,
+      `export R_LIBS_SITE="${this.cluster.rLibsSite}"`,
+      'export R_LIBS_USER="$HOME/R/bioc-3.19"',
+      'export TMPDIR="/tmp"',
+      'export TZ="America/Los_Angeles"',
+      'exec /usr/lib/rstudio-server/bin/rsession "$@"',
+    ].join('\\n');
+
+    // Create setup commands using echo -e (avoids heredoc issues in --wrap)
     const setup = [
-      // Create work directories
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      // Create database.conf
-      `cat > ${workdir}/database.conf << DBCONF
-provider=sqlite
-directory=/var/lib/rstudio-server
-DBCONF`,
-      // Create rsession.sh wrapper
-      `cat > ${workdir}/rsession.sh << RSESSION
-#!/bin/sh
-export OMP_NUM_THREADS=${cpus}
-export R_LIBS_SITE="${this.cluster.rLibsSite}"
-export R_LIBS_USER="~/R/bioc-3.19"
-export TMPDIR="/tmp"
-export TZ="America/Los_Angeles"
-exec /usr/lib/rstudio-server/bin/rsession "\\$@"
-RSESSION`,
+      `echo -e "${dbConf}" > ${workdir}/database.conf`,
+      `echo -e "${rsessionSh}" > ${workdir}/rsession.sh`,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
@@ -160,9 +160,9 @@ RSESSION`,
       `${this.cluster.singularityImage}`,
       `rserver`,
       `--www-port=${ideConfig.port}`,
-      `--server-user=$(whoami)`,
-      `--auth-none=1`,
-      `--rsession-path=/etc/rstudio/rsession.sh`,
+      '--server-user=$(whoami)',
+      '--auth-none=1',
+      '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 
     return `${setup} && ${rserverCmd}`;

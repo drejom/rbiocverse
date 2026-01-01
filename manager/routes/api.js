@@ -155,6 +155,7 @@ function createApiRouter(stateManager) {
       log.debug('Returning cached cluster status', { ageMs: cacheAge });
       return res.json({
         ...statusCache.data,
+        activeSession: state.activeSession,  // Always use current activeSession, not cached
         cached: true,
         cacheAge: Math.floor(cacheAge / 1000),
         cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),

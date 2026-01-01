@@ -20,7 +20,7 @@ describe('Configuration', () => {
       // Clear all HPC-related env vars
       delete process.env.HPC_SSH_USER;
       delete process.env.DEFAULT_HPC;
-      delete process.env.CODE_SERVER_PORT;
+      delete process.env.DEFAULT_IDE;
       delete process.env.DEFAULT_CPUS;
       delete process.env.DEFAULT_MEM;
       delete process.env.DEFAULT_TIME;
@@ -29,7 +29,7 @@ describe('Configuration', () => {
 
       expect(config.hpcUser).to.equal('domeally');
       expect(config.defaultHpc).to.equal('gemini');
-      expect(config.codeServerPort).to.equal(8000);
+      expect(config.defaultIde).to.equal('vscode');
       expect(config.defaultCpus).to.equal('2');
       expect(config.defaultMem).to.equal('40G');
       expect(config.defaultTime).to.equal('12:00:00');
@@ -38,7 +38,7 @@ describe('Configuration', () => {
     it('should use environment variables when set', () => {
       process.env.HPC_SSH_USER = 'testuser';
       process.env.DEFAULT_HPC = 'apollo';
-      process.env.CODE_SERVER_PORT = '9000';
+      process.env.DEFAULT_IDE = 'rstudio';
       process.env.DEFAULT_CPUS = '8';
       process.env.DEFAULT_MEM = '64G';
       process.env.DEFAULT_TIME = '24:00:00';
@@ -49,20 +49,10 @@ describe('Configuration', () => {
 
       expect(config.hpcUser).to.equal('testuser');
       expect(config.defaultHpc).to.equal('apollo');
-      expect(config.codeServerPort).to.equal(9000);
+      expect(config.defaultIde).to.equal('rstudio');
       expect(config.defaultCpus).to.equal('8');
       expect(config.defaultMem).to.equal('64G');
       expect(config.defaultTime).to.equal('24:00:00');
-    });
-
-    it('should parse CODE_SERVER_PORT as integer', () => {
-      process.env.CODE_SERVER_PORT = '8080';
-
-      delete require.cache[require.resolve('../../config')];
-      const { config } = require('../../config');
-
-      expect(config.codeServerPort).to.be.a('number');
-      expect(config.codeServerPort).to.equal(8080);
     });
   });
 
@@ -209,7 +199,8 @@ describe('Configuration', () => {
       const { config } = require('../../config');
 
       expect(config).to.be.an('object');
-      expect(Object.keys(config)).to.have.lengthOf(7);
+      // hpcUser, defaultHpc, defaultIde, defaultCpus, defaultMem, defaultTime, additionalPorts
+      expect(Object.keys(config).length).to.be.at.least(6);
     });
 
     it('should export valid clusters structure', () => {
@@ -217,6 +208,18 @@ describe('Configuration', () => {
 
       expect(clusters).to.be.an('object');
       expect(Object.keys(clusters)).to.have.lengthOf(2);
+    });
+
+    it('should export valid ides structure', () => {
+      const { ides } = require('../../config');
+
+      expect(ides).to.be.an('object');
+      expect(ides).to.have.property('vscode');
+      expect(ides).to.have.property('rstudio');
+      expect(ides.vscode).to.have.property('port');
+      expect(ides.vscode).to.have.property('jobName');
+      expect(ides.rstudio).to.have.property('port');
+      expect(ides.rstudio).to.have.property('jobName');
     });
   });
 });

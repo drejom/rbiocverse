@@ -47,10 +47,11 @@ describe('HpcService', () => {
     it('should parse job info from squeue output', async () => {
       sshExecStub.resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
 
-      const jobInfo = await hpcService.getJobInfo();
+      const jobInfo = await hpcService.getJobInfo('vscode');
 
       expect(jobInfo).to.deep.equal({
         jobId: '12345',
+        ide: 'vscode',
         state: 'RUNNING',
         node: 'node01',
         timeLeft: '11:30:00',
@@ -111,14 +112,24 @@ describe('HpcService', () => {
     it('should include correct sbatch parameters', async () => {
       sshExecStub.resolves('Submitted batch job 12345');
 
-      await hpcService.submitJob('8', '64G', '24:00:00');
+      await hpcService.submitJob('8', '64G', '24:00:00', 'vscode');
 
       const sshCommand = sshExecStub.firstCall.args[0];
       expect(sshCommand).to.include('sbatch');
       expect(sshCommand).to.include('--cpus-per-task=8');
       expect(sshCommand).to.include('--mem=64G');
       expect(sshCommand).to.include('--time=24:00:00');
-      expect(sshCommand).to.include('--job-name=code-server');
+      expect(sshCommand).to.include('--job-name=hpc-vscode');
+    });
+
+    it('should use RStudio job name for rstudio IDE', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'rstudio');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('--job-name=hpc-rstudio');
+      expect(sshCommand).to.include('rserver');
     });
 
     it('should include cluster-specific partition', async () => {
@@ -225,7 +236,7 @@ describe('HpcService', () => {
       sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
 
       try {
-        await hpcService.waitForNode('12345', 2); // Only 2 attempts
+        await hpcService.waitForNode('12345', 'vscode', 2); // Only 2 attempts
         expect.fail('Should have thrown error');
       } catch (error) {
         expect(error.message).to.include('Timeout waiting for node assignment');
