@@ -106,23 +106,27 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
     });
   }
 
-  // Rewrite Set-Cookie headers to fix path and remove secure flag
-  // RStudio's auth-cookies-force-secure=0 doesn't always work
+  // Rewrite Set-Cookie headers for iframe compatibility
+  // RStudio is loaded in an iframe, which requires SameSite=None; Secure for cookies
+  // to be sent in cross-context requests (even same-origin iframes in some browsers)
   if (setCookies && Array.isArray(setCookies)) {
     proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
       let modified = cookie;
 
-      // Ensure path has trailing slash for consistent matching
+      // Ensure path matches our proxy mount (with trailing slash for broad matching)
       modified = modified.replace(/path=\/rstudio-direct(?![\/;])/i, 'path=/rstudio-direct/');
 
-      // Remove secure flag - we're behind a reverse proxy, browser sees HTTPS
-      // but the secure flag can cause issues with cookie transmission
-      modified = modified.replace(/;\s*secure/gi, '');
+      // For iframe compatibility: SameSite=None requires Secure flag
+      // Remove any existing SameSite directive first
+      modified = modified.replace(/;\s*samesite=[^;]*/gi, '');
 
-      // Add SameSite=Lax if not present (explicit is better than browser default)
-      if (!/samesite=/i.test(modified)) {
-        modified = modified.replace(/;?\s*$/, '; SameSite=Lax');
+      // Ensure Secure flag is present (required for SameSite=None)
+      if (!/;\s*secure/i.test(modified)) {
+        modified = modified + '; Secure';
       }
+
+      // Add SameSite=None for iframe cookie support
+      modified = modified + '; SameSite=None';
 
       if (modified !== cookie) {
         log.debug(`Cookie rewritten: ${cookie.substring(0, 80)}... -> ${modified.substring(0, 80)}...`);
