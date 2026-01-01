@@ -158,7 +158,9 @@ class HpcService {
       'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      'exec /usr/lib/rstudio-server/bin/rsession --no-save --no-restore',
+      // Pass through rserver args - rsession doesn't accept --no-save directly
+      // Need \\\\\\\\@ to get $@ in output (same escaping as LD_LIBRARY_PATH)
+      'exec /usr/lib/rstudio-server/bin/rsession "\\\\\\\\$@"',
       '',  // trailing newline
     ].join('\\\\012');
 
