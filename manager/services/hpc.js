@@ -91,41 +91,81 @@ class HpcService {
   }
 
   /**
-   * Build IDE-specific command for Singularity exec
-   * @param {string} ide - IDE type ('vscode', 'rstudio')
-   * @returns {string[]} Command arguments
+   * Build sbatch wrap command for VS Code
    */
-  buildIdeCommand(ide) {
-    const ideConfig = ides[ide];
+  buildVscodeWrap() {
+    const ideConfig = ides.vscode;
+    return `${this.cluster.singularityBin} exec ` +
+      `--env TERM=xterm-256color ` +
+      `--env R_LIBS_SITE=${this.cluster.rLibsSite} ` +
+      `-B ${this.cluster.bindPaths} ` +
+      `${this.cluster.singularityImage} ` +
+      `code serve-web ` +
+      `--host 0.0.0.0 ` +
+      `--port ${ideConfig.port} ` +
+      `--without-connection-token ` +
+      `--accept-server-license-terms ` +
+      `--disable-telemetry ` +
+      `--server-base-path /vscode-direct ` +
+      `--server-data-dir ~/.vscode-slurm/.vscode-server ` +
+      `--extensions-dir ~/.vscode-slurm/.vscode-server/extensions ` +
+      `--user-data-dir ~/.vscode-slurm/user-data`;
+  }
 
-    switch (ide) {
-      case 'vscode':
-        return [
-          'code serve-web',
-          '--host 0.0.0.0',
-          `--port ${ideConfig.port}`,
-          '--without-connection-token',
-          '--accept-server-license-terms',
-          '--disable-telemetry',
-          '--server-base-path /vscode-direct',
-          '--server-data-dir ~/.vscode-slurm/.vscode-server',
-          '--extensions-dir ~/.vscode-slurm/.vscode-server/extensions',
-          '--user-data-dir ~/.vscode-slurm/user-data',
-        ];
+  /**
+   * Build sbatch wrap command for RStudio
+   * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
+   */
+  buildRstudioWrap(cpus) {
+    const ideConfig = ides.rstudio;
+    const workdir = '~/.rstudio-slurm/workdir';
 
-      case 'rstudio':
-        return [
-          'rserver',
-          '--www-address=0.0.0.0',
-          `--www-port=${ideConfig.port}`,
-          '--server-user=$(whoami)',
-          '--auth-none=1',
-          '--server-data-dir=~/.rstudio-slurm',
-        ];
+    // Create setup script that mirrors the proven approach
+    const setup = [
+      // Create work directories
+      `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
+      // Create database.conf
+      `cat > ${workdir}/database.conf << DBCONF
+provider=sqlite
+directory=/var/lib/rstudio-server
+DBCONF`,
+      // Create rsession.sh wrapper
+      `cat > ${workdir}/rsession.sh << RSESSION
+#!/bin/sh
+export OMP_NUM_THREADS=${cpus}
+export R_LIBS_SITE="${this.cluster.rLibsSite}"
+export R_LIBS_USER="~/R/bioc-3.19"
+export TMPDIR="/tmp"
+export TZ="America/Los_Angeles"
+exec /usr/lib/rstudio-server/bin/rsession "\\$@"
+RSESSION`,
+      `chmod +x ${workdir}/rsession.sh`,
+    ].join(' && ');
 
-      default:
-        throw new Error(`Unknown IDE: ${ide}`);
-    }
+    // Build singularity bind paths for RStudio
+    const rstudioBinds = [
+      `${workdir}/run:/run`,
+      `${workdir}/tmp:/tmp`,
+      `${workdir}/database.conf:/etc/rstudio/database.conf`,
+      `${workdir}/rsession.sh:/etc/rstudio/rsession.sh`,
+      `${workdir}/var/lib/rstudio-server:/var/lib/rstudio-server`,
+      this.cluster.bindPaths,
+    ].join(',');
+
+    // Build rserver command (no auth since we're behind proxy)
+    const rserverCmd = [
+      `${this.cluster.singularityBin} exec --cleanenv`,
+      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `-B ${rstudioBinds}`,
+      `${this.cluster.singularityImage}`,
+      `rserver`,
+      `--www-port=${ideConfig.port}`,
+      `--server-user=$(whoami)`,
+      `--auth-none=1`,
+      `--rsession-path=/etc/rstudio/rsession.sh`,
+    ].join(' ');
+
+    return `${setup} && ${rserverCmd}`;
   }
 
   /**
@@ -143,7 +183,19 @@ class HpcService {
     }
 
     const logDir = `/home/${config.hpcUser}/hpc-slurm-logs`;
-    const ideCommand = this.buildIdeCommand(ide);
+
+    // Build IDE-specific wrap command
+    let wrapCmd;
+    switch (ide) {
+      case 'vscode':
+        wrapCmd = this.buildVscodeWrap();
+        break;
+      case 'rstudio':
+        wrapCmd = this.buildRstudioWrap(cpus);
+        break;
+      default:
+        throw new Error(`Unknown IDE: ${ide}`);
+    }
 
     const submitCmd = [
       'sbatch',
@@ -155,13 +207,8 @@ class HpcService {
       `--time=${time}`,
       `--output=${logDir}/${ideConfig.jobName}_%j.log`,
       `--error=${logDir}/${ideConfig.jobName}_%j.err`,
-      `--wrap='mkdir -p ${logDir} && ${this.cluster.singularityBin} exec`,
-      '--env TERM=xterm-256color',
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
-      `-B ${this.cluster.bindPaths}`,
-      `${this.cluster.singularityImage}`,
-      ...ideCommand,
-    ].join(' ') + "'";
+      `--wrap='mkdir -p ${logDir} && ${wrapCmd}'`,
+    ].join(' ');
 
     const output = await this.sshExec(submitCmd);
     const match = output.match(/Submitted batch job (\d+)/);

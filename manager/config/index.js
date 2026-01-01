@@ -63,8 +63,8 @@ const clusters = {
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
     singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
     rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
-    // Include /run and /var/lib/rstudio-server for RStudio
-    bindPaths: '/packages,/run,/var/lib/rstudio-server,/scratch,/ref_genomes',
+    // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
+    bindPaths: '/packages,/scratch,/ref_genomes',
   },
   apollo: {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
@@ -72,8 +72,8 @@ const clusters = {
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
     singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
     rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
-    // Include /run and /var/lib/rstudio-server for RStudio
-    bindPaths: '/opt,/run,/var/lib/rstudio-server,/labs',
+    // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
+    bindPaths: '/opt,/labs',
   },
 };
 
