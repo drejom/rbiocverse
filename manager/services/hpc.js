@@ -151,8 +151,8 @@ class HpcService {
       'exec 2>>~/.rstudio-slurm/rsession.log',
       'set -x',  // trace commands
       'export R_HOME=/usr/local/lib/R',
-      // NOTE: 8 backslashes needed: JS(\\\\\\\\$) → string(\\\\$) → SSH(")(\\$) → printf(")(\\$) → output($)
-      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:\\\\\\\\$LD_LIBRARY_PATH',
+      // Hardcode the path - $LD_LIBRARY_PATH is empty in container anyway
+      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
       'export R_LIBS_USER=~/R/bioc-3.19',
