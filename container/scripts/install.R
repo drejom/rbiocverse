@@ -118,18 +118,46 @@ parse_description <- function(path = DESCRIPTION_PATH) {
   # Remove version constraints
   imports <- gsub("\\s*\\([^)]+\\)", "", imports)
 
-  # Parse Remotes
+  # Parse Remotes and create a mapping from package name to remote spec
   remotes <- character(0)
+  remote_map <- list()
   if (!is.null(desc$Remotes) && !is.na(desc$Remotes)) {
     remotes <- strsplit(desc$Remotes, ",\\s*")[[1]]
     remotes <- trimws(remotes)
     remotes <- remotes[remotes != ""]
+
+    # Build mapping from package name to remote spec
+    # Known repo->package name mappings for GitHub packages with non-standard names
+    repo_to_pkg <- c(
+      "seurat-data" = "SeuratData",
+      "seurat-disk" = "SeuratDisk",
+      "seurat-wrappers" = "SeuratWrappers"
+    )
+
+    for (remote in remotes) {
+      # Extract package name from remote spec
+      # url::https://...pkg_version.tar.gz -> pkg
+      # user/repo@ref -> repo
+      if (grepl("^url::", remote)) {
+        # URL remote: extract package name from filename
+        # e.g., url::https://cran.r-project.org/.../grr_0.9.5.tar.gz -> grr
+        pkg_name <- sub(".*/([-a-zA-Z0-9.]+)_[0-9].*\\.tar\\.gz$", "\\1", remote)
+      } else {
+        # GitHub remote: user/repo@ref -> repo
+        repo_name <- sub("^[^/]+/", "", remote)  # remove user/
+        repo_name <- sub("@.*$", "", repo_name)  # remove @ref
+        # Use explicit mapping if available, otherwise use repo name as-is
+        pkg_name <- if (repo_name %in% names(repo_to_pkg)) repo_to_pkg[[repo_name]] else repo_name
+      }
+      remote_map[[pkg_name]] <- remote
+    }
   }
 
   list(
     version = desc$Version,
     imports = imports,
-    remotes = remotes
+    remotes = remotes,
+    remote_map = remote_map
   )
 }
 
@@ -332,7 +360,20 @@ generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
 
   config <- get_cluster_config(cluster, bioc_version)
   pkgs <- parse_description()
-  all_pkgs <- c(pkgs$imports, pkgs$remotes)
+
+  # Helper to convert package name to install spec (using remote if available)
+  to_install_spec <- function(pkg_names) {
+    sapply(pkg_names, function(pkg) {
+      if (pkg %in% names(pkgs$remote_map)) {
+        pkgs$remote_map[[pkg]]
+      } else {
+        pkg
+      }
+    }, USE.NAMES = FALSE)
+  }
+
+  # All packages to install (imports only, remotes are handled via remote_map)
+  all_pkgs <- pkgs$imports
 
   # Get core deps to install first
   core_deps <- get_core_deps()
@@ -345,13 +386,13 @@ generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   output_dir_abs <- normalizePath(output_dir)
 
-  # Write core deps list
-  writeLines(core_deps, file.path(output_dir_abs, "pkgs_deps.txt"))
+  # Write core deps list (with remote specs where applicable)
+  writeLines(to_install_spec(core_deps), file.path(output_dir_abs, "pkgs_deps.txt"))
 
-  # Split leaf packages into chunks
+  # Split leaf packages into chunks (with remote specs where applicable)
   chunks <- split(leaf_pkgs, cut(seq_along(leaf_pkgs), jobs, labels = FALSE))
   for (i in seq_along(chunks)) {
-    writeLines(chunks[[i]], file.path(output_dir_abs, sprintf("pkgs_leaf_%03d.txt", i)))
+    writeLines(to_install_spec(chunks[[i]]), file.path(output_dir_abs, sprintf("pkgs_leaf_%03d.txt", i)))
   }
 
   # Phase 1: Install core dependencies (single job, high resources)

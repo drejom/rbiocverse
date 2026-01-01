@@ -158,6 +158,77 @@ bump_version <- function(version_str, type = c("patch", "minor", "major", "bioc"
   paste(parts, collapse = ".")
 }
 
+#' Generate changelog entry for package changes
+#' @param added Character vector of added packages
+#' @param removed Character vector of removed packages
+#' @param version Version string for this release
+#' @param changelog_path Path to CHANGELOG.md
+generate_changelog <- function(added, removed, version, changelog_path = "CHANGELOG.md") {
+  today <- format(Sys.Date(), "%Y-%m-%d")
+
+  # Build the new entry
+  entry <- sprintf("## [%s] - %s\n", version, today)
+
+  if (length(added) > 0) {
+    entry <- paste0(entry, "\n### Added\n")
+    # Group by likely source
+    for (pkg in sort(added)) {
+      entry <- paste0(entry, sprintf("- `%s`\n", pkg))
+    }
+  }
+
+  if (length(removed) > 0) {
+    entry <- paste0(entry, "\n### Removed\n")
+    for (pkg in sort(removed)) {
+      entry <- paste0(entry, sprintf("- `%s`\n", pkg))
+    }
+  }
+
+  if (length(added) == 0 && length(removed) == 0) {
+    entry <- paste0(entry, "\n### Changed\n- No package changes\n")
+  }
+
+  # Add package stats
+  entry <- paste0(entry, sprintf("\n### Package Statistics\n- Added: %d\n- Removed: %d\n",
+                                  length(added), length(removed)))
+  entry <- paste0(entry, "\n---\n\n")
+
+  # Read existing changelog or create new
+  if (file.exists(changelog_path)) {
+    existing <- readLines(changelog_path)
+    # Find where to insert (after the header)
+    header_end <- grep("^## \\[", existing)[1]
+    if (is.na(header_end)) header_end <- length(existing) + 1
+
+    # Check if this version already exists
+    if (any(grepl(sprintf("^## \\[%s\\]", version), existing))) {
+      message("Changelog entry for version ", version, " already exists")
+      return(invisible(NULL))
+    }
+
+    # Insert new entry
+    new_content <- c(
+      existing[1:(header_end - 1)],
+      strsplit(entry, "\n")[[1]],
+      existing[header_end:length(existing)]
+    )
+  } else {
+    # Create new changelog
+    header <- c(
+      "# Changelog",
+      "",
+      "All notable changes to the rbiocverse package collection will be documented in this file.",
+      "",
+      ""
+    )
+    new_content <- c(header, strsplit(entry, "\n")[[1]])
+  }
+
+  writeLines(new_content, changelog_path)
+  message("Updated: ", changelog_path)
+  invisible(entry)
+}
+
 # =============================================================================
 # Main Functions
 # =============================================================================
@@ -384,6 +455,12 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
     desc$Imports <- paste0("\n", imports_str)
     write_description(desc, path)
     message("\nDESCRIPTION updated with ", length(all_imports), " packages")
+
+    # Generate changelog entry if there are changes
+    if (length(new_pkgs) > 0 || length(removed_pkgs) > 0) {
+      changelog_path <- file.path(dirname(dirname(path)), "CHANGELOG.md")
+      generate_changelog(new_pkgs, removed_pkgs, desc$Version, changelog_path)
+    }
   } else {
     message("\n[DRY RUN] Re-run with --apply to update DESCRIPTION")
   }
@@ -409,6 +486,10 @@ bump <- function(type = "patch", path = DESCRIPTION_PATH) {
 #' Full update: check packages, update remotes, bump version
 #' @export
 full_update <- function(bump_type = "patch", dry_run = TRUE, path = DESCRIPTION_PATH) {
+  # Get current state before changes
+  desc_before <- read_description(path)
+  imports_before <- parse_imports(desc_before$Imports)
+
   message("=== Checking package availability ===")
   unavailable <- check_packages(fix = !dry_run, path = path)
 
@@ -417,7 +498,18 @@ full_update <- function(bump_type = "patch", dry_run = TRUE, path = DESCRIPTION_
 
   if (!dry_run) {
     message("\n=== Bumping version ===")
-    bump(bump_type, path = path)
+    new_version <- bump(bump_type, path = path)
+
+    # Generate changelog if packages were removed
+    if (length(unavailable) > 0) {
+      changelog_path <- file.path(dirname(dirname(path)), "CHANGELOG.md")
+      generate_changelog(
+        added = character(0),
+        removed = unavailable,
+        version = new_version,
+        changelog_path = changelog_path
+      )
+    }
   }
 
   if (dry_run) {
