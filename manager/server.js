@@ -89,20 +89,45 @@ rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   });
 });
 
-// Rewrite RStudio redirects to use proxy paths
-// Handle absolute URLs and root-relative redirects
+// Rewrite RStudio redirects and fix cookie attributes
+// Handle absolute URLs, root-relative redirects, and cookie path/secure issues
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
   const setCookies = proxyRes.headers['set-cookie'];
 
-  // Debug: log all responses with cookies or redirects
+  // Debug: log all responses with cookies or redirects (full cookie details)
   if (status >= 300 && status < 400 || setCookies) {
     log.debug(`RStudio proxyRes`, {
       status,
       url: req.url,
       location: location || 'none',
-      setCookies: setCookies ? setCookies.map(c => c.substring(0, 60) + '...') : 'none',
+      setCookies: setCookies || 'none',
+    });
+  }
+
+  // Rewrite Set-Cookie headers to fix path and remove secure flag
+  // RStudio's auth-cookies-force-secure=0 doesn't always work
+  if (setCookies && Array.isArray(setCookies)) {
+    proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
+      let modified = cookie;
+
+      // Ensure path has trailing slash for consistent matching
+      modified = modified.replace(/path=\/rstudio-direct(?![\/;])/i, 'path=/rstudio-direct/');
+
+      // Remove secure flag - we're behind a reverse proxy, browser sees HTTPS
+      // but the secure flag can cause issues with cookie transmission
+      modified = modified.replace(/;\s*secure/gi, '');
+
+      // Add SameSite=Lax if not present (explicit is better than browser default)
+      if (!/samesite=/i.test(modified)) {
+        modified = modified.replace(/;?\s*$/, '; SameSite=Lax');
+      }
+
+      if (modified !== cookie) {
+        log.debug(`Cookie rewritten: ${cookie.substring(0, 80)}... -> ${modified.substring(0, 80)}...`);
+      }
+      return modified;
     });
   }
 
