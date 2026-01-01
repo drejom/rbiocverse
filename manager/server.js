@@ -87,12 +87,16 @@ rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   });
 });
 
-// Rewrite RStudio redirects and fix cookie attributes
+// Rewrite RStudio redirects and fix cookie/header attributes for iframe embedding
 // Handle absolute URLs, root-relative redirects, and cookie path/secure issues
 rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   const status = proxyRes.statusCode;
   const location = proxyRes.headers['location'];
   const setCookies = proxyRes.headers['set-cookie'];
+
+  // Remove X-Frame-Options header - RStudio sets 'deny' which blocks iframe embedding
+  // Our wrapper loads RStudio in an iframe, so we must strip this header
+  delete proxyRes.headers['x-frame-options'];
 
   // Debug: log all responses with cookies or redirects (full cookie details)
   if (status >= 300 && status < 400 || setCookies) {
