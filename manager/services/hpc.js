@@ -138,14 +138,21 @@ class HpcService {
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
     // Use ~ instead of $HOME to avoid escaping issues
     // --no-save --no-restore prevents caching large R objects (e.g., scRNAseq) to disk
+    // Log to ~/.rstudio-slurm/rsession.log for debugging
     const rsessionSh = [
       '#!/bin/sh',
+      'exec 2>>~/.rstudio-slurm/rsession.log',
+      'echo "=== rsession.sh started at $(date) ===" >&2',
+      'echo "PWD: $(pwd)" >&2',
+      'echo "USER: $USER" >&2',
+      'echo "Args: $@" >&2',
       `export OMP_NUM_THREADS=${cpus}`,
       `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
       'export R_LIBS_USER=~/R/bioc-3.19',
       'export TMPDIR=/tmp',
       'export TZ=America/Los_Angeles',
-      'exec /usr/lib/rstudio-server/bin/rsession --no-save --no-restore',
+      'echo "Starting rsession..." >&2',
+      'exec /usr/lib/rstudio-server/bin/rsession "$@"',
       '',  // trailing newline
     ].join('\\\\012');
 
