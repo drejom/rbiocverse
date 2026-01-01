@@ -165,6 +165,7 @@ class HpcService {
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
+      '--www-address=0.0.0.0',  // Bind to all interfaces, not just localhost
       `--www-port=${ideConfig.port}`,
       '--server-user=$(whoami)',
       '--auth-none=1',
