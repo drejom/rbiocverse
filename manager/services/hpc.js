@@ -141,34 +141,28 @@ class HpcService {
       '',
     ].join('\\\\012');
 
-    // rsession.sh content - \\\\012 for newlines
-    // Use ~ instead of $HOME to avoid escaping issues
-    // --no-save --no-restore prevents caching large R objects (e.g., scRNAseq) to disk
-    // Log to ~/.rstudio-slurm/rsession.log for debugging
-    // CRITICAL: LD_LIBRARY_PATH must include R lib dir for libR.so
-    const rsessionSh = [
-      '#!/bin/sh',
-      'exec 2>>~/.rstudio-slurm/rsession.log',
-      'set -x',  // trace commands
-      'export R_HOME=/usr/local/lib/R',
-      // Hardcode the path - $LD_LIBRARY_PATH is empty in container anyway
-      'export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib',
-      `export OMP_NUM_THREADS=${cpus}`,
-      `export R_LIBS_SITE=${this.cluster.rLibsSite}`,
-      'export R_LIBS_USER=~/R/bioc-3.19',
-      'export TMPDIR=/tmp',
-      'export TZ=America/Los_Angeles',
-      // Pass args via "$@" - \\$ survives SSH double-quotes to become $
-      'exec /usr/lib/rstudio-server/bin/rsession "\\$@"',
-      '',  // trailing newline
-    ].join('\\\\012');
+    // Use heredoc for rsession.sh - cleaner than printf escaping
+    // Quoted delimiter 'RSESSION' prevents variable expansion
+    // \\$ in JS becomes \$ in SSH, which stays literal in heredoc (but we use quoted delimiter anyway)
+    const rsessionShHeredoc = `cat > ${workdir}/rsession.sh << 'RSESSION'
+#!/bin/sh
+exec 2>>~/.rstudio-slurm/rsession.log
+set -x
+export R_HOME=/usr/local/lib/R
+export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
+export OMP_NUM_THREADS=${cpus}
+export R_LIBS_SITE=${this.cluster.rLibsSite}
+export R_LIBS_USER=~/R/bioc-3.19
+export TMPDIR=/tmp
+export TZ=America/Los_Angeles
+exec /usr/lib/rstudio-server/bin/rsession "\\$@"
+RSESSION`;
 
-    // Use printf '%b' with single quotes - no shell expansion inside, simpler escaping
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
       `printf '%b' '${dbConf}' > ${workdir}/database.conf`,
       `printf '%b' '${rserverConf}' > ${workdir}/rserver.conf`,
-      `printf '%b' '${rsessionSh}' > ${workdir}/rsession.sh`,
+      rsessionShHeredoc,
       `chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
