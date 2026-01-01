@@ -11,7 +11,7 @@ const express = require('express');
 const path = require('path');
 const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
-const { config } = require('./config');
+const { config, ides } = require('./config');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
@@ -47,18 +47,33 @@ app.use('/api', createApiRouter(stateManager));
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Proxy for forwarding to code-server when tunnel is active
-const proxy = httpProxy.createProxyServer({
+// Proxy for forwarding to VS Code when tunnel is active
+const vscodeProxy = httpProxy.createProxyServer({
   ws: true,
-  target: `http://127.0.0.1:${config.codeServerPort}`,
+  target: `http://127.0.0.1:${ides.vscode.port}`,
   changeOrigin: true,
 });
 
-proxy.on('error', (err, req, res) => {
-  log.proxyError('Code-server proxy error', { error: err.message });
+vscodeProxy.on('error', (err, req, res) => {
+  log.proxyError('VS Code proxy error', { error: err.message });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>Code server not available</h1><p><a href="/">Back to launcher</a></p>');
+    res.end('<h1>VS Code not available</h1><p><a href="/">Back to launcher</a></p>');
+  }
+});
+
+// Proxy for forwarding to RStudio when tunnel is active
+const rstudioProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: `http://127.0.0.1:${ides.rstudio.port}`,
+  changeOrigin: true,
+});
+
+rstudioProxy.on('error', (err, req, res) => {
+  log.proxyError('RStudio proxy error', { error: err.message });
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>RStudio not available</h1><p><a href="/">Back to launcher</a></p>');
   }
 });
 
@@ -107,7 +122,7 @@ app.use((req, res, next) => {
     if (!hasRunningSession()) {
       return res.redirect('/');
     }
-    return proxy.web(req, res);
+    return vscodeProxy.web(req, res);
   }
   next();
 });
@@ -124,7 +139,7 @@ app.use('/code', (req, res, next) => {
   }
 
   // All other /code/* paths proxy directly
-  proxy.web(req, res);
+  vscodeProxy.web(req, res);
 });
 
 // Direct proxy to VS Code (used by wrapper iframe)
@@ -132,7 +147,30 @@ app.use('/vscode-direct', (req, res, next) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
-  proxy.web(req, res);
+  vscodeProxy.web(req, res);
+});
+
+// RStudio proxy - serves at /rstudio/
+app.use('/rstudio', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+
+  // Main /rstudio/ page gets wrapper with floating menu
+  if (req.path === '/' || req.path === '') {
+    return res.sendFile(path.join(__dirname, 'public', 'rstudio-wrapper.html'));
+  }
+
+  // All other /rstudio/* paths proxy directly
+  rstudioProxy.web(req, res);
+});
+
+// Direct proxy to RStudio (used by wrapper iframe)
+app.use('/rstudio-direct', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  rstudioProxy.web(req, res);
 });
 
 // Proxy to Live Server (port 5500) - access at /live/
@@ -169,7 +207,7 @@ const server = app.listen(PORT, () => {
   log.info(`Default HPC: ${config.defaultHpc}`);
 });
 
-// Handle WebSocket upgrades for code-server and Live Server
+// Handle WebSocket upgrades for VS Code, RStudio, and Live Server
 server.on('upgrade', (req, socket, head) => {
   log.proxy(`WebSocket upgrade: ${req.url}`);
   if (hasRunningSession()) {
@@ -177,14 +215,19 @@ server.on('upgrade', (req, socket, head) => {
     if (req.url.startsWith('/live')) {
       liveServerProxy.ws(req, socket, head);
     }
-    // Proxy WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
+    // RStudio WebSocket
+    else if (req.url.startsWith('/rstudio')) {
+      rstudioProxy.ws(req, socket, head);
+    }
+    // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
     else if (req.url.startsWith('/code') ||
+        req.url.startsWith('/vscode-direct') ||
         req.url.startsWith('/stable-') ||
         req.url.startsWith('/vscode-') ||
         req.url.startsWith('/oss-dev') ||
         req.url === '/' ||
         req.url.startsWith('/?')) {
-      proxy.ws(req, socket, head);
+      vscodeProxy.ws(req, socket, head);
     } else {
       log.proxy(`WebSocket rejected: ${req.url}`);
       socket.destroy();
