@@ -135,6 +135,120 @@ get_github_latest <- function(repo) {
   })
 }
 
+#' Get tag for a GitHub commit (if one exists)
+#' @param user GitHub username
+#' @param repo GitHub repo name
+#' @param sha Commit SHA
+#' @return Tag name if found, NULL otherwise
+get_tag_for_commit <- function(user, repo, sha) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+
+  tryCatch({
+    # Get tags and find one pointing to this SHA
+    tags_url <- sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
+    tags <- jsonlite::fromJSON(tags_url, simplifyVector = FALSE)
+
+    for (tag in tags) {
+      if (substr(tag$commit$sha, 1, 7) == substr(sha, 1, 7)) {
+        return(tag$name)
+      }
+    }
+    NULL
+  }, error = function(e) NULL)
+}
+
+#' Get GitHub remote info from an installed package's DESCRIPTION
+#' @param pkg Package name
+#' @param lib Library path (defaults to .libPaths()[1])
+#' @param use_tags If TRUE, look up tags for commits (requires network)
+#' @return List with repo, ref, subdir info or NULL if not a GitHub package
+get_installed_github_info <- function(pkg, lib = .libPaths()[1], use_tags = TRUE) {
+  desc_path <- file.path(lib, pkg, "DESCRIPTION")
+  if (!file.exists(desc_path)) return(NULL)
+
+  desc <- tryCatch(read.dcf(desc_path, all = TRUE), error = function(e) NULL)
+  if (is.null(desc)) return(NULL)
+
+  # Check if it's a GitHub package
+  remote_type <- desc$RemoteType
+  if (is.null(remote_type) || !grepl("github", remote_type, ignore.case = TRUE)) {
+    return(NULL)
+  }
+
+  # Extract GitHub info
+  user <- desc$GithubUsername %||% desc$RemoteUsername
+  repo <- desc$GithubRepo %||% desc$RemoteRepo
+  sha <- desc$GithubSHA1 %||% desc$RemoteSha
+  subdir <- desc$GithubSubdir %||% desc$RemoteSubdir
+  # Check if already installed from a ref (tag/branch)
+  ref <- desc$GithubRef %||% desc$RemoteRef
+
+  if (is.null(user) || is.null(repo)) return(NULL)
+
+  # Determine the best ref to use: tag > existing ref > commit SHA
+  best_ref <- NULL
+  ref_type <- "commit"
+
+  if (!is.null(ref) && ref != "HEAD" && ref != "master" && ref != "main") {
+    # Already has a meaningful ref (likely a tag)
+    best_ref <- ref
+    ref_type <- "tag"
+  } else if (use_tags && !is.null(sha)) {
+    # Try to find a tag for this commit
+    tag <- get_tag_for_commit(user, repo, sha)
+    if (!is.null(tag)) {
+      best_ref <- tag
+      ref_type <- "tag"
+    }
+  }
+
+  # Fall back to commit SHA
+  if (is.null(best_ref) && !is.null(sha) && sha != "") {
+    best_ref <- substr(sha, 1, 7)
+    ref_type <- "commit"
+  }
+
+  # Build the remote string
+  remote <- paste0(user, "/", repo)
+  if (!is.null(subdir) && subdir != "" && subdir != ".") {
+    remote <- paste0(remote, "/", subdir)
+  }
+  if (!is.null(best_ref)) {
+    remote <- paste0(remote, "@", best_ref)
+  }
+
+  list(
+    package = pkg,
+    user = user,
+    repo = repo,
+    sha = sha,
+    subdir = subdir,
+    ref = best_ref,
+    ref_type = ref_type,
+    remote = remote
+  )
+}
+
+#' Discover all GitHub-installed packages in a library
+#' @param lib Library path
+#' @return List of remote strings for GitHub packages
+discover_github_packages <- function(lib = .libPaths()[1]) {
+  pkgs <- list.dirs(lib, recursive = FALSE, full.names = FALSE)
+
+  github_pkgs <- list()
+  for (pkg in pkgs) {
+    info <- get_installed_github_info(pkg, lib)
+    if (!is.null(info)) {
+      github_pkgs[[pkg]] <- info
+    }
+  }
+
+  github_pkgs
+}
+
+# Helper for NULL coalescing (if not already defined)
+`%||%` <- function(x, y) if (is.null(x) || is.na(x) || x == "") y else x
+
 #' Bump version (increment patch by default)
 bump_version <- function(version_str, type = c("patch", "minor", "major", "bioc")) {
   type <- match.arg(type)
@@ -391,18 +505,34 @@ suggest_packages <- function(path = DESCRIPTION_PATH,
 
 #' Sync DESCRIPTION with current environment
 #' Adds all installed packages to DESCRIPTION, removes unavailable ones
+#' Also discovers GitHub packages and updates Remotes with pinned commits
 #' @param dry_run If TRUE, just show what would change
 #' @param exclude Packages to exclude
+#' @param lib Library path to scan (defaults to R_LIBS_SITE or .libPaths()[1])
 #' @export
 sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
-                                   exclude = c("rbiocverse")) {
+                                   exclude = c("rbiocverse"),
+                                   lib = Sys.getenv("R_LIBS_SITE", .libPaths()[1])) {
   desc <- read_description(path)
   current_imports <- parse_imports(desc$Imports)
   current_remotes <- parse_remotes(desc$Remotes)
-  remote_pkgs <- sapply(current_remotes, function(r) basename(r$repo))
 
-  # Get installed packages (non-base)
-  ip <- installed.packages()
+  # Discover GitHub packages from installed library (with commit pins)
+  message("Scanning library for GitHub packages: ", lib)
+  github_pkgs <- discover_github_packages(lib)
+  message("Found ", length(github_pkgs), " GitHub-installed packages")
+
+  # Build list of remote strings from discovered packages
+  discovered_remotes <- sapply(github_pkgs, function(x) x$remote)
+  github_pkg_names <- names(github_pkgs)
+
+  # Merge with existing remotes (discovered takes precedence for updates)
+  # But keep URL-based remotes (archived CRAN packages) from current
+  existing_url_remotes <- current_remotes[grepl("^url::", sapply(current_remotes, function(r) r$full))]
+  url_remote_strs <- sapply(existing_url_remotes, function(r) r$full)
+
+  # Get installed packages (non-base, non-GitHub)
+  ip <- installed.packages(lib.loc = lib)
   installed <- data.frame(
     Package = ip[, "Package"],
     Repository = if ("Repository" %in% colnames(ip)) ip[, "Repository"] else NA_character_,
@@ -411,7 +541,7 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
   base_pkgs <- rownames(installed.packages(priority = c("base", "recommended")))
   installed <- installed[!installed$Package %in% base_pkgs, ]
   installed <- installed[!installed$Package %in% exclude, ]
-  installed <- installed[!installed$Package %in% remote_pkgs, ]  # Keep remotes separate
+  installed <- installed[!installed$Package %in% github_pkg_names, ]  # Exclude GitHub packages
 
   # Classify by source
   installed$Source <- ifelse(
@@ -422,17 +552,44 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
   # Include CRAN, Bioconductor, and Unknown (likely CRAN/Bioc installed without repo info)
   cran_bioc <- installed[installed$Source %in% c("CRAN", "Bioconductor", "Unknown"), "Package"]
 
+  # GitHub packages should be in Imports too (the package name)
+  all_imports_set <- unique(c(cran_bioc, github_pkg_names))
+
   # Find what's new vs current
-  new_pkgs <- setdiff(cran_bioc, current_imports)
-  removed_pkgs <- setdiff(current_imports, cran_bioc)
+  new_pkgs <- setdiff(all_imports_set, current_imports)
+  removed_pkgs <- setdiff(current_imports, all_imports_set)
+
+  # Compare remotes
+  current_remote_strs <- sapply(current_remotes, function(r) r$full)
+  new_remotes <- setdiff(discovered_remotes, current_remote_strs)
+  updated_remotes <- character(0)
+
+  # Check for updated commits on existing remotes
+  for (pkg in github_pkg_names) {
+    info <- github_pkgs[[pkg]]
+    # Find if this package exists in current remotes (by repo name)
+    matching <- sapply(current_remotes, function(r) {
+      grepl(paste0("/", info$repo, "(/|@|$)"), r$full, ignore.case = TRUE)
+    })
+    if (any(matching)) {
+      old_remote <- current_remotes[matching][[1]]$full
+      if (old_remote != info$remote) {
+        updated_remotes <- c(updated_remotes, sprintf("%s -> %s", old_remote, info$remote))
+      }
+    }
+  }
 
   message("=== Sync from Environment ===")
+  message("Library: ", lib)
   message("Current DESCRIPTION imports: ", length(current_imports))
   message("Installed (CRAN/Bioc): ", length(cran_bioc))
-  message("GitHub remotes (unchanged): ", length(remote_pkgs))
+  message("Installed (GitHub): ", length(github_pkg_names))
+  message("URL remotes (archived): ", length(url_remote_strs))
   message("")
-  message("To add: ", length(new_pkgs))
-  message("To remove: ", length(removed_pkgs))
+  message("Imports to add: ", length(new_pkgs))
+  message("Imports to remove: ", length(removed_pkgs))
+  message("New GitHub remotes: ", length(new_remotes))
+  message("Updated GitHub remotes: ", length(updated_remotes))
 
   if (length(new_pkgs) > 0) {
     message("\nNew packages to add:")
@@ -445,16 +602,35 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
     message(paste("  ", removed_pkgs, collapse = "\n"))
   }
 
+  if (length(new_remotes) > 0) {
+    message("\nNew GitHub remotes:")
+    message(paste("  ", new_remotes, collapse = "\n"))
+  }
+
+  if (length(updated_remotes) > 0) {
+    message("\nUpdated GitHub remotes:")
+    message(paste("  ", updated_remotes, collapse = "\n"))
+  }
+
   if (!dry_run) {
     # Sort packages alphabetically
-    all_imports <- sort(cran_bioc)
+    all_imports <- sort(all_imports_set)
 
     # Format as DESCRIPTION Imports field
     imports_str <- paste("    ", all_imports, collapse = ",\n")
-
     desc$Imports <- paste0("\n", imports_str)
+
+    # Combine remotes: URL remotes + discovered GitHub remotes
+    all_remotes <- c(url_remote_strs, discovered_remotes)
+    if (length(all_remotes) > 0) {
+      remotes_str <- paste("    ", all_remotes, collapse = ",\n")
+      desc$Remotes <- paste0("\n", remotes_str)
+    }
+
     write_description(desc, path)
-    message("\nDESCRIPTION updated with ", length(all_imports), " packages")
+    message("\nDESCRIPTION updated:")
+    message("  Imports: ", length(all_imports), " packages")
+    message("  Remotes: ", length(all_remotes), " entries")
 
     # Generate changelog entry if there are changes
     if (length(new_pkgs) > 0 || length(removed_pkgs) > 0) {
@@ -465,7 +641,13 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
     message("\n[DRY RUN] Re-run with --apply to update DESCRIPTION")
   }
 
-  invisible(list(added = new_pkgs, removed = removed_pkgs, total = length(cran_bioc)))
+  invisible(list(
+    added = new_pkgs,
+    removed = removed_pkgs,
+    total_imports = length(all_imports_set),
+    github_remotes = discovered_remotes,
+    url_remotes = url_remote_strs
+  ))
 }
 
 #' Bump version in DESCRIPTION
