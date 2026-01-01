@@ -420,11 +420,16 @@ echo "Library: $R_LIBS_SITE"
 echo "Packages: %d core dependencies"
 echo ""
 
+# Use job-local cache to avoid NFS lock contention
+export PAK_CACHE_DIR=/tmp/pak_cache_phase1
+mkdir -p $PAK_CACHE_DIR
+
 singularity exec \\
   --env R_LIBS=/usr/local/lib/R/site-library \\
   --env R_LIBS_SITE=$R_LIBS_SITE \\
   --env SLURM_CPUS=$SLURM_CPUS_PER_TASK \\
-  -B $BIND_PATHS \\
+  --env R_USER_CACHE_DIR=$PAK_CACHE_DIR \\
+  -B $BIND_PATHS,/tmp \\
   "$SINGULARITY_IMAGE" \\
   Rscript -e "
     ncpus <- as.integer(Sys.getenv(\\"SLURM_CPUS\\", parallel::detectCores()))
