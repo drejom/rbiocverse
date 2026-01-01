@@ -132,7 +132,8 @@ class HpcService {
     // rserver.conf - auth-none=1 disables login (single-user mode)
     // www-root-path tells RStudio it's behind a reverse proxy at /rstudio-direct
     // auth-cookies-force-secure=0 prevents secure flag on cookies (fixes CSRF issues behind proxy)
-    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012www-root-path=/rstudio-direct\\\\012auth-cookies-force-secure=0\\\\012';
+    // rserver-proxy-max-wait-secs=60 increases timeout for long-polling (default 10s causes spinner)
+    const rserverConf = 'rsession-which-r=/usr/local/bin/R\\\\012auth-none=1\\\\012www-root-path=/rstudio-direct\\\\012auth-cookies-force-secure=0\\\\012rserver-proxy-max-wait-secs=60\\\\012';
 
     // rsession.sh content - \\\\012 for newlines
     // Note: $@ removed as it's not needed and impossible to escape through SSH+printf layers
