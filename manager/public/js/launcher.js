@@ -4,6 +4,9 @@
  * Supports multiple IDEs (VS Code, RStudio) per cluster
  */
 
+// Supported HPC clusters - add new clusters here
+const CLUSTER_NAMES = ['gemini', 'apollo'];
+
 // Default configuration - will be overwritten by server config
 let defaultConfig = {
   cpus: '2',
@@ -15,13 +18,12 @@ let defaultConfig = {
 let availableIdes = {};
 
 // Selected IDE per cluster (for launch form)
-let selectedIde = {
-  gemini: 'vscode',
-  apollo: 'vscode',
-};
+// Initialized dynamically from CLUSTER_NAMES
+let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
 
 // Cluster status keyed by hpc (contains ides)
-let clusterStatus = { gemini: {}, apollo: {} };
+// Initialized dynamically from CLUSTER_NAMES
+let clusterStatus = Object.fromEntries(CLUSTER_NAMES.map(c => [c, {}]));
 
 // Countdowns and walltimes keyed by hpc-ide
 let countdowns = {};
@@ -339,6 +341,45 @@ function updateClusterCard(hpc, ideStatuses) {
 }
 
 /**
+ * Detect if cluster status has changed (for exponential backoff reset)
+ *
+ * Detects the following changes:
+ * - Job status changes (pending/running/idle)
+ * - Job ID changes (new job started)
+ * - IDE additions (new IDE appears in status)
+ * - IDE removals (IDE disappears from status, e.g., job completed)
+ * - Time bucket changes (remaining time crosses 5-minute boundary)
+ *
+ * @param {Object} newStatus - New cluster status object
+ * @returns {boolean} True if status has changed
+ */
+function hasStatusChanged(newStatus) {
+  if (!lastClusterStatusSnapshot) return true;
+
+  // Create comparable snapshots (job IDs and states)
+  const createSnapshot = (status) => {
+    const snapshot = {};
+    for (const [cluster, ides] of Object.entries(status)) {
+      snapshot[cluster] = {};
+      for (const [ide, ideStatus] of Object.entries(ides || {})) {
+        snapshot[cluster][ide] = {
+          status: ideStatus.status,
+          jobId: ideStatus.jobId,
+          // Bucket remaining time into 5-minute intervals; changes across bucket boundaries reset backoff
+          timeLeftBucket: Math.floor((ideStatus.timeLeftSeconds || 0) / POLLING_CONFIG.TIME_BUCKET_SECONDS)
+        };
+      }
+    }
+    return JSON.stringify(snapshot);
+  };
+
+  const oldSnapshot = createSnapshot(lastClusterStatusSnapshot);
+  const newSnapshot = createSnapshot(newStatus);
+
+  return oldSnapshot !== newSnapshot;
+}
+
+/**
  * Fetch status from server
  */
 async function fetchStatus(forceRefresh = false) {
@@ -362,10 +403,39 @@ async function fetchStatus(forceRefresh = false) {
       statusCacheTtl = data.cacheTtl;
     }
 
+    // Detect state changes for exponential backoff
+    // Build newClusterStatus dynamically from existing clusterStatus keys
+    const newClusterStatus = {};
+    for (const cluster of Object.keys(clusterStatus)) {
+      newClusterStatus[cluster] = data[cluster] || {};
+    }
+
+    if (hasStatusChanged(newClusterStatus)) {
+      // State changed - reset backoff
+      consecutiveUnchangedPolls = 0;
+      debugLog('State changed - backoff reset');
+    } else {
+      // No change - increment backoff counter
+      consecutiveUnchangedPolls++;
+      if (consecutiveUnchangedPolls >= POLLING_CONFIG.BACKOFF.START_THRESHOLD) {
+        debugLog(`No changes for ${consecutiveUnchangedPolls} polls - applying backoff`);
+      }
+    }
+
+    // Update cluster status for adaptive polling
+    for (const cluster of Object.keys(clusterStatus)) {
+      clusterStatus[cluster] = newClusterStatus[cluster];
+    }
+    lastClusterStatusSnapshot = newClusterStatus;
+
     // Update cluster cards with per-IDE status
-    updateClusterCard('gemini', data.gemini);
-    updateClusterCard('apollo', data.apollo);
+    for (const cluster of Object.keys(clusterStatus)) {
+      updateClusterCard(cluster, data[cluster]);
+    }
     updateCacheIndicator();
+
+    // Adjust polling interval based on new status
+    startPolling();
   } catch (e) {
     console.error('Status fetch error:', e);
   }
@@ -390,6 +460,9 @@ async function refreshStatus() {
   if (ageSpan) {
     ageSpan.innerHTML = '<em>Updating...</em>';
   }
+
+  // Reset backoff on manual refresh
+  consecutiveUnchangedPolls = 0;
 
   await fetchStatus(true);
 
@@ -613,13 +686,157 @@ function tick() {
 
 let statusInterval = null;
 let tickInterval = null;
+let currentPollInterval = 60000; // Start with 60s default
+let consecutiveUnchangedPolls = 0; // Track polls with no state changes for backoff
+let lastClusterStatusSnapshot = null; // Track previous state to detect changes
+
+// Debug logging - set to true via browser console: window.POLLING_DEBUG = true
+const DEBUG = () => window.POLLING_DEBUG || false;
+const debugLog = (...args) => DEBUG() && console.log('[Polling]', ...args);
+
+/**
+ * Polling configuration - centralized constants for adaptive polling behavior
+ */
+const POLLING_CONFIG = {
+  // Time thresholds (seconds) for determining polling frequency
+  THRESHOLDS_SECONDS: {
+    NEAR_EXPIRY: 600,       // 10 minutes - jobs about to expire
+    APPROACHING_END: 1800,  // 30 minutes - jobs approaching end
+    MODERATE: 3600,         // 1 hour - moderate time remaining
+    STABLE: 21600,          // 6 hours - long-running stable jobs
+  },
+  // Polling intervals (milliseconds) for each state
+  INTERVALS_MS: {
+    FREQUENT: 15000,        // 15s - for pending jobs or near expiry
+    MODERATE: 60000,        // 1m - for jobs approaching end (10-30min left)
+    RELAXED: 300000,        // 5m - for jobs with 30min-1hr left
+    INFREQUENT: 600000,     // 10m - for jobs with 1-6hr left
+    IDLE: 1800000,          // 30m - for very stable jobs (>6hr) or no sessions
+    MAX: 3600000,           // 1hr - absolute maximum interval
+  },
+  // Exponential backoff configuration
+  BACKOFF: {
+    START_THRESHOLD: 3,     // Apply backoff when reaching 3 unchanged polls (1.5x at 3, 2.25x at 4, 3.375x at 5+)
+    MULTIPLIER: 1.5,        // Multiply interval by 1.5x each time
+    MAX_EXPONENT: 3,        // Cap exponent at 3 (max multiplier: 1.5^3 = 3.375x)
+  },
+  // Time bucket size for change detection (seconds)
+  TIME_BUCKET_SECONDS: 300, // 5-minute buckets
+};
+
+/**
+ * Determine optimal polling interval based on job time remaining and exponential backoff
+ *
+ * Time-based ramping (uses actual timeLeft from SLURM):
+ * - Pending: 15s (waiting for node assignment)
+ * - Running with <10min left: 15s (about to expire)
+ * - Running with 10-30min left: 60s (approaching end)
+ * - Running with 30min-1hr left: 300s (5 minutes)
+ * - Running with 1-6hr left: 600s (10 minutes)
+ * - Running with >6hr left: 1800s (30 minutes - very stable)
+ * - No sessions: 1800s (30 minutes)
+ *
+ * Progressive exponential backoff (when no state changes):
+ * - After 3 consecutive unchanged polls, apply progressive multiplier
+ * - Multiplier increases: 1.5x after 3 polls, 2.25x after 4, 3.375x after 5+
+ * - Maximum interval: 3600s (1 hour) for very stable long-running jobs
+ * - Reset backoff on any state change (new job, status change, time bucket change)
+ */
+function getOptimalPollInterval() {
+  const { THRESHOLDS_SECONDS, INTERVALS_MS, BACKOFF } = POLLING_CONFIG;
+
+  let hasPending = false;
+  let minTimeLeft = Infinity; // Track shortest time remaining across all jobs
+  let hasAnySessions = false;
+
+  // Check all clusters for job status (derived dynamically)
+  for (const cluster of Object.keys(clusterStatus)) {
+    const ideStatuses = clusterStatus[cluster] || {};
+    for (const status of Object.values(ideStatuses)) {
+      if (status.status === 'pending') {
+        hasPending = true;
+        hasAnySessions = true;
+      } else if (status.status === 'running') {
+        hasAnySessions = true;
+        // Track the job with least time remaining
+        const timeLeft = status.timeLeftSeconds || Infinity;
+        if (timeLeft < minTimeLeft) {
+          minTimeLeft = timeLeft;
+        }
+      }
+    }
+  }
+
+  // Pending jobs need frequent updates (waiting for node assignment)
+  if (hasPending) {
+    return INTERVALS_MS.FREQUENT;
+  }
+
+  // No sessions at all - very infrequent polling
+  if (!hasAnySessions) {
+    return INTERVALS_MS.IDLE;
+  }
+
+  // Determine base interval from time remaining
+  let baseInterval;
+  if (minTimeLeft < THRESHOLDS_SECONDS.NEAR_EXPIRY) {
+    baseInterval = INTERVALS_MS.FREQUENT;
+  } else if (minTimeLeft < THRESHOLDS_SECONDS.APPROACHING_END) {
+    baseInterval = INTERVALS_MS.MODERATE;
+  } else if (minTimeLeft < THRESHOLDS_SECONDS.MODERATE) {
+    baseInterval = INTERVALS_MS.RELAXED;
+  } else if (minTimeLeft < THRESHOLDS_SECONDS.STABLE) {
+    baseInterval = INTERVALS_MS.INFREQUENT;
+  } else {
+    baseInterval = INTERVALS_MS.IDLE;
+  }
+
+  // Apply progressive exponential backoff if no changes detected
+  // When reaching START_THRESHOLD unchanged polls, apply increasing multiplier:
+  // - At 3 polls: 1.5x, at 4 polls: 2.25x, at 5+ polls: 3.375x (capped)
+  if (consecutiveUnchangedPolls >= BACKOFF.START_THRESHOLD) {
+    const exponent = Math.min(
+      consecutiveUnchangedPolls - BACKOFF.START_THRESHOLD + 1,
+      BACKOFF.MAX_EXPONENT
+    );
+    const backoffMultiplier = Math.pow(BACKOFF.MULTIPLIER, exponent);
+    const backedOffInterval = baseInterval * backoffMultiplier;
+    return Math.min(backedOffInterval, INTERVALS_MS.MAX);
+  }
+
+  return baseInterval;
+}
 
 function startPolling() {
-  if (!statusInterval) {
-    statusInterval = setInterval(fetchStatus, 60000);
-  }
+  // Always start tick interval for countdowns
   if (!tickInterval) {
     tickInterval = setInterval(tick, 1000);
+  }
+
+  // Start or restart status polling with adaptive interval
+  const optimalInterval = getOptimalPollInterval();
+
+  const previousInterval = currentPollInterval;
+  const intervalDecreased = optimalInterval < currentPollInterval;
+
+  if (statusInterval && optimalInterval !== currentPollInterval) {
+    // Interval changed - restart with new interval
+    clearInterval(statusInterval);
+    statusInterval = null;
+    debugLog(`Interval adjusted: ${previousInterval}ms -> ${optimalInterval}ms`);
+  }
+
+  if (!statusInterval) {
+    currentPollInterval = optimalInterval;
+    statusInterval = setInterval(fetchStatus, currentPollInterval);
+    debugLog(`Started with ${Math.floor(currentPollInterval / 1000)}s interval`);
+
+    // If polling frequency increased (interval decreased), fetch immediately
+    // This ensures responsive updates when jobs transition to critical states
+    if (intervalDecreased) {
+      debugLog('Frequency increased - fetching immediately');
+      fetchStatus();
+    }
   }
 }
 
@@ -632,12 +849,15 @@ function stopPolling() {
     clearInterval(tickInterval);
     tickInterval = null;
   }
+  debugLog('Stopped');
 }
 
 function handleVisibilityChange() {
   if (document.hidden) {
     stopPolling();
   } else {
+    // Reset backoff when user returns to page
+    consecutiveUnchangedPolls = 0;
     fetchStatus();
     startPolling();
   }

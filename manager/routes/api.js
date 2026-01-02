@@ -11,43 +11,40 @@ const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
 const { config, ides } = require('../config');
 const { log } = require('../lib/logger');
+const { createClusterCache } = require('../lib/cache');
 
 // Shared tunnel service instance
 const tunnelService = new TunnelService();
 
 // Status cache - reduces SSH calls to HPC clusters
-const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 120000; // 120 seconds default
-let statusCache = {
-  data: null,
-  timestamp: 0,
-};
+// Long TTL (30min) since we invalidate on user actions (launch/kill)
+// Client uses time-aware adaptive polling (15s-1hr) with exponential backoff
+// This ensures multi-user environments see updates immediately via cache invalidation
+// while dramatically reducing SSH load for stable long-running jobs (6-24+ hours)
+const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 1800000; // 30 minutes default
+
+// Per-cluster cache to avoid invalidating both clusters on single job change
+const statusCache = createClusterCache(STATUS_CACHE_TTL);
 
 /**
  * Invalidate the cluster status cache
  * Call after job state changes (cancel, submit) to force fresh poll
+ * @param {string} cluster - Optional cluster name ('gemini' or 'apollo'). If not provided, invalidates all.
  */
-function invalidateStatusCache() {
-  statusCache.timestamp = 0;
-  log.debug('Status cache invalidated');
+function invalidateStatusCache(cluster = null) {
+  statusCache.invalidate(cluster);
 }
 
 /**
- * Fetch fresh cluster status and update cache
- * @param {Object} state - Current state object
+ * Fetch fresh status for a single cluster and update its cache
+ * @param {string} clusterName - Cluster name ('gemini' or 'apollo')
  * @returns {Promise<Object>} Fresh cluster status data
  */
-async function fetchClusterStatus(state) {
-  const now = Date.now();
-  log.info('Fetching fresh cluster status');
+async function fetchSingleClusterStatus(clusterName) {
+  log.info(`Fetching fresh status for ${clusterName}`);
 
-  const geminiService = new HpcService('gemini');
-  const apolloService = new HpcService('apollo');
-
-  // Get all IDE jobs for both clusters in parallel
-  const [geminiJobs, apolloJobs] = await Promise.all([
-    geminiService.getAllJobs(),
-    apolloService.getAllJobs(),
-  ]);
+  const hpcService = new HpcService(clusterName);
+  const jobs = await hpcService.getAllJobs();
 
   const formatJobStatus = (job) => {
     if (!job) return { status: 'idle' };
@@ -79,23 +76,37 @@ async function fetchClusterStatus(state) {
     return result;
   };
 
-  const freshData = {
-    gemini: formatClusterStatus(geminiJobs),
-    apollo: formatClusterStatus(apolloJobs),
+  const freshData = formatClusterStatus(jobs);
+
+  // Update cache for this cluster
+  statusCache.set(clusterName, freshData);
+
+  return freshData;
+}
+
+/**
+ * Fetch fresh cluster status for all clusters and update cache
+ * @param {Object} state - Current state object
+ * @returns {Promise<Object>} Fresh cluster status data for all clusters
+ */
+async function fetchClusterStatus(state) {
+  log.info('Fetching fresh cluster status for all clusters');
+
+  // Fetch both clusters in parallel
+  const [geminiData, apolloData] = await Promise.all([
+    fetchSingleClusterStatus('gemini'),
+    fetchSingleClusterStatus('apollo'),
+  ]);
+
+  return {
+    gemini: geminiData,
+    apollo: apolloData,
     activeSession: state.activeSession,
     ides: Object.fromEntries(
       Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
     ),
     updatedAt: new Date().toISOString(),
   };
-
-  // Update cache
-  statusCache = {
-    data: freshData,
-    timestamp: now,
-  };
-
-  return freshData;
 }
 
 /**
@@ -227,28 +238,48 @@ function createApiRouter(stateManager) {
   router.get('/cluster-status', async (req, res) => {
     const forceRefresh = req.query.refresh === 'true';
     const now = Date.now();
-    const cacheAge = now - statusCache.timestamp;
-    const cacheValid = statusCache.data && cacheAge < STATUS_CACHE_TTL;
-
-    // Return cached data if valid and not forcing refresh
-    if (cacheValid && !forceRefresh) {
-      log.debug('Returning cached cluster status', { ageMs: cacheAge });
-      return res.json({
-        ...statusCache.data,
-        activeSession: state.activeSession,  // Always use current activeSession, not cached
-        cached: true,
-        cacheAge: Math.floor(cacheAge / 1000),
-        cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
-      });
-    }
 
     try {
-      const freshData = await fetchClusterStatus(state);
+      // Check cache status for each cluster
+      const geminiCache = statusCache.get('gemini');
+      const apolloCache = statusCache.get('apollo');
+
+      const geminiFetchNeeded = !geminiCache.valid || forceRefresh;
+      const apolloFetchNeeded = !apolloCache.valid || forceRefresh;
+
+      // Fetch stale clusters in parallel for better performance
+      const promises = [];
+      if (geminiFetchNeeded) {
+        promises.push(fetchSingleClusterStatus('gemini'));
+      } else {
+        log.debug('Using cached gemini status', { ageMs: geminiCache.age });
+        promises.push(Promise.resolve(geminiCache.data));
+      }
+
+      if (apolloFetchNeeded) {
+        promises.push(fetchSingleClusterStatus('apollo'));
+      } else {
+        log.debug('Using cached apollo status', { ageMs: apolloCache.age });
+        promises.push(Promise.resolve(apolloCache.data));
+      }
+
+      const [geminiData, apolloData] = await Promise.all(promises);
+
+      const anyFresh = geminiFetchNeeded || apolloFetchNeeded;
+      const geminiCacheAge = geminiFetchNeeded ? 0 : geminiCache.age;
+      const apolloCacheAge = apolloFetchNeeded ? 0 : apolloCache.age;
+      const maxCacheAge = Math.max(geminiCacheAge, apolloCacheAge);
 
       res.json({
-        ...freshData,
-        cached: false,
-        cacheAge: 0,
+        gemini: geminiData,
+        apollo: apolloData,
+        activeSession: state.activeSession,  // Always use current activeSession, not cached
+        ides: Object.fromEntries(
+          Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
+        ),
+        updatedAt: new Date().toISOString(),
+        cached: !anyFresh,
+        cacheAge: Math.floor(maxCacheAge / 1000),
         cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
       });
     } catch (e) {
@@ -377,8 +408,9 @@ function createApiRouter(stateManager) {
       state.activeSession = { hpc, ide };
       await stateManager.save();
 
-      // Invalidate cache and fetch fresh status after successful launch
-      invalidateStatusCache();
+      // Invalidate cache for this cluster and fetch fresh status after successful launch
+      // This ensures ALL users (multi-user environment) see the new job on their next poll
+      invalidateStatusCache(hpc);
       let clusterStatus = null;
       try {
         clusterStatus = await fetchClusterStatus(state);
@@ -511,11 +543,11 @@ function createApiRouter(stateManager) {
 
     await stateManager.save();
 
-    // If we cancelled a job, invalidate cache and fetch fresh status
-    // This ensures the UI immediately sees the freed slot
+    // If we cancelled a job, invalidate cache for this cluster and fetch fresh status
+    // This ensures ALL users (multi-user environment) immediately see the freed slot
     let clusterStatus = null;
     if (jobCancelled) {
-      invalidateStatusCache();
+      invalidateStatusCache(hpc);
       try {
         // Small delay to let SLURM process the cancellation
         await new Promise(resolve => setTimeout(resolve, 1000));

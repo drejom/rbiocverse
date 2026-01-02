@@ -15,6 +15,11 @@ describe('parseTimeToSeconds', () => {
       expect(parseTimeToSeconds('10-05:15:30')).to.equal(882930); // 10*86400 + 5*3600 + 15*60 + 30
     });
 
+    it('should parse MM:SS format (SLURM short format for <1hr)', () => {
+      expect(parseTimeToSeconds('12:00')).to.equal(720); // 12 minutes
+      expect(parseTimeToSeconds('30:45')).to.equal(1845); // 30 min 45 sec
+    });
+
     it('should handle zero values', () => {
       expect(parseTimeToSeconds('00:00:00')).to.equal(0);
       expect(parseTimeToSeconds('0-00:00:00')).to.equal(0);
@@ -35,7 +40,6 @@ describe('parseTimeToSeconds', () => {
     });
 
     it('should return null for invalid format', () => {
-      expect(parseTimeToSeconds('12:00')).to.be.null;
       expect(parseTimeToSeconds('120000')).to.be.null;
       expect(parseTimeToSeconds('invalid')).to.be.null;
     });
