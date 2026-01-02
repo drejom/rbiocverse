@@ -550,3 +550,119 @@ Proxy would expect `--session-root-path /rstudio-direct`.
 ### Commits
 - c212bfa: Fix ${dollar} pattern for shell vars in rsession.sh
 - d8c4cfd: Disable X-RStudio-Root-Path header to test rsession spawning
+
+---
+
+## 2026-01-02 (cont): X-RStudio-Root-Path Theory DISPROVEN
+
+### Test Results
+
+Removed `X-RStudio-Root-Path` header from proxy - **rsession still doesn't spawn**.
+
+### Critical Discovery: Issue is NOT about spawning
+
+Tested with rsession already running (spawned via direct tunnel):
+
+| Test | Result |
+|------|--------|
+| Direct tunnel login | rsession spawns, R Console loads ✅ |
+| Proxy login (fresh job) | rsession never spawns, stuck on spinner ❌ |
+| **Proxy with EXISTING rsession** | **STILL stuck on spinner** ❌ |
+
+This proves: **The proxy can't communicate with rsession even when it's already running.**
+
+### RPC Investigation
+
+The `/rpc/client_init` POST is the critical call that triggers rsession spawn and connects the GWT client.
+
+```
+Proxy logs show:
+- proxyReq: POST /rpc/client_init ... (request sent)
+- NO proxyRes logged for /rpc/* endpoints
+- Browser keeps retrying GET / in a loop
+```
+
+The RPC request goes out but no response comes back. Connection doesn't reset (no ECONNRESET) - the response just... vanishes.
+
+### Possible Causes
+
+1. **Response buffering**: http-proxy may not correctly stream chunked/long-poll RPC responses
+2. **Cookie path mismatch**: Cookies set with `path=/` vs `path=/rstudio-direct`
+3. **Content-Type handling**: RStudio RPC uses custom content types
+4. **Body rewriting needed**: Response body may contain absolute URLs that break
+
+### Next Steps
+
+- Web search for similar RStudio reverse proxy issues
+- Check if others use Nginx/Apache instead of Node http-proxy for RStudio
+- Look for RStudio-specific proxy configuration requirements
+
+---
+
+## 2026-01-02 (cont): ROOT CAUSE FOUND - Missing www-root-path
+
+### Web Search Results
+
+Searched for RStudio reverse proxy issues and found:
+
+1. **Posit official docs** require:
+   - `proxy_buffering off` for streaming/long-polling
+   - `proxy_read_timeout 20d` for long connections
+   - WebSocket upgrade headers
+   - **`www-root-path` in rserver.conf when proxying under a subpath**
+
+2. **jupyter-rsession-proxy** (solves the exact same problem):
+   - Sets `--www-root-path={base_url}rstudio/` in rserver args
+   - Implements `rewrite_netloc` to fix Location headers
+   - This is how JupyterHub proxies RStudio successfully
+
+### The Root Cause
+
+**Our rserver.conf is missing `www-root-path=/rstudio-direct/`**
+
+Current config (hpc.js lines 135-137):
+```
+rsession-which-r=/usr/local/bin/R
+auth-cookies-force-secure=0
+```
+
+When RStudio doesn't know its root path:
+1. Generates cookies with `path=/` instead of `path=/rstudio-direct`
+2. Internal URLs lack the `/rstudio-direct` prefix
+3. `/rpc/client_init` response contains incorrect paths
+4. Cookie validation fails, rsession connection breaks
+
+### Evidence
+
+The rsession process shows `--session-root-path /` when spawned via direct tunnel:
+```
+/usr/lib/rstudio-server/bin/rsession ... --session-root-path / ...
+```
+
+This is correct for direct access but wrong for proxy access at `/rstudio-direct/`.
+
+### The Fix
+
+Add to rserver.conf:
+```
+www-root-path=/rstudio-direct/
+```
+
+This tells rserver:
+- Generate cookies with correct path
+- Prefix all internal URLs with `/rstudio-direct`
+- rsession will use `--session-root-path /rstudio-direct/`
+
+### References
+
+- https://github.com/jupyterhub/jupyter-rsession-proxy - uses `--www-root-path`
+- https://docs.posit.co/ide/server-pro/access_and_security/running_with_a_proxy.html
+- https://github.com/rstudio/rstudio/issues/2173 - "Unable to establish connection"
+- https://doc.traefik.io/traefik/user-guides/websocket/ - Traefik websocket config
+
+### Implementation Plan
+
+1. Update `buildRstudioWrap()` in hpc.js to add `www-root-path=/rstudio-direct/` to rserver.conf
+2. Remove the cookie path rewriting in server.js (line 124) - no longer needed
+3. Re-enable the `X-RStudio-Root-Path` header (optional, may help)
+4. Deploy and test

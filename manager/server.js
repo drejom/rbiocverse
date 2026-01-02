@@ -75,10 +75,8 @@ rstudioProxy.on('error', (err, req, res) => {
 });
 
 // Log proxy requests for debugging
-// NOTE: Removed X-RStudio-Root-Path header - it was preventing rsession from spawning
-// when rserver.conf doesn't have www-root-path set
 rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
-  // proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');  // DISABLED
+  proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
   log.debug(`RStudio proxyReq`, {
     method: req.method,
     url: req.url,
