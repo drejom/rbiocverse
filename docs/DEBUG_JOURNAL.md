@@ -497,3 +497,56 @@ This is a minor debugging issue - the actual functionality works.
 - Job: 28780221 on g-h-1-8-19
 - Both direct tunnel and proxy access: **WORKING**
 - Commit: 342ad54
+
+---
+
+## 2026-01-02: rsession.sh Escaping Fix and Proxy Investigation
+
+### Fix 1: $HOME escaping in template literals
+
+**Problem**: `\$HOME` in JS template literal produces `\$HOME` (with backslash) in base64 output.
+
+**Solution**: Use a variable to inject the `$` character:
+```javascript
+const dollar = '$';
+const script = `LOG=${dollar}HOME/.rstudio-slurm/rsession.log`;
+```
+
+This produces clean `$HOME` without backslash. Updated ESCAPING.md with this lesson.
+
+### Fix 2: Password hardcoded to 1111 for testing
+
+Temporarily set `generatePassword()` to return '1111' for easier debugging.
+
+### Discovery: Direct Tunnel Works, Proxy Doesn't
+
+After fixing escaping, tested both access methods:
+
+| Method | rsession spawns? | rsession.log created? |
+|--------|-----------------|----------------------|
+| Direct SSH tunnel (localhost:8787) | YES | YES |
+| Proxy (hpc.omeally.com/rstudio-direct/) | NO | NO |
+
+**Key Evidence**:
+```bash
+# Direct tunnel - rsession.sh gets called:
+=== rsession.sh called at Fri Jan  2 01:42:09 AM MST 2026 ===
+Args: -u domeally --session-root-path / ...
+HOME=/home/domeally PWD=/
+
+# Proxy - rsession.sh NEVER called
+# But GWT JavaScript UI loads (showing spinner)
+```
+
+### Theory: X-RStudio-Root-Path Header
+
+The proxy sets `X-RStudio-Root-Path: /rstudio-direct` header. Without `www-root-path` in rserver.conf, this header might cause rserver to reject session creation or behave unexpectedly.
+
+Direct tunnel rsession shows `--session-root-path /` (root).
+Proxy would expect `--session-root-path /rstudio-direct`.
+
+**Test**: Disabled the X-RStudio-Root-Path header in server.js to see if rsession spawns via proxy.
+
+### Commits
+- c212bfa: Fix ${dollar} pattern for shell vars in rsession.sh
+- d8c4cfd: Disable X-RStudio-Root-Path header to test rsession spawning
