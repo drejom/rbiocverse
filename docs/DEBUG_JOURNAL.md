@@ -849,3 +849,93 @@ router.use(express.json());  // Only parse JSON for /api routes
 ### Key Lesson
 **Never use body-parsing middleware globally when using http-proxy.**
 Body parsers consume the request stream, leaving nothing for the proxy to forward.
+
+---
+
+## 2026-01-02: Floating Menu Blocking Clicks
+
+### Problem
+After RStudio proxy fix, users couldn't delete/rename files in RStudio UI. The floating menu iframe (320x450px) was capturing clicks in transparent areas.
+
+### Root Cause
+```css
+#hpc-menu-frame {
+  width: 320px;
+  height: 450px;
+  pointer-events: auto;  /* Captures ALL clicks in rectangle */
+}
+```
+
+### Failed Fix: pointer-events: none
+Setting `pointer-events: none` on the iframe lets clicks through but **blocks ALL interaction** - can't click OR drag the menu button.
+
+### Working Fix: Dynamic iframe sizing
+Iframe starts small (50x50px = toggle button only), expands when menu opens:
+
+```css
+#hpc-menu-frame {
+  width: 50px;
+  height: 50px;
+  transition: width 0.15s, height 0.15s;
+}
+#hpc-menu-frame.expanded {
+  width: 260px;
+  height: 400px;
+}
+```
+
+Menu sends `postMessage` to parent on open/close:
+```javascript
+parent.postMessage({ type: open ? 'hpc-menu-expand' : 'hpc-menu-collapse' }, '*');
+```
+
+Parent toggles `.expanded` class on iframe.
+
+---
+
+## 2026-01-02: VS Code Tunnel Wrong Node
+
+### Problem
+VS Code showed garbled UI (missing CSS). Logs showed `Connection refused` errors.
+
+### Root Cause
+SSH tunnel was pointing to **old node** (g-h-1-8-17) while job was running on **new node** (g-c-1-7-30).
+
+```
+# Tunnel in container:
+ssh -L 8000:g-h-1-8-17:8000 ...  # WRONG NODE
+
+# Actual job:
+squeue shows: g-c-1-7-30  # CORRECT NODE
+```
+
+### Why It Happened
+Container restart or state desync caused tunnel to persist with stale node info while job migrated or was relaunched on different node.
+
+### Fix
+Restart manager container to clear all stale tunnels:
+```bash
+docker restart omhq-hpc-code-server-prod-app
+```
+
+Then reconnect to rebuild tunnel with correct node.
+
+### Prevention
+- Manager should verify tunnel target matches current job node before proxying
+- Consider adding tunnel health check that validates node matches squeue output
+
+---
+
+## Summary: All Fixes Applied 2026-01-02
+
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| RStudio spinner (client_init hangs) | `express.json()` consuming POST body | Move to `/api` router only |
+| Menu blocking RStudio clicks | Large iframe with `pointer-events: auto` | Dynamic iframe sizing (50x50 → 260x400) |
+| VS Code garbled/no CSS | Tunnel pointing to wrong node | Restart container to clear stale tunnels |
+
+### Key Architecture Lessons
+
+1. **Body parsers + http-proxy don't mix** - body parsers consume streams
+2. **Overlay iframes need dynamic sizing** - or they block underlying UI
+3. **SSH tunnels can become stale** - node info can change without tunnel update
