@@ -157,6 +157,197 @@ get_tag_for_commit <- function(user, repo, sha) {
   }, error = function(e) NULL)
 }
 
+#' Make authenticated GitHub API request
+#' Uses gh CLI if available (handles auth automatically), otherwise falls back to direct API
+#' @param endpoint GitHub API endpoint (e.g., "repos/owner/repo")
+#' @return Parsed JSON response or NULL on error
+github_api_get <- function(endpoint) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+
+  # Remove full URL prefix if present
+
+  endpoint <- sub("^https://api.github.com/", "", endpoint)
+
+  # Try using gh CLI first (handles auth automatically)
+  gh_available <- tryCatch({
+    system2("gh", "--version", stdout = FALSE, stderr = FALSE) == 0
+  }, error = function(e) FALSE)
+
+  if (gh_available) {
+    result <- tryCatch({
+      output <- system2("gh", c("api", endpoint), stdout = TRUE, stderr = FALSE)
+      if (length(output) > 0) {
+        jsonlite::fromJSON(paste(output, collapse = "\n"))
+      } else {
+        NULL
+      }
+    }, error = function(e) NULL, warning = function(w) NULL)
+
+    if (!is.null(result)) return(result)
+  }
+
+  # Fall back to direct API call (may hit rate limits)
+  url <- paste0("https://api.github.com/", endpoint)
+  tryCatch({
+    jsonlite::fromJSON(url)
+  }, error = function(e) NULL)
+}
+
+#' Validate a GitHub remote: check if ref exists and if package is now on CRAN/Bioc
+#' @param remote_str Full remote string (e.g., "user/repo@ref")
+#' @param available_pkgs Vector of available CRAN/Bioc package names
+#' @return List with status, message, and suggested action
+validate_github_remote <- function(remote_str, available_pkgs = NULL) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    return(list(valid = TRUE, message = "jsonlite not available, skipping validation"))
+  }
+
+  # Skip URL remotes
+  if (grepl("^url::", remote_str)) {
+    return(list(valid = TRUE, message = "URL remote, skipping"))
+  }
+
+  # Parse the remote string
+  if (grepl("@", remote_str)) {
+    parts <- strsplit(remote_str, "@")[[1]]
+    repo <- parts[1]
+    ref <- parts[2]
+  } else {
+    repo <- remote_str
+    ref <- NULL
+  }
+
+  # Extract package name (last part of repo path, handling subdirs)
+  repo_parts <- strsplit(repo, "/")[[1]]
+  pkg_name <- repo_parts[length(repo_parts)]
+  user_repo <- paste(repo_parts[1:min(2, length(repo_parts))], collapse = "/")
+
+  result <- list(
+    remote = remote_str,
+    package = pkg_name,
+    valid = TRUE,
+    on_cran = FALSE,
+    ref_exists = TRUE,
+    message = "OK",
+    action = NULL
+  )
+
+  # Check if package is now on CRAN/Bioconductor
+  if (!is.null(available_pkgs) && pkg_name %in% available_pkgs) {
+    result$on_cran <- TRUE
+    result$message <- sprintf("Package '%s' is now on CRAN/Bioconductor", pkg_name)
+    result$action <- "remove_remote"
+  }
+
+  # Check if repo exists at all first
+  repo_url <- sprintf("https://api.github.com/repos/%s", user_repo)
+  repo_info <- github_api_get(repo_url)
+  repo_exists <- !is.null(repo_info)
+
+  # Check if the ref exists (only if we have a specific ref and repo exists)
+  if (repo_exists && !is.null(ref) && ref != "HEAD" && ref != "main" && ref != "master") {
+    # Try as a branch first
+    branch_url <- sprintf("https://api.github.com/repos/%s/branches/%s", user_repo, ref)
+    branch_info <- github_api_get(branch_url)
+
+    if (is.null(branch_info)) {
+      # Try as a tag
+      tag_url <- sprintf("https://api.github.com/repos/%s/git/refs/tags/%s", user_repo, ref)
+      tag_info <- github_api_get(tag_url)
+
+      if (is.null(tag_info)) {
+        # Try as a commit SHA
+        commit_url <- sprintf("https://api.github.com/repos/%s/commits/%s", user_repo, ref)
+        commit_info <- github_api_get(commit_url)
+
+        if (is.null(commit_info)) {
+          result$valid <- FALSE
+          result$ref_exists <- FALSE
+          result$message <- sprintf("Ref '%s' not found for %s", ref, user_repo)
+          result$action <- "update_ref"
+        }
+      }
+    }
+  }
+
+  if (!repo_exists) {
+    result$valid <- FALSE
+    result$message <- sprintf("Repository '%s' not found (may have moved or been deleted)", user_repo)
+    result$action <- "remove_or_update"
+  }
+
+  result
+}
+
+#' Validate all GitHub remotes in DESCRIPTION
+#' @param fix If TRUE, remove remotes that are now on CRAN/Bioc
+#' @param path Path to DESCRIPTION file
+#' @return List of validation results
+#' @export
+validate_remotes <- function(fix = FALSE, path = DESCRIPTION_PATH) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("jsonlite required: install.packages('jsonlite')", call. = FALSE)
+  }
+
+  desc <- read_description(path)
+  remotes <- parse_remotes(desc$Remotes)
+
+  if (length(remotes) == 0) {
+    message("No Remotes to validate")
+    return(invisible(list()))
+  }
+
+  message("Validating ", length(remotes), " GitHub remotes...")
+
+  # Get available packages for CRAN/Bioc check
+  available <- get_available_packages()
+
+  results <- list()
+  issues <- list()
+  to_remove <- character(0)
+
+  for (r in remotes) {
+    result <- validate_github_remote(r$full, available)
+    results[[r$full]] <- result
+
+    if (isFALSE(result$valid) || isTRUE(result$on_cran)) {
+      issues[[r$full]] <- result
+
+      if (isTRUE(result$on_cran)) {
+        message(sprintf("  NOW ON CRAN: %s -> remove from Remotes", r$full))
+        to_remove <- c(to_remove, r$full)
+      } else if (isFALSE(result$ref_exists)) {
+        message(sprintf("  INVALID REF: %s - %s", r$full, result$message))
+      } else {
+        message(sprintf("  INVALID: %s - %s", r$full, result$message))
+      }
+    }
+  }
+
+  if (length(issues) == 0) {
+    message("All remotes valid!")
+  } else {
+    message("\n", length(issues), " remotes need attention")
+
+    if (fix && length(to_remove) > 0) {
+      message("\nRemoving ", length(to_remove), " remotes now on CRAN/Bioc...")
+      current_remotes <- sapply(remotes, function(r) r$full)
+      new_remotes <- setdiff(current_remotes, to_remove)
+
+      if (length(new_remotes) > 0) {
+        remotes_str <- paste("    ", new_remotes, collapse = ",\n")
+        desc$Remotes <- paste0("\n", remotes_str)
+      } else {
+        desc$Remotes <- NULL
+      }
+      write_description(desc, path)
+      message("Removed ", length(to_remove), " remotes")
+    }
+  }
+
+  invisible(list(results = results, issues = issues, removed = to_remove))
+}
+
 #' Get GitHub remote info from an installed package's DESCRIPTION
 #' @param pkg Package name
 #' @param lib Library path (defaults to .libPaths()[1])
@@ -700,7 +891,7 @@ bump <- function(type = "patch", path = DESCRIPTION_PATH) {
   invisible(new_version)
 }
 
-#' Full update: check packages, update remotes, bump version
+#' Full update: check packages, validate remotes, update remotes, bump version
 #' @export
 full_update <- function(bump_type = "patch", dry_run = TRUE, path = DESCRIPTION_PATH) {
   # Get current state before changes
@@ -709,6 +900,9 @@ full_update <- function(bump_type = "patch", dry_run = TRUE, path = DESCRIPTION_
 
   message("=== Checking package availability ===")
   unavailable <- check_packages(fix = !dry_run, path = path)
+
+  message("\n=== Validating GitHub remotes ===")
+  validate_remotes(fix = !dry_run, path = path)
 
   message("\n=== Updating GitHub remotes ===")
   update_remotes(dry_run = dry_run, path = path)
@@ -750,10 +944,11 @@ if (!interactive()) {
     message("                     --merge (default): only add packages, never remove")
     message("                     --replace: replace with installed packages")
     message("  check [--apply]    Check package availability, remove unavailable")
+    message("  validate [--apply] Validate GitHub remotes (refs exist, not on CRAN)")
     message("  remotes [--apply]  Update GitHub remote pins (dry-run by default)")
     message("  suggest            Show installed packages not in DESCRIPTION")
     message("  bump [type]        Bump version (patch|minor|major|bioc)")
-    message("  update [--apply]   Full update (check + remotes + bump)")
+    message("  update [--apply]   Full update (check + validate + remotes + bump)")
     message("")
     message("Multi-cluster sync workflow:")
     message("  1. Sync from Cluster A (merge mode, adds packages):")
@@ -781,6 +976,8 @@ if (!interactive()) {
     sync_from_environment(dry_run = !apply_flag, merge = merge_mode)
   } else if (cmd == "check") {
     check_packages(fix = apply_flag)
+  } else if (cmd == "validate") {
+    validate_remotes(fix = apply_flag)
   } else if (cmd == "remotes") {
     update_remotes(dry_run = !apply_flag)
   } else if (cmd == "suggest") {
