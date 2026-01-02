@@ -666,3 +666,71 @@ This tells rserver:
 2. Remove the cookie path rewriting in server.js (line 124) - no longer needed
 3. Re-enable the `X-RStudio-Root-Path` header (optional, may help)
 4. Deploy and test
+
+---
+
+## 2026-01-02 (cont): Multiple Fixes Applied - SUCCESS!
+
+### Fix 1: http-proxy keepAlive issue
+
+**Error**: `Parse Error: Data after Connection: close`
+
+RStudio's rserver sends `Connection: close` header but http-proxy was keeping connections alive.
+
+**Solution**: Add custom agent with `keepAlive: false`:
+```javascript
+agent: new (require('http').Agent)({ keepAlive: false }),
+```
+
+Note: This fixed GET requests but HEAD still fails (acceptable).
+
+### Fix 2: www-root-path trailing slash
+
+**Error**: `Client unauthorized` (error code 3) on `/rpc/client_init`
+
+The cookie was set with `path=/rstudio-direct` but rserver.conf had `www-root-path=/rstudio-direct/` (with trailing slash). This mismatch caused cookie validation to fail.
+
+**Solution**: Remove trailing slash from www-root-path:
+```
+www-root-path=/rstudio-direct
+```
+
+### Fix 3: Missing X-RS-CSRF-Token header
+
+**Error**: `Missing X-RS-CSRF-Token header` on client_init
+
+The browser JavaScript sends this header. Direct curl tests without it fail. The proxy correctly passes this header through.
+
+### Final Working State
+
+After all fixes:
+- Login works via proxy ✅
+- user-id cookie set and sent correctly ✅
+- client_init returns full session JSON ✅
+- rsession.sh called with correct args ✅
+- rsession process spawns ✅
+
+```bash
+# rsession.log shows:
+=== rsession.sh called at Fri Jan  2 03:53:47 AM MST 2026 ===
+Args: -u domeally --session-use-secure-cookies 0 --session-root-path /rstudio-direct ...
+HOME=/home/domeally PWD=/
+```
+
+### Key Commits
+- 2d5e008: Disable keepAlive for RStudio proxy
+- cc646dd: Remove trailing slash from www-root-path
+
+### Remaining Issues
+
+1. **HEAD requests fail** - `Parse Error` on HEAD, but GET works. Low priority.
+2. **R Console detection** - Puppeteer DOM detection shows "Has R Console: false" but RStudio loads visually.
+
+### Architecture Summary
+
+Working RStudio reverse proxy requirements:
+1. `www-root-path=/rstudio-direct` in rserver.conf (NO trailing slash)
+2. Cookie path matches www-root-path exactly
+3. `keepAlive: false` in http-proxy agent
+4. `X-RStudio-Root-Path` header set by proxy
+5. `SameSite=None; Secure` for iframe cookie support
