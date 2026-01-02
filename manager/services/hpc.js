@@ -139,15 +139,17 @@ auth-cookies-force-secure=0
 
     const rsessionScript = `#!/bin/sh
 # Debug: capture all output including rsession stderr
-LOG=~/.rstudio-slurm/rsession.log
+# Use \\$HOME instead of ~ for reliable path resolution inside singularity
+LOG=\\$HOME/.rstudio-slurm/rsession.log
 echo "=== rsession.sh called at \\$(date) ===" >> \\$LOG
 echo "Args: \\$@" >> \\$LOG
+echo "HOME=\\$HOME PWD=\\$(pwd)" >> \\$LOG
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
 export R_LIBS_SITE=${this.cluster.rLibsSite}
-export R_LIBS_USER=~/R/bioc-3.19
+export R_LIBS_USER=\\$HOME/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 # Run rsession and capture exit code (don't use exec so we can log exit)
@@ -212,7 +214,9 @@ exit \\$RC
    * @returns {string} 4-digit password
    */
   generatePassword() {
-    return String(Math.floor(1000 + Math.random() * 9000));
+    // TODO: restore random password after debugging
+    // return String(Math.floor(1000 + Math.random() * 9000));
+    return '1111';
   }
 
   /**
