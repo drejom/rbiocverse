@@ -17,7 +17,9 @@ const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 
 const app = express();
-app.use(express.json());
+// NOTE: Do NOT use express.json() globally - it consumes request body streams
+// which breaks http-proxy for POST requests (like RStudio's /rpc/client_init).
+// Body parsing is applied only to /api routes in routes/api.js
 
 // Prevent caching issues - VS Code uses service workers that can cache stale paths
 // Safari is particularly aggressive about caching, so we use multiple headers

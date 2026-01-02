@@ -5,6 +5,9 @@
 
 const express = require('express');
 const router = express.Router();
+
+// Parse JSON bodies only for API routes (not globally, which breaks http-proxy)
+router.use(express.json());
 const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');

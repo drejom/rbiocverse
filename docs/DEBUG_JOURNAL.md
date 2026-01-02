@@ -794,3 +794,58 @@ The `proxy.web(req, res, {}, callback)` pattern BREAKS response streaming!
 - Previous code had this callback which was removed in c783256
 
 But proxyRes STILL doesn't fire even without the callback. The issue is deeper.
+
+---
+
+## 2026-01-02: ROOT CAUSE FOUND - express.json() Breaks Proxy
+
+### Discovery
+Added `start`/`end` event logging to proxy. Result:
+- `proxy start` fires for `/rpc/client_init`
+- `proxyReq` fires
+- **NO `proxy end` for client_init** - request never completes
+- All other requests (GET for assets) have matching start/end pairs
+
+### The Root Cause: `express.json()` consumes POST bodies
+
+```javascript
+// server.js line 20 - PROBLEM!
+app.use(express.json());
+```
+
+When `express.json()` is applied globally:
+1. Express middleware parses and consumes the request body stream
+2. `req.body` is populated with parsed JSON
+3. **The original body stream is now empty**
+4. http-proxy forwards request with empty body
+5. rserver waits for POST body that never arrives → **request hangs**
+
+### Evidence
+- All GET requests work (no body to consume)
+- POST /api/* routes work (they read `req.body` after Express parses it)
+- POST /rpc/client_init hangs (proxy tries to forward empty stream)
+- rsession IS spawning (confirmed via rsession.log) - backend works!
+- Direct curl to rserver with body works perfectly
+
+### The Fix
+Move `express.json()` from global middleware to only the `/api` router:
+
+**server.js:**
+```javascript
+// REMOVED: app.use(express.json());
+```
+
+**routes/api.js:**
+```javascript
+const router = express.Router();
+router.use(express.json());  // Only parse JSON for /api routes
+```
+
+### Why This Works
+- `/api/*` routes need body parsing → they use `req.body`
+- `/rstudio/*` proxy routes need raw stream → http-proxy forwards it
+- `/rstudio-direct/*` proxy routes need raw stream → http-proxy forwards it
+
+### Key Lesson
+**Never use body-parsing middleware globally when using http-proxy.**
+Body parsers consume the request stream, leaving nothing for the proxy to forward.
