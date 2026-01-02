@@ -62,11 +62,10 @@ get_cluster_config <- function(cluster = detect_cluster(), bioc_version = "3.22"
       sif = sprintf("/opt/singularity-images/rbioc/vscode-rbioc_%s.sif", bioc_version),
       lib = sprintf("/opt/singularity-images/rbioc/rlibs/bioc-%s", bioc_version),
       bind = "/opt,/labs,/run,/ref_genome",
-      # Apollo has smaller nodes (median 28 CPUs)
       phase1_cpus = 24,
       phase1_mem = "48G",
       phase1_time = "4:00:00",
-      phase2_cpus = 4,
+      phase2_cpus = 8,
       phase2_mem = "16G",
       phase2_time = "2:00:00"
     )
