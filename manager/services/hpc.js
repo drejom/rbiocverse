@@ -115,14 +115,18 @@ class HpcService {
   /**
    * Build sbatch wrap command for RStudio
    * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
+   * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required
    * @param {number} cpus - Number of CPUs
-   * @param {string} password - Auto-generated password for PAM auth
    * @returns {string} sbatch wrap command
    */
-  buildRstudioWrap(cpus, password) {
+  buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
-    // Use \\$HOME to escape $ through SSH double quotes - preserved for compute node
-    const workdir = '\\$HOME/.rstudio-slurm/workdir';
+    // Use ${dollar} pattern to inject shell $ into base64-encoded scripts
+    // JS template literals interpret ${...} as substitution, so we use ${dollar}
+    // to inject a literal $ character. The dollar variable is set to '$' below.
+    // See docs/ESCAPING.md for full explanation.
+    const dollar = '$';
+    const workdir = `${dollar}HOME/.rstudio-slurm/workdir`;
 
     // Use base64 encoding for ALL config files to avoid escaping issues
     // See docs/ESCAPING.md for rationale
@@ -135,19 +139,12 @@ directory=/var/lib/rstudio-server
     const rserverConf = `rsession-which-r=/usr/local/bin/R
 auth-cookies-force-secure=0
 www-root-path=/rstudio-direct
+session-save-action-default=no
 `;
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
 
-    // Build rsession script - use template variables for shell vars to avoid escaping issues
-    // Base64 encoding preserves content exactly, so we need clean $ signs (not \$)
-    const dollar = '$';  // Use variable to avoid template literal interpretation
     const rsessionScript = `#!/bin/sh
-# Debug: capture all output including rsession stderr
-# Use ${dollar}HOME instead of ~ for reliable path resolution inside singularity
-LOG=${dollar}HOME/.rstudio-slurm/rsession.log
-echo "=== rsession.sh called at ${dollar}(date) ===" >> ${dollar}LOG
-echo "Args: ${dollar}@" >> ${dollar}LOG
-echo "HOME=${dollar}HOME PWD=${dollar}(pwd)" >> ${dollar}LOG
+exec 2>>${dollar}HOME/.rstudio-slurm/rsession.log
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
@@ -156,11 +153,7 @@ export R_LIBS_SITE=${this.cluster.rLibsSite}
 export R_LIBS_USER=${dollar}HOME/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
-# Run rsession and capture exit code (don't use exec so we can log exit)
-/usr/lib/rstudio-server/bin/rsession "${dollar}@" 2>> ${dollar}LOG
-RC=${dollar}?
-echo "=== rsession exited with code ${dollar}RC at ${dollar}(date) ===" >> ${dollar}LOG
-exit ${dollar}RC
+exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
@@ -183,12 +176,12 @@ exit ${dollar}RC
     ].join(',');
 
     // Build rserver command
-    // Use SINGULARITYENV_ prefix to pass env vars into container (required for pam-helper)
-    // PAM auth with auto-generated password (auth-none=1 broken in RStudio 2024.x)
-    // Note: --cleanenv removes user env vars but SINGULARITYENV_ vars are preserved
+    // Use auth-none=1 mode like jupyter-rsession-proxy - no login required
+    // See: https://github.com/jupyterhub/jupyter-rsession-proxy
+    // --secure-cookie-key-file must be unique per session to avoid conflicts
+    // --www-frame-origin=same allows iframe embedding from same origin
+    // --www-verify-user-agent=0 relaxes browser agent checks
     const envSetup = [
-      'export SINGULARITYENV_USER=\\$(whoami)',
-      `export SINGULARITYENV_PASSWORD=${password}`,
       'export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0',
     ].join(' && ');
 
@@ -200,11 +193,11 @@ exit ${dollar}RC
       `rserver`,
       '--www-address=0.0.0.0',
       `--www-port=${ideConfig.port}`,
-      '--server-user=\\$(whoami)',
-      '--auth-none=0',
-      '--auth-pam-helper-path=pam-helper',
-      '--auth-stay-signed-in-days=30',
-      '--auth-timeout-minutes=0',
+      `--server-user=$(whoami)`,
+      '--auth-none=1',
+      '--www-frame-origin=same',
+      '--www-verify-user-agent=0',
+      `--secure-cookie-key-file=${workdir}/secure-cookie-key`,
       '--rsession-path=/etc/rstudio/rsession.sh',
     ].join(' ');
 
@@ -214,22 +207,12 @@ exit ${dollar}RC
   }
 
   /**
-   * Generate a random password for RStudio PAM auth
-   * @returns {string} 4-digit password
-   */
-  generatePassword() {
-    // TODO: restore random password after debugging
-    // return String(Math.floor(1000 + Math.random() * 9000));
-    return '1111';
-  }
-
-  /**
    * Submit a new SLURM job for an IDE
    * @param {string} cpus - Number of CPUs
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
    * @param {string} ide - IDE type ('vscode', 'rstudio')
-   * @returns {Promise<{jobId: string, password?: string}>} Job ID and password (for RStudio)
+   * @returns {Promise<{jobId: string}>} Job ID
    */
   async submitJob(cpus, mem, time, ide = 'vscode') {
     const ideConfig = ides[ide];
@@ -241,14 +224,12 @@ exit ${dollar}RC
 
     // Build IDE-specific wrap command
     let wrapCmd;
-    let password = null;
     switch (ide) {
       case 'vscode':
         wrapCmd = this.buildVscodeWrap();
         break;
       case 'rstudio':
-        password = this.generatePassword();
-        wrapCmd = this.buildRstudioWrap(cpus, password);
+        wrapCmd = this.buildRstudioWrap(cpus);
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
@@ -275,7 +256,7 @@ exit ${dollar}RC
     }
 
     log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time });
-    return { jobId: match[1], password };
+    return { jobId: match[1] };
   }
 
   /**

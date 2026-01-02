@@ -144,7 +144,6 @@ function createApiRouter(stateManager) {
       memory: null,
       walltime: null,
       error: null,
-      password: null,  // RStudio PAM auth password (for proxy auto-login)
     };
   }
 
@@ -380,7 +379,6 @@ function createApiRouter(stateManager) {
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         session.jobId = result.jobId;
-        session.password = result.password;  // null for vscode, set for rstudio
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
       } else {
         session.jobId = jobInfo.jobId;

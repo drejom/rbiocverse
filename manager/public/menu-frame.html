@@ -274,7 +274,7 @@
 
       if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
         hasMoved = true;
-        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, '*');
+        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, window.location.origin);
         dragStartX = touch.clientX;
         dragStartY = touch.clientY;
       }
@@ -287,8 +287,13 @@
         open = !open;
         toggle.classList.toggle('open', open);
         panel.classList.toggle('open', open);
-        // Tell parent to resize iframe
-        parent.postMessage({ type: open ? 'hpc-menu-expand' : 'hpc-menu-collapse' }, '*');
+
+
+
+
+        // Notify parent wrapper to resize iframe dynamically
+        parent.postMessage({ type: open ? 'hpc-menu-expand' : 'hpc-menu-collapse' }, window.location.origin);
+
       }
     }
 

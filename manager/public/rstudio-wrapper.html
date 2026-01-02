@@ -10,16 +10,18 @@
       height: 100%;
       border: none;
     }
+    /* Dynamic sizing: small when collapsed to avoid blocking clicks on IDE UI */
     #hpc-menu-frame {
       position: fixed;
       top: 10px;
       right: 10px;
-      width: 50px;   /* Start small - just the toggle button */
+      width: 50px;
       height: 50px;
       border: none;
       z-index: 2147483647;
+      pointer-events: auto;
       background: transparent;
-      transition: width 0.15s, height 0.15s;
+      transition: width 0.15s ease-out, height 0.15s ease-out;
     }
     #hpc-menu-frame.expanded {
       width: 260px;
@@ -42,60 +44,31 @@
   </div>
   <iframe id="rstudio-frame" src="" style="display:none;"></iframe>
   <iframe id="hpc-menu-frame" src="/hpc-menu-frame"></iframe>
+  <script src="/js/menu-handler.js"></script>
   <script>
     // Simple RStudio wrapper - just load the direct proxy
     document.addEventListener('DOMContentLoaded', function() {
       const frame = document.getElementById('rstudio-frame');
       const loading = document.getElementById('loading');
 
-      console.log('[RStudio Wrapper] DOMContentLoaded, setting iframe src');
-
       // RStudio doesn't need cache clearing like VS Code
       frame.src = '/rstudio-direct/';
 
       frame.onload = function() {
-        console.log('[RStudio Wrapper] iframe onload fired');
         loading.style.display = 'none';
         frame.style.display = 'block';
       };
 
-      frame.onerror = function(e) {
-        console.error('[RStudio Wrapper] iframe onerror:', e);
-      };
-
       // Fallback: show frame after timeout even if onload doesn't fire
       setTimeout(function() {
-        console.log('[RStudio Wrapper] Timeout check - loading visible:', loading.style.display !== 'none');
         if (loading.style.display !== 'none') {
-          console.log('[RStudio Wrapper] Forcing frame visible after timeout');
           loading.style.display = 'none';
           frame.style.display = 'block';
         }
       }, 5000);
 
-      // Handle messages from menu iframe
-      const menuFrame = document.getElementById('hpc-menu-frame');
-      window.addEventListener('message', function(e) {
-        if (!e.data) return;
-        if (e.data.type === 'hpc-menu-drag') {
-          const rect = menuFrame.getBoundingClientRect();
-          let newTop = rect.top + e.data.dy;
-          let newRight = (window.innerWidth - rect.right) - e.data.dx;
-          newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
-          newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
-          menuFrame.style.top = newTop + 'px';
-          menuFrame.style.right = newRight + 'px';
-        }
-        if (e.data.type === 'hpc-menu-navigate') {
-          window.location.href = e.data.url;
-        }
-        if (e.data.type === 'hpc-menu-expand') {
-          menuFrame.classList.add('expanded');
-        }
-        if (e.data.type === 'hpc-menu-collapse') {
-          menuFrame.classList.remove('expanded');
-        }
-      });
+      // Initialize shared menu handler
+      initMenuHandler('hpc-menu-frame');
     });
   </script>
 </body>

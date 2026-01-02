@@ -8,6 +8,7 @@
  */
 
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
@@ -68,7 +69,7 @@ const rstudioProxy = httpProxy.createProxyServer({
   timeout: 5 * 60 * 1000,       // 5 minutes connection timeout
   // Fix "Parse Error: Data after Connection: close" with RStudio
   // rserver sends Connection: close but http-proxy keeps connection open
-  agent: new (require('http').Agent)({ keepAlive: false }),
+  agent: new http.Agent({ keepAlive: false }),
 });
 
 rstudioProxy.on('error', (err, req, res) => {
