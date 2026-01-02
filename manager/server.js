@@ -99,13 +99,33 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   delete proxyRes.headers['x-frame-options'];
 
   // Debug: log all responses (especially RPC calls)
-  if (req.url.includes('/rpc/') || status >= 300 && status < 400 || setCookies) {
+  const isRpc = req.url.includes('/rpc/');
+  if (isRpc || status >= 300 && status < 400 || setCookies) {
     log.debug(`RStudio proxyRes`, {
       status,
       url: req.url,
       location: location || 'none',
       setCookies: setCookies ? 'yes' : 'none',
       contentLength: proxyRes.headers['content-length'] || 'unknown',
+      transferEncoding: proxyRes.headers['transfer-encoding'] || 'none',
+      connection: proxyRes.headers['connection'] || 'none',
+    });
+  }
+
+  // For RPC calls, log when data starts flowing
+  if (isRpc) {
+    let dataSize = 0;
+    proxyRes.on('data', (chunk) => {
+      dataSize += chunk.length;
+      if (dataSize <= chunk.length) { // First chunk
+        log.debug(`RStudio RPC data start`, { url: req.url, firstChunkSize: chunk.length });
+      }
+    });
+    proxyRes.on('end', () => {
+      log.debug(`RStudio RPC data end`, { url: req.url, totalSize: dataSize });
+    });
+    proxyRes.on('error', (err) => {
+      log.error(`RStudio RPC stream error`, { url: req.url, error: err.message });
     });
   }
 
@@ -275,7 +295,11 @@ app.use('/rstudio-direct', (req, res, next) => {
     log.debug('[RStudio-Direct] No session, redirecting to /');
     return res.redirect('/');
   }
-  rstudioProxy.web(req, res);
+  rstudioProxy.web(req, res, {}, (err) => {
+    if (err) {
+      log.error(`[RStudio-Direct] proxy.web error on ${req.method} ${req.path}`, { error: err.message, code: err.code });
+    }
+  });
 });
 
 // Proxy to Live Server (port 5500) - access at /live/
