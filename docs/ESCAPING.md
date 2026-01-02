@@ -70,3 +70,35 @@ Use **base64 encoding** to avoid ALL escaping issues:
 3. Decode on remote with `base64 -d`
 
 No nested quotes, no backslash chains, no shell expansion problems.
+
+---
+
+## Important: Shell Variables in Template Literals (2026-01-02)
+
+### Problem
+When using JS template literals with base64 encoding, `\$` in the source produces `\$` in the output - the backslash is preserved!
+
+```javascript
+// WRONG - produces literal \$HOME in output
+const script = `LOG=\\$HOME/test`;  // JS string: "LOG=\$HOME/test"
+// Base64 decode: "LOG=\$HOME/test" (backslash preserved!)
+```
+
+### Solution
+Use a variable to inject the `$` character:
+
+```javascript
+// CORRECT - produces $HOME in output
+const dollar = '$';
+const script = `LOG=${dollar}HOME/test`;  // JS string: "LOG=$HOME/test"
+// Base64 decode: "LOG=$HOME/test" (clean!)
+```
+
+### Why This Works
+- Template literals interpret `${...}` as substitution
+- `${dollar}` substitutes the literal `$` character
+- Base64 encoding preserves it exactly
+- Result: clean shell script with proper `$` variables
+
+### Also: Use $HOME not ~
+Inside singularity containers, `~` may not expand correctly. Use `$HOME` which is an environment variable that resolves reliably.

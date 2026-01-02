@@ -137,26 +137,29 @@ auth-cookies-force-secure=0
 `;
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
 
+    // Build rsession script - use template variables for shell vars to avoid escaping issues
+    // Base64 encoding preserves content exactly, so we need clean $ signs (not \$)
+    const dollar = '$';  // Use variable to avoid template literal interpretation
     const rsessionScript = `#!/bin/sh
 # Debug: capture all output including rsession stderr
-# Use \\$HOME instead of ~ for reliable path resolution inside singularity
-LOG=\\$HOME/.rstudio-slurm/rsession.log
-echo "=== rsession.sh called at \\$(date) ===" >> \\$LOG
-echo "Args: \\$@" >> \\$LOG
-echo "HOME=\\$HOME PWD=\\$(pwd)" >> \\$LOG
+# Use ${dollar}HOME instead of ~ for reliable path resolution inside singularity
+LOG=${dollar}HOME/.rstudio-slurm/rsession.log
+echo "=== rsession.sh called at ${dollar}(date) ===" >> ${dollar}LOG
+echo "Args: ${dollar}@" >> ${dollar}LOG
+echo "HOME=${dollar}HOME PWD=${dollar}(pwd)" >> ${dollar}LOG
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
 export R_LIBS_SITE=${this.cluster.rLibsSite}
-export R_LIBS_USER=\\$HOME/R/bioc-3.19
+export R_LIBS_USER=${dollar}HOME/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 # Run rsession and capture exit code (don't use exec so we can log exit)
-/usr/lib/rstudio-server/bin/rsession "\\$@" 2>> \\$LOG
-RC=\\$?
-echo "=== rsession exited with code \\$RC at \\$(date) ===" >> \\$LOG
-exit \\$RC
+/usr/lib/rstudio-server/bin/rsession "${dollar}@" 2>> ${dollar}LOG
+RC=${dollar}?
+echo "=== rsession exited with code ${dollar}RC at ${dollar}(date) ===" >> ${dollar}LOG
+exit ${dollar}RC
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
