@@ -14,12 +14,16 @@
       position: fixed;
       top: 10px;
       right: 10px;
-      width: 320px;
-      height: 450px;
+      width: 50px;   /* Start small - just the toggle button */
+      height: 50px;
       border: none;
       z-index: 2147483647;
-      pointer-events: none;  /* Let clicks pass through transparent areas */
       background: transparent;
+      transition: width 0.15s, height 0.15s;
+    }
+    #hpc-menu-frame.expanded {
+      width: 260px;
+      height: 400px;
     }
     #loading {
       display: flex;
@@ -69,7 +73,7 @@
         }
       }, 5000);
 
-      // Handle drag messages from menu iframe
+      // Handle messages from menu iframe
       const menuFrame = document.getElementById('hpc-menu-frame');
       window.addEventListener('message', function(e) {
         if (!e.data) return;
@@ -84,6 +88,12 @@
         }
         if (e.data.type === 'hpc-menu-navigate') {
           window.location.href = e.data.url;
+        }
+        if (e.data.type === 'hpc-menu-expand') {
+          menuFrame.classList.add('expanded');
+        }
+        if (e.data.type === 'hpc-menu-collapse') {
+          menuFrame.classList.remove('expanded');
         }
       });
     });
