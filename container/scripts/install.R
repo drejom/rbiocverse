@@ -584,10 +584,64 @@ singularity exec \\
   phase2_path <- file.path(output_dir_abs, "install_phase2_leaves.slurm")
   writeLines(phase2_script, phase2_path)
 
+  # Phase 3: Summary job (runs after Phase 2)
+  phase3_script <- sprintf('#!/bin/bash
+#SBATCH --job-name=rbioc_summary
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=1G
+#SBATCH --time=00:10:00
+#SBATCH --output=%s/install_summary.log
+
+# Phase 3: Generate installation summary
+LOG_DIR="%s"
+
+echo "=============================================="
+echo "  rbiocverse Installation Summary"
+echo "=============================================="
+echo ""
+echo "Cluster: %s"
+echo "Library: %s"
+echo "Generated: $(date)"
+echo ""
+
+# Count successful installs
+SUCCESS=$(grep -h "✔.*pkg" "$LOG_DIR"/install_*.log 2>/dev/null | wc -l)
+echo "Packages processed: $SUCCESS"
+echo ""
+
+# Check for failures
+FAILURES=$(grep -h "FAILED:" "$LOG_DIR"/install_*.log 2>/dev/null)
+if [[ -n "$FAILURES" ]]; then
+    echo "=== FAILED PACKAGES ==="
+    echo "$FAILURES" | sort -u
+    echo ""
+fi
+
+# Check for missing system dependencies
+MISSING_DEPS=$(grep -h -A1 "✖ Missing" "$LOG_DIR"/install_*.log 2>/dev/null | grep "^+" | sort -u)
+if [[ -n "$MISSING_DEPS" ]]; then
+    echo "=== MISSING SYSTEM DEPENDENCIES (optional) ==="
+    echo "These are warnings only - packages installed but some features may be limited:"
+    echo "$MISSING_DEPS"
+    echo ""
+fi
+
+# Verify installed packages
+echo "=== VERIFICATION ==="
+INSTALLED=$(ls -1 "%s" 2>/dev/null | wc -l)
+echo "Packages in library: $INSTALLED"
+echo ""
+
+echo "Installation complete."
+', output_dir_abs, output_dir_abs, config$name, lib, lib)
+
+  phase3_path <- file.path(output_dir_abs, "install_phase3_summary.slurm")
+  writeLines(phase3_script, phase3_path)
+
   # Generate submission script
   submit_script <- sprintf('#!/bin/bash
-# Submit two-phase installation
-# Phase 1 must complete before Phase 2 starts
+# Submit three-phase installation
+# Phase 1 -> Phase 2 -> Phase 3 (summary)
 
 echo "Submitting Phase 1 (core dependencies)..."
 JOB1=$(sbatch %s | awk \'{print $4}\')
@@ -597,21 +651,27 @@ echo "Submitting Phase 2 (leaf packages) with dependency on Phase 1..."
 JOB2=$(sbatch --dependency=afterok:$JOB1 %s | awk \'{print $4}\')
 echo "Phase 2 job ID: $JOB2"
 
+echo "Submitting Phase 3 (summary) with dependency on Phase 2..."
+JOB3=$(sbatch --dependency=afterany:$JOB2 %s | awk \'{print $4}\')
+echo "Phase 3 job ID: $JOB3"
+
 echo ""
 echo "Monitor with: squeue -u $USER"
 echo "Logs in: %s/"
-', phase1_path, phase2_path, output_dir_abs)
+echo "Summary will be in: %s/install_summary.log"
+', phase1_path, phase2_path, phase3_path, output_dir_abs, output_dir_abs)
 
   submit_path <- file.path(output_dir_abs, "submit_install.sh")
   writeLines(submit_script, submit_path)
   Sys.chmod(submit_path, "755")
 
-  message("Generated two-phase SLURM install:")
+  message("Generated three-phase SLURM install:")
   message("  Cluster: ", config$name)
   message("  Phase 1: ", length(core_deps), " core dependencies (",
           config$phase1_cpus, " CPUs, ", config$phase1_mem, ")")
   message("  Phase 2: ", length(leaf_pkgs), " leaf packages in ", jobs, " jobs (",
           config$phase2_cpus, " CPUs each)")
+  message("  Phase 3: Summary report")
   message("  Output: ", output_dir_abs, "/")
   message("")
   message("Submit with:")
@@ -619,7 +679,8 @@ echo "Logs in: %s/"
   message("")
   message("Or manually:")
   message("  JOB1=$(sbatch ", phase1_path, " | awk '{print $4}')")
-  message("  sbatch --dependency=afterok:$JOB1 ", phase2_path)
+  message("  JOB2=$(sbatch --dependency=afterok:$JOB1 ", phase2_path, " | awk '{print $4}')")
+  message("  sbatch --dependency=afterany:$JOB2 ", phase3_path)
 
   invisible(submit_path)
 }
