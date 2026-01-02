@@ -44,82 +44,62 @@ sbatch /packages/singularity/shared_cache/rbioc/rbioc322.job
 
 ## Update Path (New Bioconductor Version)
 
-### Step 1: Sync DESCRIPTION with Current Environment
-Run from INSIDE the current container/environment to capture all ~1600 packages:
+The migration has two phases: **pre-release** (capture packages from old) and **post-release** (install to new).
+
+### Phase 1: Pre-Release (Sync from Old Environment)
+
+Run on HPC cluster to capture packages from the current version:
+
 ```sh
-# Preview what will change
-Rscript scripts/update-description.R sync
+# 1. Sync DESCRIPTION with packages from current (e.g., 3.19) environment
+./scripts/sync-packages.sh --from 3.19         # Preview
+./scripts/sync-packages.sh --from 3.19 --apply # Apply
 
-# Apply: adds all installed packages to DESCRIPTION
-Rscript scripts/update-description.R sync --apply
-```
-
-### Step 2: Check Availability for New Bioconductor
-Some packages may not be available in the new Bioconductor version:
-```sh
-# Check which packages are unavailable
-Rscript scripts/update-description.R check
-
-# Remove unavailable packages from DESCRIPTION
+# 2. Check availability in new Bioconductor version
 Rscript scripts/update-description.R check --apply
-```
 
-### Step 3: Update Remotes and Bump Version
-```sh
-# Update GitHub remote pins to latest tags/commits
+# 3. Update GitHub remotes and bump version
 Rscript scripts/update-description.R remotes --apply
-
-# Bump version for new Bioconductor release (3.22.0 -> 3.23.0)
 Rscript scripts/update-description.R bump bioc
-```
 
-### Step 4: Update Container
-```sh
-# Edit Dockerfile line 3 to match DESCRIPTION version
-ARG BIOC_VERSION=RELEASE_3_23  # Match rbiocverse/DESCRIPTION
+# 4. Update Dockerfile
+# Edit line 3: ARG BIOC_VERSION=RELEASE_3_22
 
-# Build locally (optional test)
-docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest .
-
-# Commit and tag to trigger CI build
-git add -A && git commit -m "Bump to Bioconductor 3.23"
+# 5. Commit and tag to trigger CI build
+git add -A && git commit -m "Bump to Bioconductor 3.22"
 git tag v2025-MM-DD
 git push && git push --tags
 ```
 
-### Step 5: Pull to HPC
-```sh
-# Gemini
-module load singularity
-singularity pull -F /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.23.sif \
-  docker://ghcr.io/drejom/vscode-rbioc:latest
+### Phase 2: Post-Release (Install to New Environment)
 
-# Apollo
-singularity pull -F /opt/singularity-images/rbioc/vscode-rbioc_3.23.sif \
-  docker://ghcr.io/drejom/vscode-rbioc:latest
+Run after the new container is built and available:
+
+```sh
+# 1. Pull new container (auto-detects cluster: Gemini/Apollo)
+./scripts/pull-container.sh --force
+
+# 2. Generate and submit two-phase SLURM install
+./scripts/install-packages.sh --to 3.22 --submit
+
+# Or generate without submitting:
+./scripts/install-packages.sh --to 3.22
+./slurm_install/submit_install.sh
 ```
 
-### Step 6: Install Packages
-```sh
-# Create new library directory (Gemini example)
-mkdir -p /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23
+### Two-Phase Installation Strategy
 
-# Option A: Direct install (uses all CPUs)
-singularity exec \
-  --env R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23 \
-  /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.23.sif \
-  Rscript /opt/rbiocverse/scripts/install.R
+The install uses a two-phase SLURM strategy to avoid NFS lock contention:
 
-# Option B: SLURM job array (20 parallel jobs)
-R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23 \
-  Rscript scripts/install.R --slurm 20
-sbatch slurm_install/install.slurm
-```
+1. **Phase 1 (single job)**: Install core dependencies with high CPU/memory
+2. **Phase 2 (job array)**: Install remaining packages in parallel
 
-### Step 7: Update Launch Scripts
+Each job uses a local pak cache (`/tmp/pak_cache_*`) to prevent NFS lock issues.
+
+### Update Launch Scripts
 Update `R_LIBS_SITE` in `~/bin/ij` and job scripts:
 ```sh
-R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.23
+R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
 ```
 
 ## What's Included
@@ -164,14 +144,27 @@ See `rbiocverse/DESCRIPTION` for the full package list organized by category:
 
 ## Scripts
 
+### Wrapper Scripts (recommended)
 | Script | Purpose | When to Use |
 |--------|---------|-------------|
-| `update-description.R sync` | Sync DESCRIPTION with installed packages | Step 1: Capture current ~1600 packages |
-| `update-description.R check` | Check/remove unavailable packages | Step 2: Before new Bioconductor release |
-| `update-description.R remotes` | Update GitHub remote pins | Step 3: Pin to latest tags/commits |
-| `update-description.R bump` | Bump version number | Step 3: After sync/check |
-| `install.R` | Install packages from DESCRIPTION | Step 6: After pulling new container |
-| `migrate-packages.R` | Export/compare package environments | Auditing, troubleshooting |
+| `sync-packages.sh --from X.Y` | Sync DESCRIPTION from existing library | Pre-release: capture packages |
+| `install-packages.sh --to X.Y` | Generate/submit SLURM install jobs | Post-release: install packages |
+| `pull-container.sh` | Pull container to cluster storage | Post-release: before install |
+
+### R Scripts (called by wrappers)
+| Script | Purpose | When to Use |
+|--------|---------|-------------|
+| `update-description.R sync` | Sync DESCRIPTION with installed packages | Pre-release (via sync-packages.sh) |
+| `update-description.R check` | Check/remove unavailable packages | Pre-release: after sync |
+| `update-description.R remotes` | Update GitHub remote pins | Pre-release: pin to tags/commits |
+| `update-description.R bump` | Bump version number | Pre-release: after sync/check |
+| `install.R --slurm-smart` | Generate two-phase SLURM jobs | Post-release (via install-packages.sh) |
+
+### Utility
+| Script | Purpose |
+|--------|---------|
+| `cluster-config.sh` | Shared cluster detection and path functions |
+| `migrate-packages.R` | Export/compare package environments |
 
 ## Files
 
@@ -185,10 +178,15 @@ See `rbiocverse/DESCRIPTION` for the full package list organized by category:
 │   ├── LICENSE
 │   └── NAMESPACE
 ├── scripts/
-│   ├── update-description.R    # Pre-release: check/update packages
-│   ├── install.R               # Post-deploy: install from DESCRIPTION
+│   ├── cluster-config.sh       # Shared cluster detection and paths
+│   ├── sync-packages.sh        # Pre-release: sync from old environment
+│   ├── install-packages.sh     # Post-release: install to new environment
+│   ├── pull-container.sh       # Pull container to HPC storage
+│   ├── update-description.R    # DESCRIPTION management (sync/check/bump)
+│   ├── install.R               # R install logic and SLURM generation
 │   ├── migrate-packages.R      # Audit: export/compare environments
 │   └── slurm-wrappers.sh       # SLURM SSH wrapper installer
+├── slurm_install/              # Generated SLURM scripts (gitignored)
 ├── Dockerfile
 ├── CLAUDE.md
 └── Readme.md

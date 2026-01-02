@@ -15,82 +15,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# =============================================================================
-# Configuration from DESCRIPTION
-# =============================================================================
-
-get_bioc_version() {
-    # Extract major.minor from Version field (e.g., 3.22.0 -> 3.22)
-    grep "^Version:" "$REPO_ROOT/rbiocverse/DESCRIPTION" | awk '{print $2}' | cut -d. -f1,2
-}
-
-# =============================================================================
-# Cluster Detection
-# =============================================================================
-
-detect_cluster() {
-    if [[ -d "/packages/singularity" ]]; then
-        echo "gemini"
-    elif [[ -d "/opt/singularity-images" ]]; then
-        echo "apollo"
-    else
-        echo "unknown"
-    fi
-}
-
-# =============================================================================
-# Cluster-specific Configuration
-# =============================================================================
-
-get_container_path() {
-    local cluster="$1"
-    local version="$2"
-
-    case "$cluster" in
-        gemini)
-            echo "/packages/singularity/shared_cache/rbioc/vscode-rbioc_${version}.sif"
-            ;;
-        apollo)
-            echo "/opt/singularity-images/rbioc/vscode-rbioc_${version}.sif"
-            ;;
-        *)
-            echo ""
-            ;;
-    esac
-}
-
-get_library_path() {
-    local cluster="$1"
-    local version="$2"
-
-    case "$cluster" in
-        gemini)
-            echo "/packages/singularity/shared_cache/rbioc/rlibs/bioc-${version}"
-            ;;
-        apollo)
-            echo "/opt/singularity-images/rbioc/rlibs/bioc-${version}"
-            ;;
-        *)
-            echo ""
-            ;;
-    esac
-}
-
-get_singularity_module() {
-    local cluster="$1"
-
-    case "$cluster" in
-        gemini)
-            echo "singularity/3.11.5"
-            ;;
-        apollo)
-            echo "singularity/4.1.3"
-            ;;
-        *)
-            echo "singularity"
-            ;;
-    esac
-}
+# Source shared cluster configuration
+source "$SCRIPT_DIR/cluster-config.sh"
 
 # =============================================================================
 # Main
