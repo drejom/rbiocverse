@@ -284,3 +284,41 @@ git push  # Commit c648736
 
 ### Verification
 Access https://hpc.omeally.com/rstudio/ in browser to confirm fix works.
+
+---
+
+## 2026-01-02: RStudio Hardcoded /rstudio/ Asset Paths
+
+### Discovery
+After login works, RStudio shows spinner. Logs reveal:
+- Login succeeds, redirects to `/rstudio-direct/` ✅
+- rsession.sh IS being called (multiple times) ✅
+- rsession gets `--session-root-path /rstudio-direct` ✅
+
+BUT: RStudio loads assets from `/rstudio/*` paths WITHIN the iframe:
+```
+[RStudio-Direct] GET /rstudio/rstudio.nocache.js
+[RStudio-Direct] GET /rstudio/182DE6C7F7B2D324BBC72C939901E787.cache.js
+```
+
+These requests hit `/rstudio-direct/rstudio/foo.js` - a **nested** path!
+
+### Root Cause
+RStudio has a **hardcoded** `/rstudio/` prefix for its GWT-compiled assets, regardless of `www-root-path`. The `www-root-path` only affects:
+- Auth redirects
+- Cookie paths
+- Top-level page URLs
+
+But the JavaScript app still references `/rstudio/*.cache.js` files.
+
+### Fix Options
+1. **Rewrite URLs in proxy response** - Replace `/rstudio/` with `/` in HTML/JS
+2. **Add /rstudio route inside /rstudio-direct** - Nested proxy
+3. **Remove www-root-path entirely** - Let RStudio use default /rstudio/
+4. **Serve at /rstudio/ without wrapper** - Direct proxy, no iframe
+
+### Current State
+- Job: 28775110 on g-c-1-7-30
+- rsession spawning: YES
+- Login: Works
+- Asset loading: FAILS (wrong paths)

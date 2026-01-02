@@ -313,8 +313,9 @@ stateManager.load().then(() => {
       if (req.url.startsWith('/live')) {
         liveServerProxy.ws(req, socket, head);
       }
-      // RStudio WebSocket
+      // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
       else if (req.url.startsWith('/rstudio')) {
+        log.debug(`[WebSocket] RStudio upgrade: ${req.url}`);
         rstudioProxy.ws(req, socket, head);
       }
       // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
