@@ -11,17 +11,3 @@ The container name is compose-index-bluetooth-protocol-rpwi2i-app. Let me find t
 
 ______
 
-
-
-⏺ Bash(ssh 192.168.1.99 "cd /etc/dokploy/compose/compose-index-bluetooth-protocol-rpwi2i/code && sudo git pull && cd .. && sudo docker compose up -d --build --force-re…)
-  ⎿  Error: Exit code 1
-     no configuration file provided: not found
-
-     Already up to date.
-
-⏺ Bash(ssh 192.168.1.99 "cd /etc/dokploy/compose/compose-index-bluetooth-protocol-rpwi2i/code && sudo docker compose -f docker-compose.yml up -d --build --force-recrea…) timeout: 3m 0s
-  ⎿  #1 [internal] load local bake definitions
-     #1 reading from stdin 639B done
-     #1 DONE 0.0s
-
-

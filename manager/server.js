@@ -70,11 +70,20 @@ const rstudioProxy = httpProxy.createProxyServer({
 });
 
 rstudioProxy.on('error', (err, req, res) => {
-  log.proxyError('RStudio proxy error', { error: err.message, code: err.code, url: req?.url });
+  log.proxyError('RStudio proxy error', { error: err.message, code: err.code, url: req?.url, stack: err.stack });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>RStudio not available</h1><p><a href="/">Back to launcher</a></p>');
   }
+});
+
+// Log all proxy events for debugging
+rstudioProxy.on('start', (req, res, target) => {
+  log.debug('RStudio proxy start', { url: req.url, target: target.href });
+});
+
+rstudioProxy.on('end', (req, res, proxyRes) => {
+  log.debug('RStudio proxy end', { url: req.url, status: proxyRes?.statusCode });
 });
 
 // Log when proxy successfully connects to target

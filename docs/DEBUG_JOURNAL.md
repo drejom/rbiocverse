@@ -734,3 +734,63 @@ Working RStudio reverse proxy requirements:
 3. `keepAlive: false` in http-proxy agent
 4. `X-RStudio-Root-Path` header set by proxy
 5. `SameSite=None; Secure` for iframe cookie support
+
+---
+
+## 2026-01-02: proxyRes Never Fires for /rpc/client_init
+
+### Problem
+After session starts successfully and assets load, the client_init POST gets stuck:
+- `proxyReq` event fires (request sent to backend)
+- `proxyRes` event NEVER fires (response not received by proxy)
+- Browser shows spinner, retries client_init every ~30s
+- Direct curl to rserver inside container works perfectly
+
+### Evidence
+```
+# proxyReq logged:
+2026-01-02 03:33:45 [DEBUG] RStudio proxyReq {"method":"POST","url":"/rpc/client_init",...}
+
+# NO proxyRes for client_init
+# But proxyRes fires for static assets (css, js) with status 200/304
+```
+
+### Direct Backend Test (WORKS)
+```bash
+docker exec container curl -s -X POST 'http://127.0.0.1:8787/rpc/client_init' \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: user-id=...; rs-csrf-token=...' \
+  -H 'X-RS-CSRF-Token: ...' \
+  -d '{}'
+# Returns: {"result":{"clientId":"...","mode":"server",...}} (huge JSON response)
+```
+
+### Raw Node.js Request (WORKS)
+```javascript
+http.request({ hostname: '127.0.0.1', port: 8787, path: '/rpc/client_init', method: 'POST' })
+// STATUS: 200, BODY: {"error":{"code":3,...}} or {"result":{...}}
+```
+
+### What's Different About client_init?
+1. **Large response**: client_init returns massive JSON (10-50KB) with full session state
+2. **POST with body**: Most other requests are GET
+3. **Content-Type: application/json**: Same as other RPC calls that work
+
+### Theories
+1. **Response buffering**: http-proxy may not handle large responses correctly
+2. **Chunked encoding**: Response might be chunked in a way proxy can't handle
+3. **Connection timing**: Response arrives but connection closes before proxy pipes it
+
+### Diagnostic Approach
+Adding more granular logging:
+- `start` event: When proxy begins handling request
+- `end` event: When proxy finishes handling request
+- Error stack traces for more context
+
+### Key Insight
+The `proxy.web(req, res, {}, callback)` pattern BREAKS response streaming!
+- When you pass a callback to proxy.web(), it enables `selfHandleResponse` mode
+- This stops automatic response piping - you must manually handle the response
+- Previous code had this callback which was removed in c783256
+
+But proxyRes STILL doesn't fire even without the callback. The issue is deeper.
