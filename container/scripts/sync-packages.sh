@@ -130,10 +130,10 @@ main() {
     singularity exec \
         --env R_LIBS=/usr/local/lib/R/site-library \
         --env R_LIBS_SITE="$lib" \
-        --pwd /opt/rbiocverse \
-        -B "$bind_paths","$repo_root":/opt/rbiocverse \
+        --pwd /mnt/rbiocverse \
+        -B "$bind_paths","$repo_root":/mnt/rbiocverse \
         "$container" \
-        Rscript /opt/rbiocverse/scripts/update-description.R sync $apply_flag
+        Rscript /mnt/rbiocverse/scripts/update-description.R sync $apply_flag
 
     echo ""
     if [[ -n "$apply_flag" ]]; then

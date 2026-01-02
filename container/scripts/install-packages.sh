@@ -130,9 +130,9 @@ main() {
     singularity exec \
         --env R_LIBS=/usr/local/lib/R/site-library \
         --env R_LIBS_SITE="$lib" \
-        -B "$bind_paths","$repo_root":/opt/rbiocverse \
+        -B "$bind_paths","$repo_root":/mnt/rbiocverse \
         "$container" \
-        Rscript /opt/rbiocverse/scripts/install.R \
+        Rscript /mnt/rbiocverse/scripts/install.R \
             --slurm-smart "$jobs" \
             --cluster "$cluster" \
             --bioc-version "$to_version"
