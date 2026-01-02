@@ -446,3 +446,54 @@ When we added `www-root-path`, direct tunnel broke. When we test via proxy, rses
 1. Cancel job, relaunch WITHOUT www-root-path
 2. Test direct tunnel confirms rsession spawns
 3. Then figure out how to make proxy work without www-root-path
+
+---
+
+## 2026-01-02: SOLVED - Proxy Works Without www-root-path
+
+### The Fix
+Removed `www-root-path=/rstudio-direct` from `manager/services/hpc.js` rserver.conf.
+
+### Why It Works
+The proxy code in `server.js` already handles path rewriting correctly:
+1. `X-RStudio-Root-Path: /rstudio-direct` header tells RStudio its external path
+2. Proxy rewrites redirects: `/auth-sign-in` → `/rstudio-direct/auth-sign-in`
+3. Cookie paths set to `/rstudio-direct` by RStudio's cookie generation
+
+Without `www-root-path`, RStudio generates paths at `/` internally, but the proxy intercepts and rewrites them to `/rstudio-direct/*`. The header tells RStudio where it's mounted externally.
+
+### Test Results
+
+**Direct tunnel (localhost:8787)**:
+- Login works
+- RStudio loads
+- No double paths
+
+**Proxy (https://hpc.omeally.com/rstudio-direct/)**:
+```
+REDIRECT 302: /rstudio-direct/ -> /rstudio-direct/auth-sign-in?appUri=%2F
+REDIRECT 302: /rstudio-direct/auth-do-sign-in -> /rstudio-direct/
+Cookies: user-id(path=/rstudio-direct), csrf-token(path=/rstudio-direct)
+Page title: RStudio
+SUCCESS: RStudio app loaded!
+```
+
+### Key Insight
+The `www-root-path` setting was CONFLICTING with the proxy's path rewriting. With both:
+- RStudio added `/rstudio-direct` prefix internally
+- Proxy added `/rstudio-direct` prefix externally
+- Result: double paths like `/rstudio-direct/rstudio-direct/`
+
+Without `www-root-path`, RStudio generates clean `/` paths, and the proxy handles all external path mapping.
+
+### rsession.log Not Created
+The `~/.rstudio-slurm/rsession.log` file isn't being created despite RStudio working. Possible causes:
+1. `~` resolves differently inside singularity container namespace
+2. The rsession.sh script's output redirect doesn't work as expected in container
+
+This is a minor debugging issue - the actual functionality works.
+
+### Current State
+- Job: 28780221 on g-h-1-8-19
+- Both direct tunnel and proxy access: **WORKING**
+- Commit: 342ad54
