@@ -44,17 +44,26 @@
       const frame = document.getElementById('rstudio-frame');
       const loading = document.getElementById('loading');
 
+      console.log('[RStudio Wrapper] DOMContentLoaded, setting iframe src');
+
       // RStudio doesn't need cache clearing like VS Code
       frame.src = '/rstudio-direct/';
 
       frame.onload = function() {
+        console.log('[RStudio Wrapper] iframe onload fired');
         loading.style.display = 'none';
         frame.style.display = 'block';
       };
 
+      frame.onerror = function(e) {
+        console.error('[RStudio Wrapper] iframe onerror:', e);
+      };
+
       // Fallback: show frame after timeout even if onload doesn't fire
       setTimeout(function() {
+        console.log('[RStudio Wrapper] Timeout check - loading visible:', loading.style.display !== 'none');
         if (loading.style.display !== 'none') {
+          console.log('[RStudio Wrapper] Forcing frame visible after timeout');
           loading.style.display = 'none';
           frame.style.display = 'block';
         }

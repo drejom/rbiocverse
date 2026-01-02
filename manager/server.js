@@ -256,7 +256,12 @@ app.use('/rstudio', (req, res, next) => {
 // Direct proxy to RStudio (used by wrapper iframe)
 // Proxy auth handles authentication via X-RStudio-Username header
 app.use('/rstudio-direct', (req, res, next) => {
+  log.debug(`[RStudio-Direct] ${req.method} ${req.path}`, {
+    hasSession: hasRunningSession(),
+    cookies: req.headers.cookie ? req.headers.cookie.substring(0, 100) : 'none',
+  });
   if (!hasRunningSession()) {
+    log.debug('[RStudio-Direct] No session, redirecting to /');
     return res.redirect('/');
   }
   rstudioProxy.web(req, res);
