@@ -133,7 +133,6 @@ directory=/var/lib/rstudio-server
     const dbConfBase64 = Buffer.from(dbConf).toString('base64');
 
     const rserverConf = `rsession-which-r=/usr/local/bin/R
-www-root-path=/rstudio-direct
 auth-cookies-force-secure=0
 `;
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');

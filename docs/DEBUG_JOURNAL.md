@@ -412,3 +412,37 @@ Main change between them: cookie path from `/rstudio-direct` to `/`
 
 **Key Insight**: Direct tunnel works. Proxy worked partially (rsession spawned but crashed).
 Now proxy is worse (rsession never called). We regressed - find what caused regression.
+
+---
+
+## 2026-01-02: www-root-path Causing Double Path
+
+### Discovery
+Direct tunnel now shows "Unable to connect to service" error. Curl reveals:
+```
+http://localhost:8787/rstudio-direct/rstudio-direct/unsupported_browser.htm
+```
+
+The path is DOUBLED: `/rstudio-direct/rstudio-direct/`
+
+### Root Cause
+`www-root-path=/rstudio-direct` in rserver.conf tells RStudio to prefix ALL URLs with `/rstudio-direct`.
+- When accessed via proxy at `/rstudio-direct/`, this is correct
+- When accessed directly at `localhost:8787/`, RStudio STILL adds the prefix
+- Result: double path when accessed directly
+
+### Implication
+The job was launched with `www-root-path=/rstudio-direct` config. This breaks direct tunnel access.
+Direct tunnel worked BEFORE because we didn't have `www-root-path` set.
+
+### The Real Problem
+We've been testing two different configurations:
+1. Direct tunnel (no www-root-path) - WORKS
+2. Proxy access (with www-root-path=/rstudio-direct) - rsession not spawning
+
+When we added `www-root-path`, direct tunnel broke. When we test via proxy, rsession doesn't spawn.
+
+### Next Steps
+1. Cancel job, relaunch WITHOUT www-root-path
+2. Test direct tunnel confirms rsession spawns
+3. Then figure out how to make proxy work without www-root-path
