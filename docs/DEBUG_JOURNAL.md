@@ -242,3 +242,45 @@ ssh -L 8787:COMPUTE_NODE:8787 gemini-login1.coh.org
 
 ### Next Step
 Test via the actual manager to confirm it works end-to-end.
+
+---
+
+## 2026-01-02: Manager Proxy Path Alignment Fix
+
+### Problem
+Direct SSH tunnel to RStudio works, but manager proxy shows spinning wheel.
+
+### Root Cause
+Path mismatch between RStudio's `www-root-path` and the proxy URL:
+- `www-root-path=/rstudio-direct` (in rserver.conf)
+- Proxy serves at `/rstudio/` to users
+- RStudio generates URLs like `/rstudio-direct/auth-sign-in`
+- These don't match the public `/rstudio/*` routes
+
+### Fix Applied
+Changed all `/rstudio-direct` references to `/rstudio`:
+
+1. **manager/services/hpc.js** - `www-root-path=/rstudio`
+2. **manager/server.js** - `X-RStudio-Root-Path` header to `/rstudio`
+3. **manager/server.js** - Cookie path rewriting to `/rstudio/`
+4. **manager/server.js** - Redirect URL rewriting to `/rstudio`
+
+### Architecture Clarification
+- `/rstudio` route: Main page serves wrapper HTML, other paths proxy to RStudio
+- `/rstudio-direct` route: Direct proxy for wrapper iframe (bypasses wrapper)
+- Wrapper iframe loads `/rstudio-direct/` but RStudio generates `/rstudio/*` URLs
+- Both routes exist and proxy to the same backend - the key is consistent URL generation
+
+### Deployment
+```bash
+git push  # Commit c648736
+# Manual deploy trigger via Dokploy API
+```
+
+### Test Job
+- Job ID: 28773218
+- Node: g-c-1-7-30
+- Status: RUNNING
+
+### Verification
+Access https://hpc.omeally.com/rstudio/ in browser to confirm fix works.
