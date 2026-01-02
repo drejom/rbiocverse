@@ -8,8 +8,13 @@
 # 2. Scans the library for installed packages
 # 3. Updates DESCRIPTION with discovered packages (including GitHub remotes with refs)
 #
+# Default behavior (merge mode):
+# - Only ADDS packages to DESCRIPTION, never removes
+# - This allows running on multiple clusters sequentially to build a union
+# - Use --replace to replace DESCRIPTION with exactly what's installed
+#
 # Usage:
-#   ./scripts/sync-packages.sh --from 3.19 [--apply]
+#   ./scripts/sync-packages.sh --from 3.19 [--apply] [--replace]
 #
 # The --apply flag writes changes to DESCRIPTION. Without it, dry-run only.
 
@@ -20,19 +25,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/cluster-config.sh"
 
 usage() {
-    echo "Usage: $0 --from VERSION [--apply]"
+    echo "Usage: $0 --from VERSION [--apply] [--replace]"
     echo ""
     echo "Sync DESCRIPTION with packages from an existing Bioconductor library."
     echo ""
     echo "Options:"
     echo "  --from VERSION   Source Bioconductor version to scan (required)"
     echo "  --apply          Apply changes to DESCRIPTION (default: dry-run)"
+    echo "  --replace        Replace mode: remove packages not installed (default: merge)"
+    echo ""
+    echo "Modes:"
+    echo "  merge (default): Only add packages, never remove. Run on multiple clusters"
+    echo "                   to build the union of all installed packages."
+    echo "  replace:         Replace DESCRIPTION with exactly what's installed."
     echo ""
     echo "Available versions on this cluster:"
     get_available_versions | sed 's/^/  /'
     echo ""
-    echo "Example:"
-    echo "  $0 --from 3.19 --apply"
+    echo "Multi-cluster workflow:"
+    echo "  1. Run on Cluster A:  $0 --from 3.19 --apply"
+    echo "  2. Git commit, push, pull on Cluster B"
+    echo "  3. Run on Cluster B:  $0 --from 3.19 --apply"
+    echo "  4. Git commit - DESCRIPTION now contains union of both clusters"
 }
 
 # =============================================================================
@@ -42,6 +56,7 @@ usage() {
 main() {
     local from_version=""
     local apply_flag=""
+    local replace_flag=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -52,6 +67,10 @@ main() {
                 ;;
             --apply)
                 apply_flag="--apply"
+                shift
+                ;;
+            --replace)
+                replace_flag="--replace"
                 shift
                 ;;
             --help|-h)
@@ -114,6 +133,7 @@ main() {
     echo "Container:       $container"
     echo "Library:         $lib"
     echo "Mode:            ${apply_flag:-dry-run}"
+    echo "Sync mode:       ${replace_flag:-merge}"
     echo ""
 
     # Load singularity
@@ -133,7 +153,7 @@ main() {
         --pwd /mnt/rbiocverse \
         -B "$bind_paths","$repo_root":/mnt/rbiocverse \
         "$container" \
-        Rscript /mnt/rbiocverse/scripts/update-description.R sync $apply_flag
+        Rscript /mnt/rbiocverse/scripts/update-description.R sync $apply_flag $replace_flag
 
     echo ""
     if [[ -n "$apply_flag" ]]; then
