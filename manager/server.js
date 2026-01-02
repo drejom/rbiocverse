@@ -80,7 +80,7 @@ rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   log.debug(`RStudio proxyReq`, {
     method: req.method,
     url: req.url,
-    cookies: req.headers.cookie ? req.headers.cookie.substring(0, 100) : 'none',
+    cookies: req.headers.cookie || 'none',
   });
 });
 
@@ -265,7 +265,7 @@ app.use('/rstudio', (req, res, next) => {
 app.use('/rstudio-direct', (req, res, next) => {
   log.debug(`[RStudio-Direct] ${req.method} ${req.path}`, {
     hasSession: hasRunningSession(),
-    cookies: req.headers.cookie ? req.headers.cookie.substring(0, 100) : 'none',
+    cookies: req.headers.cookie || 'none',
   });
   if (!hasRunningSession()) {
     log.debug('[RStudio-Direct] No session, redirecting to /');
