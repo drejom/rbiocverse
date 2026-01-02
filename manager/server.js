@@ -98,13 +98,14 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   // Our wrapper loads RStudio in an iframe, so we must strip this header
   delete proxyRes.headers['x-frame-options'];
 
-  // Debug: log all responses with cookies or redirects (full cookie details)
-  if (status >= 300 && status < 400 || setCookies) {
+  // Debug: log all responses (especially RPC calls)
+  if (req.url.includes('/rpc/') || status >= 300 && status < 400 || setCookies) {
     log.debug(`RStudio proxyRes`, {
       status,
       url: req.url,
       location: location || 'none',
-      setCookies: setCookies || 'none',
+      setCookies: setCookies ? 'yes' : 'none',
+      contentLength: proxyRes.headers['content-length'] || 'unknown',
     });
   }
 
