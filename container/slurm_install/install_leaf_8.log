@@ -1,0 +1,382 @@
+=== Phase 2: Installing leaf packages (task 8) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_008.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing googleAuthR...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 21 deps: kept 22 [7.4s]
+Installing googleCloudStorageR...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 24 deps: kept 25 [1.7s]
+Installing googledrive...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 24 deps: kept 25 [1.6s]
+Installing googlesheets4...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 30 [1.7s]
+Installing GOSemSim...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 42 deps: kept 43 [1.8s]
+Installing GOstats...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 52 deps: kept 53 [2s]
+Installing gower...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1s]
+Installing GPArotation...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing GPfit...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1.2s]
+Installing gplots...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.3s]
+Installing gprofiler2...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 66 deps: kept 66 [2.3s]
+Installing gptstudio...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 63 deps: kept 63 [2.1s]
+Installing graph...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [1.3s]
+Installing graphlayouts...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 11 [1.4s]
+Installing graphsim...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.6s]
+Installing gridBase...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.3s]
+Installing gridGraphics...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.6s]
+Installing gridtext...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 17 [1.4s]
+Installing url::https://cran.r-project.org/src/contrib/Archive/grr/grr_0.9.5.tar.gz...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [2.4s]
+Installing GSA...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1s]
+Installing GSEABase...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 38 deps: kept 39 [1.7s]
+Installing gson...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 21 [1.5s]
+Installing gss...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing gsubfn...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing GSVA...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 89 deps: kept 89 [2.8s]
+Installing gt...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 54 deps: kept 54 [1.9s]
+Installing gtable...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.3s]
+Installing gtools...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.3s]
+Installing gtsummary...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 61 deps: kept 61 [2.3s]
+Installing Gviz...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 137 deps: kept 137 [3.4s]
+Installing GWalkR...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 43 deps: kept 43 [1.7s]
+Installing gypsum...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 17 [1.4s]
+Installing h2o...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1.3s]
+Installing hardhat...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 12 [1.3s]
+Installing harmony...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 29 [1.9s]
+Installing hdf5r...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1.2s]
+Installing HDO.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.8s]
+Installing hdrcde...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 31 [1.7s]
+Installing heatmaply...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 92 deps: kept 92 [3s]
+Installing here...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.6s]
+Installing hexbin...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.2s]
+Installing hexSticker...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 66 deps: kept 66 [2.2s]
+Installing hexView...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing HGNChelper...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [1.1s]
+Installing hgu133a.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 35 deps: kept 36 [1.9s]
+Installing hgu133plus2.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 35 deps: kept 36 [1.8s]
+Installing highlight...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing highr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing Hmisc...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 53 deps: kept 54 [2.1s]
+Installing hms...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [1.3s]
+Installing homologene...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.6s]
+Installing HSAUR3...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.5s]
+Installing htmlTable...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.5s]
+Installing htmltools...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.2s]
+Installing HTMLUtils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing htmlwidgets...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.6s]
+Installing httpcode...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1s]
+Installing httpuv...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 11 [1.5s]
+Installing httr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 7 deps: kept 8 [1.3s]
+Installing httr2...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [1.3s]
+Installing hues...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.2s]
+Installing hunspell...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [1.3s]
+Installing huxtable...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ texlive  - huxtable
+ℹ No downloads are needed
+✔ 1 pkg + 22 deps: kept 23 [1.5s]
+Installing hwriter...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.2s]
+Installing hypergeo...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ pari-gp  - elliptic
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.2s]
+Installing ica...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.3s]
+Installing IDPmisc...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.4s]
+Installing ids...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.2s]

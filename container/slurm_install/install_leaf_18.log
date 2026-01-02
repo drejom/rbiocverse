@@ -1,0 +1,379 @@
+=== Phase 2: Installing leaf packages (task 18) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_018.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing spData...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [6s]
+Installing spdep...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 18 [1.4s]
+Installing speckle...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 152 deps: kept 152 [2.7s]
+Installing speedglm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [1s]
+Installing spelling...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 12 [981ms]
+Installing splines2...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [854ms]
+Installing splitstackshape...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [805ms]
+Installing spls...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [814ms]
+Installing sqldf...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.2s]
+Installing SQUAREM...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [813ms]
+Installing SSEparser...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [982ms]
+Installing stable...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [804ms]
+Installing stabledist...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [844ms]
+Installing stabs...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [828ms]
+Installing stacks...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 84 deps: kept 84 [2.2s]
+Installing stageR...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing StanHeaders...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [879ms]
+Installing stars...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 15 deps: kept 15 [1.4s]
+Installing statip...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [909ms]
+Installing statmod...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [808ms]
+Installing statnet.common...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [821ms]
+Installing stinepack...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [803ms]
+Installing stm...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.2s]
+Installing stopwords...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [834ms]
+Installing storr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [853ms]
+Installing stringdist...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [872ms]
+Installing stringfish...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [861ms]
+Installing stringi...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [819ms]
+Installing stringmagic...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [899ms]
+Installing strucchange...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [916ms]
+Installing styler...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.3s]
+Installing subselect...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [894ms]
+Installing SuperLearner...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [936ms]
+Installing superpc...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [817ms]
+Installing SuppDists...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [797ms]
+Installing survey...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 8 [992ms]
+Installing survminer...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 102 deps: kept 102 [2.2s]
+Installing survMisc...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 31 [1.2s]
+Installing sva...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 56 deps: kept 57 [1.6s]
+Installing svglite...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [950ms]
+Installing swagger...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [854ms]
+Installing symphony...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 43 deps: kept 43 [1.6s]
+Installing sys...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [865ms]
+Installing sysfonts...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [848ms]
+Installing systemfit...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 74 deps: kept 74 [2.1s]
+Installing systemfonts...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [895ms]
+Installing tables...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [940ms]
+Installing tarchetypes...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.2s]
+Installing targets...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 31 [1.3s]
+Installing TeachingDemos...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [777ms]
+Installing tensor...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [829ms]
+Installing tensorA...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [806ms]
+Installing tensorflow...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 29 [1.2s]
+Installing terra...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [878ms]
+Installing testit...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [842ms]
+Installing text2vec...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [1s]
+Installing textdata...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 24 [1.3s]
+Installing textrecipes...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 64 deps: kept 64 [1.6s]
+Installing textshaping...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [873ms]
+Installing tfautograph...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [1.1s]
+Installing TFBSTools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 67 deps: kept 67 [1.7s]
+Installing url::https://cran.r-project.org/src/contrib/Archive/TFMPvalue/TFMPvalue_0.0.9.tar.gz...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [1.5s]
+Installing tfdatasets...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 31 [1.2s]
+Installing TFisher...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 12 [1.1s]
+Installing tfruns...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 23 [1.1s]
+Installing TH.data...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [929ms]
+Installing thematic...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 19 [1.2s]
+Installing themis...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 64 deps: kept 64 [1.8s]

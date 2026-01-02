@@ -231,7 +231,7 @@ Imports: abind, acepack, actuar, ade4, adegenet, admisc, AER, affy, affyio,
 Suggests: testthat (>= 3.0.0), roxygen2, pkgdown
 Remotes: url::https://cran.r-project.org/src/contrib/Archive/grr/grr_0.9.5.tar.gz,
         url::https://cran.r-project.org/src/contrib/Archive/TFMPvalue/TFMPvalue_0.0.9.tar.gz,
-        bnprks/BPCells/r@c293a0a,
+        bnprks/BPCells/r@v0.3.1,
         cole-trapnell-lab/monocle3@v1.4.26, satijalab/seurat-data@3e51f44,
         satijalab/seurat-wrappers@a1eb0d8, satijalab/azimuth@243ee5d,
         mojaveazure/seurat-disk@877d4e1, immunogenomics/presto@7636b3d,

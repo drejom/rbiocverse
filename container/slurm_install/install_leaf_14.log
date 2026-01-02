@@ -1,0 +1,378 @@
+=== Phase 2: Installing leaf packages (task 14) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_014.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing profvis...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 28 deps: kept 29 [6.5s]
+Installing progress...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [1.1s]
+Installing progressr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [906ms]
+Installing proj4...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing projects...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 32 deps: kept 33 [1.5s]
+Installing promises...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 10 [1.3s]
+Installing ProtGenerics...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [836ms]
+Installing proto...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.5s]
+Installing proxy...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [941ms]
+Installing proxyC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1.1s]
+Installing PRROC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [919ms]
+Installing pryr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [1.2s]
+Installing ps...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [888ms]
+Installing pscl...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [935ms]
+Installing psych...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.1s]
+Installing Publish...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 42 deps: kept 42 [1.5s]
+Installing pvca...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 38 deps: kept 38 [1.5s]
+Installing pvclust...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [841ms]
+Installing pwalign...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [1s]
+Installing pzfx...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [917ms]
+Installing qap...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [909ms]
+Installing qpdf...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [1.2s]
+Installing qqconf...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [991ms]
+Installing qrLMM...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ pari-gp  - elliptic
+ℹ No downloads are needed
+✔ 1 pkg + 24 deps: kept 24 [1.2s]
+Installing qs...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [1s]
+Installing qs2...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1s]
+Installing QSARdata...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [847ms]
+Installing quadprog...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [867ms]
+Installing quanteda...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 16 [1.1s]
+Installing quantiseqr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 49 deps: kept 50 [1.6s]
+Installing quantmod...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [1s]
+Installing quantreg...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [897ms]
+Installing quarto...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 31 [1.3s]
+Installing questionr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 69 deps: kept 69 [2.1s]
+Installing QuickJSR...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [866ms]
+Installing qvalue...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 22 deps: kept 22 [1.2s]
+Installing qvcalc...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [980ms]
+Installing R.cache...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [933ms]
+Installing R.methodsS3...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [882ms]
+Installing R.oo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1s]
+Installing R.rsp...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [988ms]
+Installing R.utils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [885ms]
+Installing r2d3...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 28 deps: kept 29 [1.2s]
+Installing R2HTML...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [842ms]
+Installing R2jags...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.1s]
+Installing R2WinBUGS...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1s]
+Installing R6...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [988ms]
+Installing rafalib...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [962ms]
+Installing ragg...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [1.1s]
+Installing rainbow...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 36 deps: kept 36 [1.4s]
+Installing randomcoloR...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 21 deps: kept 21 [1.2s]
+Installing randtoolbox...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [906ms]
+Installing ranger...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [969ms]
+Installing rapidjsonr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [788ms]
+Installing RApiSerialize...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [801ms]
+Installing rappdirs...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [884ms]
+Installing rARPACK...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [959ms]
+Installing raster...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [1.1s]
+Installing RBGL...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [939ms]
+Installing rbibutils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [919ms]
+Installing rcmdcheck...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.1s]
+Installing rcompanion...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 65 deps: kept 65 [1.7s]
+Installing rcorpora...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [884ms]
+Installing RcppAnnoy...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [1.1s]
+Installing RcppGSL...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [967ms]
+Installing RcppHNSW...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [983ms]
+Installing RcppML...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1s]
+Installing RcppNumerical...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [1.1s]
+Installing RcppProgress...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.2s]

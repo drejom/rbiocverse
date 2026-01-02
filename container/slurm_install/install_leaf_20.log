@@ -1,0 +1,466 @@
+=== Phase 2: Installing leaf packages (task 20) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_020.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing urltools...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [6s]
+Installing utf8...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing uuid...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [766ms]
+Installing V8...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1.1s]
+Installing validate...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [877ms]
+Installing variancePartition...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 93 deps: kept 93 [1.9s]
+Installing VariantAnnotation...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 64 deps: kept 65 [1.8s]
+Installing vars...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [935ms]
+Installing vcd...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [934ms]
+Installing vdiffr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 28 deps: kept 29 [1.2s]
+Installing vegan...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 7 deps: kept 8 [1.1s]
+Installing velocyto-team/velocyto.R@0.6...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ velocyto.R   0.6 [bld][cmp] (GitHub: 83e6ed9)
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 1 pkg is cached
+ℹ Building velocyto.R 0.6
+✖ Failed to build velocyto.R 0.6 (17.3s)
+  FAILED: ! error in pak subprocess
+Caused by error in `stop_task_build(state, worker)`:
+! Failed to build source package velocyto.R.
+Full installation output:
+* installing *source* package ‘velocyto.R’ ...
+** this is package ‘velocyto.R’ version ‘0.6’
+staged installation is only possible with locking
+** using non-staged installation
+** libs
+using C++ compiler: ‘g++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0’
+using C++11
+g++ -std=gnu++11 -I"/usr/local/lib/R/include" -DNDEBUG  -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/Rcpp/include' -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include' -I/usr/local/include   -fopenmp -fpic  -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2 -g  -Wall -pedantic  -c RcppExports.cpp -o RcppExports.o
+In file included from /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include/RcppArmadillo.h:29,
+                 from RcppExports.cpp:4:
+/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include/RcppArmadillo/version/arma.h:66:199: note: ‘#pragma message: Using fallback compilation with Armadillo 14.6.3. Please consider defining -DARMA_USE_CURRENT and also removing C++11 compilation directive. See GitHub issue #475 for more.’
+   66 |         #pragma message("Using fallback compilation with Armadillo 14.6.3. Please consider defining -DARMA_USE_CURRENT and also removing C++11 compilation directive. See GitHub issue #475 for more.")
+      |                                                                                                                                                                                                       ^
+g++ -std=gnu++11 -I"/usr/local/lib/R/include" -DNDEBUG  -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/Rcpp/include' -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include' -I/usr/local/include   -fopenmp -fpic  -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2 -g  -Wall -pedantic  -c points_within.cpp -o points_within.o
+g++ -std=gnu++11 -I"/usr/local/lib/R/include" -DNDEBUG  -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/Rcpp/include' -I'/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include' -I/usr/local/include   -fopenmp -fpic  -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2 -g  -Wall -pedantic  -c routines.cpp -o routines.o
+In file included from /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include/RcppArmadillo.h:29,
+                 from routines.cpp:5:
+/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22/RcppArmadillo/include/RcppArmadillo/version/arma.h:66:199: note: ‘#pragma message: Using fallback compilation with Armadillo 14.6.3. Please consider defining -DARMA_USE_CURRENT and also removing C++11 compilation directive. See GitHub issue #475 for more.’
+   66 |         #pragma message("Using fallback compilation with Armadillo 14.6.3. Please consider defining -DARMA_USE_CURRENT and also removing C++11 compilation directive. See GitHub issue #475 for more.")
+      |                                                                                                                                                                                                       ^
+routines.cpp: In function ‘arma::sp_mat balanced_knn(const arma::mat&, int, int, bool, int)’:
+routines.cpp:16:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   16 |   for(int i=0;i<d.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp:30:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   30 |   for(int i=0;i<d.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp:35:14: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   35 |     for(j=0;j<dsi.n_rows && p<k;j++) {
+      |             ~^~~~~~~~~~~
+routines.cpp:39:14: warning: comparison of integer expressions of different signedness: ‘unsigned int’ and ‘int’ [-Wsign-compare]
+   39 |       if(l[m]>= maxl) { continue; } // element has already maxed out its neighbors
+routines.cpp:43:9: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   43 |     if(j==dsi.n_rows && p<k) {
+      |        ~^~~~~~~~~~~~
+routines.cpp:48:19: error: format not a string literal and no format arguments [-Werror=format-security]
+   48 |         Rf_warning(es.str().c_str());
+      |         ~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+routines.cpp:59:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   59 |   for(int i=0;i<colptr.n_elem;i++) { colptr[i]=cc; cc+=k; }
+      |               ~^~~~~~~~~~~~~~
+routines.cpp: In function ‘arma::mat colDeltaCor(const arma::mat&, const arma::mat&, int)’:
+routines.cpp:77:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   77 |   for(int i=0;i<e.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp: In function ‘arma::mat colDeltaCorSqrt(const arma::mat&, const arma::mat&, int)’:
+routines.cpp:89:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+   89 |   for(int i=0;i<e.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp: In function ‘arma::mat colDeltaCorLog10(const arma::mat&, const arma::mat&, double, int)’:
+routines.cpp:102:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+  102 |   for(int i=0;i<e.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp: In function ‘arma::mat colEuclid(const arma::mat&, const arma::mat&, int)’:
+routines.cpp:118:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+  118 |   for(int i=0;i<e.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp: In function ‘arma::mat embArrows(const arma::mat&, const arma::sp_mat&, double, int)’:
+routines.cpp:147:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+  147 |   for(int i=0;i<emb.n_rows;i++) {
+      |               ~^~~~~~~~~~~
+routines.cpp: In function ‘arma::mat expectedExpressionShift(const arma::mat&, const arma::sp_mat&, int, double, int)’:
+routines.cpp:164:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘const arma::uword’ {aka ‘const unsigned int’} [-Wsign-compare]
+  164 |   for(int i=0;i<e.n_cols;i++) {
+      |               ~^~~~~~~~~
+routines.cpp: In function ‘Rcpp::DataFrame groupMotifs(Rcpp::DataFrame, int)’:
+routines.cpp:231:16: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::vector<int, std::allocator<int> >::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]
+  231 |   for(int i=0;i<ci.size();i++) {
+      |               ~^~~~~~~~~~
+cc1plus: some warnings being treated as errors
+make: *** [/usr/local/lib/R/etc/Makeconf:211: routines.o] Error 1
+ERROR: compilation failed for package ‘velocyto.R’
+* removing ‘/tmp/Rtmpnj1dnl/pkg-lib57c836588c46/velocyto.R’
+Installing VennDiagram...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [945ms]
+Installing venneuler...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [962ms]
+Installing versions...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [822ms]
+Installing VGAM...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [870ms]
+Installing VIM...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 84 deps: kept 84 [2.2s]
+Installing vipor...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1s]
+Installing viridisLite...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [806ms]
+Installing visdat...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 37 deps: kept 38 [1.3s]
+Installing visNetwork...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 28 deps: kept 29 [1.1s]
+Installing vroom...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.3s]
+Installing vsn...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.1s]
+Installing waiter...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.3s]
+Installing wakefield...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.3s]
+Installing waldo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [918ms]
+Installing warp...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [846ms]
+Installing wCorr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [1.1s]
+Installing webdriver...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1s]
+Installing webfakes...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [815ms]
+Installing webmockr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 12 [982ms]
+Installing webp...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [752ms]
+Installing webshot...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [902ms]
+Installing webshot2...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ chromium  - chromote
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing websocket...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [1s]
+Installing wesanderson...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [818ms]
+Installing WGCNA...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 91 deps: kept 91 [1.9s]
+Installing whisker...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [839ms]
+Installing widgetframe...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 31 [1.3s]
+Installing withr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [858ms]
+Installing wk...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [827ms]
+Installing wordcloud...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [1.2s]
+Installing wordpiece...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 19 [1s]
+Installing wordpiece.data...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [857ms]
+Installing workflows...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 65 deps: kept 65 [1.7s]
+Installing workflowsets...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 78 deps: kept 78 [2.1s]
+Installing writexl...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [803ms]
+Installing WriteXLS...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [860ms]
+Installing xaringan...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 33 deps: kept 33 [1.4s]
+Installing xaringanExtra...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 13 [952ms]
+Installing xfun...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [857ms]
+Installing xlsx...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [915ms]
+Installing xlsxjars...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [849ms]
+Installing XML...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [874ms]
+Installing xml2...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [1.1s]
+Installing xmlparsedata...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [766ms]
+Installing xopen...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [855ms]
+Installing xrf...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 27 [1.1s]
+Installing xtable...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [829ms]
+Installing xts...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [938ms]
+Installing xxhashlite...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [808ms]
+Installing yaImpute...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [847ms]
+Installing yaml...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [815ms]
+Installing yardstick...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing yulab.utils...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [923ms]
+Installing zeallot...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [778ms]
+Installing zellkonverter...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 32 deps: kept 32 [1.4s]
+Installing zip...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [849ms]
+Installing zoo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [838ms]

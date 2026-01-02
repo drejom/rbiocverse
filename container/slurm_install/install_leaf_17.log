@@ -1,0 +1,383 @@
+=== Phase 2: Installing leaf packages (task 17) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_017.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing shiny.i18n...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 35 deps: kept 35 [6.5s]
+Installing shinyAce...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.4s]
+Installing shinyBS...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.2s]
+Installing shinybusy...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 38 deps: kept 38 [1.4s]
+Installing shinycssloaders...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.4s]
+Installing shinydashboard...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.2s]
+Installing shinydisconnect...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 32 deps: kept 32 [1.2s]
+Installing shinyjs...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.4s]
+Installing shinylive...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 41 deps: kept 42 [1.4s]
+Installing shinystan...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 100 deps: kept 100 [2.3s]
+Installing shinytest...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 65 deps: kept 65 [1.7s]
+Installing shinytest2...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ chromium  - chromote
+ℹ No downloads are needed
+✔ 1 pkg + 63 deps: kept 63 [1.9s]
+Installing shinythemes...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.3s]
+Installing shinytoastr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.3s]
+Installing shinyWidgets...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.4s]
+Installing ShortRead...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 40 deps: kept 40 [1.6s]
+Installing showimage...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing showtext...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [1.1s]
+Installing showtextdb...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [886ms]
+Installing Signac...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 74 deps: kept 74 [1.8s]
+Installing signal...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [832ms]
+Installing simplifyEnrichment...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 81 deps: kept 81 [2s]
+Installing simputation...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 99 deps: kept 99 [2.3s]
+Installing sinew...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing SingleR...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 29 [1.3s]
+Installing singscore...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 109 deps: kept 109 [2.5s]
+Installing sitmo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [886ms]
+Installing skimr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 31 [2.6s]
+Installing slam...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [865ms]
+Installing slider...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [1s]
+Installing slingshot...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 29 [1.2s]
+Installing sm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [824ms]
+Installing smd...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing sn...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [943ms]
+Installing sna...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 15 deps: kept 16 [1s]
+Installing snakecase...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [989ms]
+Installing snm...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 14 [1.2s]
+Installing snow...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [844ms]
+Installing SnowballC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [850ms]
+Installing SNPRelate...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [890ms]
+Installing sodium...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [850ms]
+Installing sofa...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [1.1s]
+Installing som...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [842ms]
+Installing sortable...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 46 deps: kept 46 [1.7s]
+Installing sos...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [862ms]
+Installing SoupX...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 135 deps: kept 135 [2.5s]
+Installing sourcetools...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [797ms]
+Installing sp...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [875ms]
+Installing spacyr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [959ms]
+Installing spam...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [961ms]
+Installing sparkline...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.2s]
+Installing sparklyr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 36 deps: kept 37 [1.4s]
+Installing SparseArray...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 12 [986ms]
+Installing sparsediscrim...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.3s]
+Installing SparseGrid...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [827ms]
+Installing SparseM...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [869ms]
+Installing SpatialExperiment...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 56 deps: kept 56 [1.8s]
+Installing spatialreg...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 30 deps: kept 30 [1.2s]
+Installing spatstat...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 20 [1.2s]
+Installing spatstat.data...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1.1s]
+Installing spatstat.explore...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [993ms]
+Installing spatstat.geom...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 7 deps: kept 8 [925ms]
+Installing spatstat.linnet...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 19 [1.2s]
+Installing spatstat.model...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing spatstat.random...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [959ms]
+Installing spatstat.sparse...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [916ms]
+Installing spatstat.univar...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [948ms]
+Installing spatstat.utils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [854ms]

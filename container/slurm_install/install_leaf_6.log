@@ -1,0 +1,369 @@
+=== Phase 2: Installing leaf packages (task 6) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_006.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing fastICA...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [4.5s]
+Installing fastmap...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [952ms]
+Installing fastmatch...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [804ms]
+Installing fauxpas...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [926ms]
+Installing fBasics...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [916ms]
+Installing fda...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 41 deps: kept 41 [1.5s]
+Installing fdrtool...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [783ms]
+Installing fds...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 39 deps: kept 39 [1.3s]
+Installing feather...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1s]
+Installing fftwtools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [814ms]
+Installing fGarch...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [957ms]
+Installing fgsea...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 29 [1.2s]
+Installing fields...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 6 [1.1s]
+Installing filelock...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [796ms]
+Installing finetune...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 78 deps: kept 78 [1.9s]
+Installing fission...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing fit.models...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [858ms]
+Installing fitdistrplus...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [965ms]
+Installing flashClust...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [868ms]
+Installing flexclust...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1s]
+Installing flexdashboard...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 43 deps: kept 43 [1.6s]
+Installing flexmix...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [856ms]
+Installing flexsurv...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 49 deps: kept 49 [1.4s]
+Installing flextable...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 56 deps: kept 56 [1.6s]
+Installing float...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [828ms]
+Installing flock...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [901ms]
+Installing flow...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ chromium  - chromote, nomnoml
+ℹ No downloads are needed
+✔ 1 pkg + 54 deps: kept 54 [1.5s]
+Installing flowCore...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 8 [1s]
+Installing flowStats...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 86 deps: kept 86 [1.9s]
+Installing flowViz...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing flowWorkspace...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 48 deps: kept 48 [1.6s]
+Installing FNN...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [846ms]
+Installing fontawesome...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [1s]
+Installing fontBitstreamVera...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [852ms]
+Installing fontLiberation...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [841ms]
+Installing fontquiver...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [894ms]
+Installing foreach...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [919ms]
+Installing forecast...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 35 deps: kept 35 [1.5s]
+Installing forge...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [848ms]
+Installing formatR...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [807ms]
+Installing formattable...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.2s]
+Installing Formula...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [802ms]
+Installing fortunes...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [783ms]
+Installing fpc...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [955ms]
+Installing fracdiff...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [823ms]
+Installing fresh...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 31 [1.4s]
+Installing fs...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [829ms]
+Installing fst...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [833ms]
+Installing fstcore...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [854ms]
+Installing furrr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [1.1s]
+Installing futile.logger...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [917ms]
+Installing futile.options...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [793ms]
+Installing future.batchtools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.2s]
+Installing future.callr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [988ms]
+Installing fuzzyjoin...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 24 deps: kept 24 [1.3s]
+Installing GA...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 6 [887ms]
+Installing gage...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 36 deps: kept 37 [1.2s]
+Installing gam...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [884ms]
+Installing gamlss.dist...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [855ms]
+Installing gapminder...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [943ms]
+Installing gargle...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 15 deps: kept 16 [1.1s]
+Installing gbm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [913ms]
+Installing gbutils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [848ms]
+Installing gclus...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [826ms]
+Installing gdata...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [869ms]
+Installing gdsfmt...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [839ms]
+Installing gdtools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 14 [974ms]
+Installing geepack...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 22 deps: kept 23 [1.4s]

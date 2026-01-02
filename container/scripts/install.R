@@ -138,14 +138,19 @@ parse_description <- function(path = DESCRIPTION_PATH) {
       # Extract package name from remote spec
       # url::https://...pkg_version.tar.gz -> pkg
       # user/repo@ref -> repo
+      # user/repo/subdir@ref -> repo (not subdir!)
       if (grepl("^url::", remote)) {
         # URL remote: extract package name from filename
         # e.g., url::https://cran.r-project.org/.../grr_0.9.5.tar.gz -> grr
         pkg_name <- sub(".*/([-a-zA-Z0-9.]+)_[0-9].*\\.tar\\.gz$", "\\1", remote)
       } else {
-        # GitHub remote: user/repo@ref -> repo
-        repo_name <- sub("^[^/]+/", "", remote)  # remove user/
-        repo_name <- sub("@.*$", "", repo_name)  # remove @ref
+        # GitHub remote: user/repo[@ref] or user/repo/subdir[@ref]
+        # First strip @ref
+        base <- sub("@.*$", "", remote)
+        # Split by /
+        parts <- strsplit(base, "/")[[1]]
+        # repo is always the second part (user/repo or user/repo/subdir)
+        repo_name <- if (length(parts) >= 2) parts[2] else parts[1]
         # Use explicit mapping if available, otherwise use repo name as-is
         pkg_name <- if (repo_name %in% names(repo_to_pkg)) repo_to_pkg[[repo_name]] else repo_name
       }

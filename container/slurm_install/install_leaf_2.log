@@ -1,0 +1,377 @@
+=== Phase 2: Installing leaf packages (task 2) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_002.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing bbmle...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [4.2s]
+Installing bdsmatrix...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [963ms]
+Installing beachmat...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 14 [971ms]
+Installing bedr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 33 deps: kept 34 [1.4s]
+Installing beepr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [842ms]
+Installing beeswarm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [811ms]
+Installing bench...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 12 [918ms]
+Installing benchmarkme...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 32 [1.3s]
+Installing benchmarkmeData...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 15 deps: kept 16 [987ms]
+Installing betareg...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [914ms]
+Installing BH...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [793ms]
+Installing BiasedUrn...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [742ms]
+Installing bigassertr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [803ms]
+Installing bigD...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [904ms]
+Installing biglm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [954ms]
+Installing biglmm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [880ms]
+Installing bigmemory...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 3 [871ms]
+Installing bigmemory.sri...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [848ms]
+Installing bigreadr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [945ms]
+Installing bindr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [839ms]
+Installing binGroup...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [957ms]
+Installing BiocBaseUtils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [889ms]
+Installing BiocHubsShiny...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 88 deps: kept 88 [2.2s]
+Installing BiocIO...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1s]
+Installing BiocManager...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [846ms]
+Installing BiocNeighbors...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [809ms]
+Installing BiocSingular...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 25 deps: kept 25 [1.1s]
+Installing BiocStyle...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 28 deps: kept 29 [1.2s]
+Installing BiocWorkflowTools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 55 deps: kept 56 [1.6s]
+Installing biovizBase...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 114 deps: kept 115 [2.4s]
+Installing bipartite...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 31 [1.2s]
+Installing bit...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [805ms]
+Installing bit64...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [935ms]
+Installing bitops...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [813ms]
+Installing blastula...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 49 deps: kept 50 [1.7s]
+Installing blme...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 13 [944ms]
+Installing blob...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [900ms]
+Installing bluster...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 23 [1.1s]
+Installing bookdown...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.2s]
+Installing BradleyTerry2...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 17 [1.1s]
+Installing brew...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [818ms]
+Installing brglm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [848ms]
+Installing bridgesampling...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 20 [1.2s]
+Installing brio...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [777ms]
+Installing brms...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 70 deps: kept 70 [1.8s]
+Installing Brobdingnag...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [863ms]
+Installing broom...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 21 [1.3s]
+Installing broom.helpers...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 33 deps: kept 34 [1.4s]
+Installing broom.mixed...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 32 deps: kept 33 [1.4s]
+Installing bs4Dash...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 38 deps: kept 38 [1.5s]
+Installing BSgenome.Hsapiens.UCSC.hg19...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 46 deps: kept 47 [1.4s]
+Installing BSgenome.Hsapiens.UCSC.hg38...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 48 deps: kept 49 [1.4s]
+Installing BSgenome.Scerevisiae.UCSC.sacCer3...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 46 deps: kept 47 [1.5s]
+Installing bslib...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1s]
+Installing bsplus...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.2s]
+Installing btergm...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 44 deps: kept 45 [1.5s]
+Installing BUSpaRse...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 107 deps: kept 107 [2.6s]
+Installing butcher...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.1s]
+Installing C50...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 21 deps: kept 21 [1.2s]
+Installing ca...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [817ms]
+Installing cache...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [1.2s]
+Installing cachem...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [828ms]
+Installing Cairo...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [881ms]
+Installing callr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [889ms]
+Installing car...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 72 deps: kept 72 [1.7s]
+Installing carData...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [775ms]
+Installing cards...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 20 [1.2s]
+Installing cardx...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 21 [1.1s]

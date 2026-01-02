@@ -1,0 +1,367 @@
+=== Phase 2: Installing leaf packages (task 13) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_013.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing paws.security.identity...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [6.4s]
+Installing paws.storage...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.4s]
+Installing pbapply...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [827ms]
+Installing pbivnorm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [935ms]
+Installing pbkrtest...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 63 deps: kept 63 [1.9s]
+Installing pbmcapply...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [885ms]
+Installing pcaMethods...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [903ms]
+Installing pcaPP...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.7s]
+Installing pdftools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [989ms]
+Installing pec...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 95 deps: kept 95 [2.2s]
+Installing pegas...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [1.1s]
+Installing performance...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [993ms]
+Installing permute...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [921ms]
+Installing PFAM.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.5s]
+Installing phosphoricons...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [1s]
+Installing phylolm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 11 [1s]
+Installing piecemaker...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [1s]
+Installing piggyback...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 27 deps: kept 28 [1.3s]
+Installing pinfsc50...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [924ms]
+Installing pingr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [976ms]
+Installing pins...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.6s]
+Installing pixmap...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [876ms]
+Installing pkgbuild...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [955ms]
+Installing pkgcache...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [946ms]
+Installing pkgconfig...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [852ms]
+Installing pkgdepends...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [1.2s]
+Installing pkgload...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 13 [1s]
+Installing PKI...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [862ms]
+Installing plm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 16 [1s]
+Installing plogr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [806ms]
+Installing plot3D...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [943ms]
+Installing plotly...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 62 deps: kept 62 [1.8s]
+Installing plotlyGeoAssets...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [841ms]
+Installing plotmo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [985ms]
+Installing plotrix...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [937ms]
+Installing pls...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing plyr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [1.3s]
+Installing plyranges...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 58 deps: kept 59 [1.6s]
+Installing png...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [816ms]
+Installing PoiClaClu...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [871ms]
+Installing poLCA...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [898ms]
+Installing polspline...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [954ms]
+Installing polyclip...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [870ms]
+Installing polycor...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [1.1s]
+Installing polylabelr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [886ms]
+Installing polynom...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [882ms]
+Installing PolyPhen.Hsapiens.dbSNP131...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 65 deps: kept 66 [2s]
+Installing polysat...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [961ms]
+Installing poppr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 71 deps: kept 71 [2s]
+Installing posterior...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 19 [1.3s]
+Installing poweRlaw...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing prabclus...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [907ms]
+Installing pracma...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [835ms]
+Installing praise...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [824ms]
+Installing preprocessCore...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [859ms]
+Installing immunogenomics/presto@7636b3d...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 23 [1.7s]
+Installing prettycode...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [937ms]
+Installing prettydoc...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.2s]
+Installing prettyunits...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [890ms]
+Installing princurve...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [922ms]
+Installing prismatic...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [916ms]
+Installing pROC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [919ms]
+Installing processx...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [935ms]
+Installing prodlim...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 35 deps: kept 35 [1.3s]
+Installing proffer...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 22 deps: kept 22 [1.3s]
+Installing profile...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 12 [1.1s]
+Installing profileModel...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [909ms]
+Installing profmem...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.2s]

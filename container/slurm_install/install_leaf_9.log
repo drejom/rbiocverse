@@ -1,0 +1,374 @@
+=== Phase 2: Installing leaf packages (task 9) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_009.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing illuminaio...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [4.7s]
+Installing impute...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [796ms]
+Installing imputeTS...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 48 deps: kept 48 [1.5s]
+Installing infer...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 32 [1.3s]
+Installing infotheo...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [872ms]
+Installing ini...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [793ms]
+Installing inline...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1.1s]
+Installing insight...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [856ms]
+Installing interactiveDisplayBase...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 43 deps: kept 43 [1.3s]
+Installing intergraph...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 17 [1.1s]
+Installing interp...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [821ms]
+Installing intrinsicDimension...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1s]
+Installing inum...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [902ms]
+Installing invgamma...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [783ms]
+Installing ipred...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 40 deps: kept 40 [1.7s]
+Installing IRdisplay...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 13 deps: kept 14 [1.1s]
+Installing isoband...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [865ms]
+Installing ISOcodes...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [862ms]
+Installing isomiRs...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 130 deps: kept 130 [2.8s]
+Installing ISwR...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [1s]
+Installing iterators...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [832ms]
+Installing itertools...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [840ms]
+Installing janeaustenr...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [807ms]
+Installing janitor...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 24 [1.2s]
+Installing JASPAR2020...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [857ms]
+Installing jcolors...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 17 [1s]
+Installing joineRML...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 47 deps: kept 47 [1.5s]
+Installing jomo...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 26 [1.2s]
+Installing jose...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [847ms]
+Installing jpeg...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [976ms]
+Installing jqr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [836ms]
+Installing jquerylib...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [885ms]
+Installing jsonify...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [866ms]
+Installing jsonlite...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [976ms]
+Installing jsonvalidate...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [922ms]
+Installing juicyjuice...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [940ms]
+Installing kableExtra...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 40 deps: kept 41 [1.4s]
+Installing katex...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [989ms]
+Installing KEGGdzPathwaysGEO...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [1.1s]
+Installing KEGGgraph...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 7 deps: kept 8 [1s]
+Installing KEGGREST...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [1.1s]
+Installing Kendall...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [862ms]
+Installing keras...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 32 deps: kept 32 [1.2s]
+Installing kernlab...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [804ms]
+Installing KFAS...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [802ms]
+Installing kknn...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [1s]
+Installing km.ci...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [887ms]
+Installing KMsurv...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [830ms]
+Installing knitrBootstrap...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 30 [1.2s]
+Installing ks...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 12 [1.1s]
+Installing kSamples...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [842ms]
+Installing labeling...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [858ms]
+Installing labelled...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 29 deps: kept 30 [1.4s]
+Installing laeken...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [876ms]
+Installing Lahman...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 15 deps: kept 16 [1.4s]
+Installing lambda.r...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [840ms]
+Installing langevitour...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 31 deps: kept 32 [1.3s]
+Installing languageserver...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 42 deps: kept 43 [1.4s]
+Installing lars...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [807ms]
+Installing later...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [850ms]
+Installing latex2exp...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [919ms]
+Installing latticeExtra...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 8 [1s]
+Installing lava...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [999ms]
+Installing lavaan...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [903ms]
+Installing lazyeval...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [821ms]
+Installing lda...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [871ms]
+Installing leafem...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 55 deps: kept 55 [1.7s]
+Installing leaflet...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 53 deps: kept 53 [1.6s]

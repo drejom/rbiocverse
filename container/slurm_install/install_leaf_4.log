@@ -1,0 +1,372 @@
+=== Phase 2: Installing leaf packages (task 4) ===
+Package file: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_leaf_004.txt
+Library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing curl...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [3.9s]
+Installing cvar...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [989ms]
+Installing cvAUC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 7 deps: kept 8 [891ms]
+Installing CVST...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [912ms]
+Installing cyclocomp...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [1s]
+Installing cytolib...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [757ms]
+Installing data.tree...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [825ms]
+Installing datamods...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 77 deps: kept 77 [1.7s]
+Installing datapasta...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 22 deps: kept 23 [1s]
+Installing datawizard...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [805ms]
+Installing dbarts...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [780ms]
+Installing DBI...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [830ms]
+Installing dbplyr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 21 deps: kept 22 [1.1s]
+Installing dbscan...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [843ms]
+Installing ddalpha...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 11 deps: kept 11 [1s]
+Installing debugme...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [876ms]
+Installing decor...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 10 deps: kept 11 [938ms]
+Installing DEGreport...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 95 deps: kept 95 [2s]
+Installing deldir...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [803ms]
+Installing dendextend...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 20 [1.2s]
+Installing dendsort...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [735ms]
+Installing densvis...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 18 deps: kept 18 [930ms]
+Installing DEoptimR...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [748ms]
+Installing Deriv...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [780ms]
+Installing desc...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [876ms]
+Installing DescTools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 50 deps: kept 50 [1.4s]
+Installing DESeq2...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 42 deps: kept 42 [1.2s]
+Installing deSolve...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [762ms]
+Installing details...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 23 deps: kept 24 [1.1s]
+Installing DEXSeq...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 94 deps: kept 94 [2s]
+Installing dfidx...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [820ms]
+Installing dfoptim...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [756ms]
+Installing diagram...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing DiagrammeR...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 59 deps: kept 60 [1.5s]
+Installing DiagrammeRsvg...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 4 [790ms]
+Installing dials...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 25 deps: kept 26 [1.1s]
+Installing DiceDesign...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [838ms]
+Installing dichromat...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [770ms]
+Installing diffcoexp...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 109 deps: kept 109 [2.1s]
+Installing DiffCorr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 19 [1.1s]
+Installing diffobj...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [815ms]
+Installing digest...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [781ms]
+Installing dimRed...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [926ms]
+Installing diptest...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [824ms]
+Installing dir.expiry...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [790ms]
+Installing DirichletMultinomial...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [933ms]
+Installing discrim...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 37 deps: kept 38 [1.3s]
+Installing distances...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [806ms]
+Installing distributional...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [1.1s]
+Installing DistributionUtils...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [711ms]
+Installing distro...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [737ms]
+Installing dittoSeq...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 46 deps: kept 46 [1.3s]
+Installing dlr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [839ms]
+Installing dm...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 27 [1.1s]
+Installing DO.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.2s]
+Installing doBy...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 55 deps: kept 55 [1.5s]
+Installing doconv...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 12 [922ms]
+Installing docopt...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [839ms]
+Installing doFuture...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 9 deps: kept 10 [984ms]
+Installing doMC...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [852ms]
+Installing doParallel...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [827ms]
+Installing doRNG...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [847ms]
+Installing DOSE...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 73 deps: kept 73 [1.8s]
+Installing doSNOW...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [803ms]
+Installing dotCall64...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [719ms]
+Installing chris-mcginnis-ucsf/DoubletFinder@1b244d8...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 137 deps: kept 137 [2.8s]
+Installing downlit...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 17 [938ms]
+Installing downloader...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [810ms]

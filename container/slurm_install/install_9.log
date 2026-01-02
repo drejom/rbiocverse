@@ -1,0 +1,897 @@
+Installing packages from: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_009.txt
+Target library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing infer...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+→ Will install 2 packages.
+→ Will download 1 CRAN package (2.72 MB), cached: 1 (3.32 MB).
++ infer       1.1.0 [bld][dl] (2.72 MB)
++ patchwork   1.3.2 [bld]
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (2.72 MB), 1 (3.32 MB) cached
+✔ Got infer 1.1.0 (source) (2.72 MB)
+ℹ Building patchwork 1.3.2
+✔ Built patchwork 1.3.2 (5s)
+✔ Installed patchwork 1.3.2  (222ms)
+ℹ Building infer 1.1.0
+✔ Built infer 1.1.0 (4.2s)
+✔ Installed infer 1.1.0  (283ms)
+✔ 1 pkg + 31 deps: kept 30, added 2, dld 1 (2.72 MB) [15.4s]
+Installing infotheo...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (8.34 kB).
++ infotheo   1.2.0.1 [bld][cmp][dl] (8.34 kB)
+  
+ℹ Getting 1 pkg (8.34 kB)
+✔ Got infotheo 1.2.0.1 (source) (8.34 kB)
+ℹ Building infotheo 1.2.0.1
+✔ Built infotheo 1.2.0.1 (2.7s)
+✔ Installed infotheo 1.2.0.1  (1.1s)
+✔ 1 pkg: added 1, dld 1 (8.34 kB) [5.4s]
+Installing ini...
+ 
+→ Will install 1 package.
+→ The package (3.49 kB) is cached.
++ ini   0.3.1 [bld]
+  
+ℹ No downloads are needed, 1 pkg (3.49 kB) is cached
+✔ Installed ini 0.3.1  (169ms)
+✔ 1 pkg: added 1 [1.2s]
+Installing inline...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [602ms]
+Installing insight...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.10 MB).
++ insight   1.4.4 [bld][dl] (1.10 MB)
+  
+ℹ Getting 1 pkg (1.10 MB)
+✔ Got insight 1.4.4 (source) (1.10 MB)
+ℹ Building insight 1.4.4
+✔ Built insight 1.4.4 (14.8s)
+✔ Installed insight 1.4.4  (214ms)
+✔ 1 pkg: added 1, dld 1 (1.10 MB) [16.3s]
+Installing interactiveDisplayBase...
+ 
+→ Will install 2 packages.
+→ All 2 packages (1.66 MB) are cached.
++ DT                       0.34.0 [bld]
++ interactiveDisplayBase   1.48.0 [bld]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 2 pkgs (1.66 MB) are cached
+✔ Got interactiveDisplayBase 1.48.0 (source) (8.84 kB)
+ℹ Building DT 0.34.0
+✔ Built DT 0.34.0 (2.9s)
+✔ Installed DT 0.34.0  (1.6s)
+ℹ Building interactiveDisplayBase 1.48.0
+✔ Built interactiveDisplayBase 1.48.0 (1.9s)
+✔ Installed interactiveDisplayBase 1.48.0  (153ms)
+✔ 1 pkg + 43 deps: kept 41, added 2, dld 1 (8.84 kB) [8.4s]
+Installing intergraph...
+ 
+→ Will install 4 packages.
+→ Will download 4 CRAN packages (775.36 kB).
++ coda             0.19-4.1 [bld][dl] (74.30 kB)
++ intergraph       2.0-4    [bld][dl] (99.26 kB)
++ network          1.19.0   [bld][cmp][dl] (507.23 kB)
++ statnet.common   4.13.0   [bld][cmp][dl] (94.57 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 4 pkgs (775.36 kB)
+✔ Got coda 0.19-4.1 (source) (74.30 kB)
+✔ Got intergraph 2.0-4 (source) (99.26 kB)
+✔ Got statnet.common 4.13.0 (source) (94.57 kB)
+✔ Got network 1.19.0 (source) (507.23 kB)
+ℹ Building coda 0.19-4.1
+✔ Built coda 0.19-4.1 (2.5s)
+✔ Installed coda 0.19-4.1  (121ms)
+ℹ Building statnet.common 4.13.0
+✔ Built statnet.common 4.13.0 (2s)
+✔ Installed statnet.common 4.13.0  (145ms)
+ℹ Building network 1.19.0
+✔ Built network 1.19.0 (5.7s)
+✔ Installed network 1.19.0  (174ms)
+ℹ Building intergraph 2.0-4
+✔ Built intergraph 2.0-4 (1.6s)
+✔ Installed intergraph 2.0-4  (147ms)
+✔ 1 pkg + 16 deps: kept 13, added 4, dld 4 (775.36 kB) [14.7s]
+Installing interp...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.11 MB).
++ interp   1.1-6 [bld][cmp][dl] (1.11 MB)
+  
+ℹ Getting 1 pkg (1.11 MB)
+✔ Got interp 1.1-6 (source) (1.11 MB)
+ℹ Building interp 1.1-6
+✔ Built interp 1.1-6 (1m 32.3s)
+✔ Installed interp 1.1-6  (468ms)
+✔ 1 pkg + 3 deps: kept 2, added 1, dld 1 (1.11 MB) [1m 35.3s]
+Installing intrinsicDimension...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (337.90 kB).
++ intrinsicDimension   1.2.0    [bld][dl] (81.08 kB)
++ yaImpute             1.0-34.1 [bld][cmp][dl] (256.82 kB)
+  
+ℹ Getting 2 pkgs (337.90 kB)
+✔ Got intrinsicDimension 1.2.0 (source) (81.08 kB)
+✔ Got yaImpute 1.0-34.1 (source) (256.82 kB)
+ℹ Building yaImpute 1.0-34.1
+✔ Built yaImpute 1.0-34.1 (10.2s)
+✔ Installed yaImpute 1.0-34.1  (147ms)
+ℹ Building intrinsicDimension 1.2.0
+✔ Built intrinsicDimension 1.2.0 (1.3s)
+✔ Installed intrinsicDimension 1.2.0  (1.1s)
+✔ 1 pkg + 1 dep: added 2, dld 2 (337.90 kB) [15.2s]
+Installing inum...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (859.74 kB).
++ inum      1.0-5  [bld][dl] (12.10 kB)
++ libcoin   1.0-10 [bld][cmp][dl] (847.64 kB)
+  
+ℹ Getting 2 pkgs (859.74 kB)
+✔ Got inum 1.0-5 (source) (12.10 kB)
+✔ Got libcoin 1.0-10 (source) (847.64 kB)
+ℹ Building libcoin 1.0-10
+✔ Built libcoin 1.0-10 (3.1s)
+✔ Installed libcoin 1.0-10  (170ms)
+ℹ Building inum 1.0-5
+✔ Built inum 1.0-5 (784ms)
+✔ Installed inum 1.0-5  (103ms)
+✔ 1 pkg + 2 deps: kept 1, added 2, dld 2 (859.74 kB) [5.9s]
+Installing invgamma...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (2.60 MB).
++ invgamma   1.2 [bld][dl] (2.60 MB)
+  
+ℹ Getting 1 pkg (2.60 MB)
+✔ Got invgamma 1.2 (source) (2.60 MB)
+ℹ Building invgamma 1.2
+✔ Built invgamma 1.2 (747ms)
+✔ Installed invgamma 1.2  (109ms)
+✔ 1 pkg: added 1, dld 1 (2.60 MB) [2.3s]
+Installing ipred...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 40 deps: kept 40 [1.3s]
+Installing IRanges...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [722ms]
+Installing IRdisplay...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (41.02 kB).
++ IRdisplay   1.1   [bld][dl] (8.29 kB)
++ repr        1.1.7 [bld][dl] (32.74 kB)
+  
+ℹ Getting 2 pkgs (41.02 kB)
+✔ Got IRdisplay 1.1 (source) (8.29 kB)
+✔ Got repr 1.1.7 (source) (32.74 kB)
+ℹ Building repr 1.1.7
+✔ Built repr 1.1.7 (1.8s)
+✔ Installed repr 1.1.7  (110ms)
+ℹ Building IRdisplay 1.1
+✔ Built IRdisplay 1.1 (1.2s)
+✔ Installed IRdisplay 1.1  (105ms)
+✔ 1 pkg + 13 deps: kept 12, added 2, dld 2 (41.02 kB) [4.7s]
+Installing irlba...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [837ms]
+Installing isoband...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [742ms]
+Installing ISOcodes...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (201.34 kB).
++ ISOcodes   2025.05.18 [bld][dl] (201.34 kB)
+  
+ℹ Getting 1 pkg (201.34 kB)
+✔ Got ISOcodes 2025.05.18 (source) (201.34 kB)
+ℹ Building ISOcodes 2025.05.18
+✔ Built ISOcodes 2025.05.18 (664ms)
+✔ Installed ISOcodes 2025.05.18  (109ms)
+✔ 1 pkg: added 1, dld 1 (201.34 kB) [2.2s]
+Installing isomiRs...
+ 
+→ Will install 12 packages.
+→ Will download 6 CRAN packages (4.10 MB), cached: 6 (0 B).
++ ALL                    1.52.0   [bld]
++ ComplexHeatmap         2.26.0   [bld]
++ ConsensusClusterPlus   1.74.0   [bld]
++ DEGreport              1.46.0   [bld]
++ DESeq2                 1.50.2   [bld][cmp]
++ GGally                 2.4.0    [bld][dl] (1.37 MB) + ✔ libssl-dev
++ ggstats                0.12.0   [bld][dl] (1.02 MB)
++ GPArotation            2025.3-1 [bld][dl] (496.41 kB)
++ isomiRs                1.38.1   [bld]
++ logging                0.10-108 [bld][dl] (17.16 kB)
++ psych                  2.5.6    [bld][dl] (1.15 MB)
++ reshape                0.8.10   [bld][dl] (42.89 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 6 pkgs (4.10 MB), 6 cached
+✔ Got GPArotation 2025.3-1 (source) (496.41 kB)
+✔ Got logging 0.10-108 (source) (17.16 kB)
+✔ Got ConsensusClusterPlus 1.74.0 (source) (418.70 kB)
+✔ Got DESeq2 1.50.2 (source) (2.69 MB)
+✔ Got GGally 2.4.0 (source) (1.37 MB)
+✔ Got ggstats 0.12.0 (source) (1.02 MB)
+✔ Got psych 2.5.6 (source) (1.15 MB)
+✔ Got reshape 0.8.10 (source) (42.89 kB)
+✔ Got isomiRs 1.38.1 (source) (4.37 MB)
+✔ Got ALL 1.52.0 (source) (11.46 MB)
+✔ Got DEGreport 1.46.0 (source) (20.53 MB)
+ℹ Building ggstats 0.12.0
+ℹ Building GPArotation 2025.3-1
+ℹ Building logging 0.10-108
+ℹ Building reshape 0.8.10
+ℹ Building ComplexHeatmap 2.26.0
+ℹ Building DESeq2 1.50.2
+ℹ Building ALL 1.52.0
+✔ Built logging 0.10-108 (2.1s)
+✔ Installed logging 0.10-108  (128ms)
+✔ Built GPArotation 2025.3-1 (2.6s)
+✔ Installed GPArotation 2025.3-1  (190ms)
+ℹ Building psych 2.5.6
+✔ Built reshape 0.8.10 (3.1s)
+✔ Installed reshape 0.8.10  (152ms)
+✔ Built ALL 1.52.0 (3.3s)
+✔ Installed ALL 1.52.0  (274ms)
+ℹ Building ConsensusClusterPlus 1.74.0
+✔ Built ggstats 0.12.0 (6s)
+✔ Installed ggstats 0.12.0  (304ms)
+ℹ Building GGally 2.4.0
+✔ Built ConsensusClusterPlus 1.74.0 (2.5s)
+✔ Installed ConsensusClusterPlus 1.74.0  (140ms)
+✔ Built GGally 2.4.0 (6.8s)
+✔ Installed GGally 2.4.0  (153ms)
+✔ Built ComplexHeatmap 2.26.0 (15.1s)
+✔ Installed ComplexHeatmap 2.26.0  (206ms)
+✔ Built psych 2.5.6 (26s)
+✔ Installed psych 2.5.6  (180ms)
+✔ Built DESeq2 1.50.2 (35.2s)
+✔ Installed DESeq2 1.50.2  (243ms)
+ℹ Building DEGreport 1.46.0
+✔ Built DEGreport 1.46.0 (17.2s)
+✔ Installed DEGreport 1.46.0  (198ms)
+ℹ Building isomiRs 1.38.1
+✔ Built isomiRs 1.38.1 (27.6s)
+✔ Installed isomiRs 1.38.1  (1.2s)
+✔ 1 pkg + 131 deps: kept 119, added 12, dld 11 (43.57 MB) [1m 27.5s]
+Installing ISwR...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (214.11 kB).
++ ISwR   2.0-11 [bld][dl] (214.11 kB)
+  
+ℹ Getting 1 pkg (214.11 kB)
+✔ Got ISwR 2.0-11 (source) (214.11 kB)
+ℹ Building ISwR 2.0-11
+✔ Built ISwR 2.0-11 (861ms)
+✔ Installed ISwR 2.0-11  (245ms)
+✔ 1 pkg: added 1, dld 1 (214.11 kB) [2.7s]
+Installing iterators...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [625ms]
+Installing itertools...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (21.41 kB).
++ itertools   0.1-3 [bld][dl] (21.41 kB)
+  
+ℹ Getting 1 pkg (21.41 kB)
+✔ Got itertools 0.1-3 (source) (21.41 kB)
+ℹ Building itertools 0.1-3
+✔ Built itertools 0.1-3 (1s)
+✔ Installed itertools 0.1-3  (156ms)
+✔ 1 pkg + 1 dep: kept 1, added 1, dld 1 (21.41 kB) [2.4s]
+Installing janeaustenr...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.17 MB).
++ janeaustenr   1.0.0 [bld][dl] (1.17 MB)
+  
+ℹ Getting 1 pkg (1.17 MB)
+✔ Got janeaustenr 1.0.0 (source) (1.17 MB)
+ℹ Building janeaustenr 1.0.0
+✔ Built janeaustenr 1.0.0 (1.5s)
+✔ Installed janeaustenr 1.0.0  (143ms)
+✔ 1 pkg: added 1, dld 1 (1.17 MB) [3s]
+Installing janitor...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (690.80 kB).
++ janitor     2.2.1  [bld][dl] (232.99 kB)
++ snakecase   0.11.1 [bld][dl] (457.82 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 2 pkgs (690.80 kB)
+✔ Got janitor 2.2.1 (source) (232.99 kB)
+✔ Got snakecase 0.11.1 (source) (457.82 kB)
+ℹ Building snakecase 0.11.1
+✔ Built snakecase 0.11.1 (1s)
+✔ Installed snakecase 0.11.1  (143ms)
+ℹ Building janitor 2.2.1
+✔ Built janitor 2.2.1 (2.3s)
+✔ Installed janitor 2.2.1  (158ms)
+✔ 1 pkg + 23 deps: kept 22, added 2, dld 2 (690.80 kB) [5.5s]
+Installing JASPAR2020...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ JASPAR2020   0.99.10 [bld]
+  
+ℹ No downloads are needed, 1 pkg is cached
+✔ Got JASPAR2020 0.99.10 (source) (10.59 MB)
+ℹ Building JASPAR2020 0.99.10
+✔ Built JASPAR2020 0.99.10 (5.7s)
+✔ Installed JASPAR2020 0.99.10  (1.3s)
+✔ 1 pkg: added 1, dld 1 (10.59 MB) [9.1s]
+Installing jcolors...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (2.55 MB).
++ jcolors   0.0.5 [bld][dl] (2.55 MB)
+  
+ℹ Getting 1 pkg (2.55 MB)
+✔ Got jcolors 0.0.5 (source) (2.55 MB)
+ℹ Building jcolors 0.0.5
+✔ Built jcolors 0.0.5 (2.5s)
+✔ Installed jcolors 0.0.5  (1.1s)
+✔ 1 pkg + 16 deps: kept 16, added 1, dld 1 (2.55 MB) [5.5s]
+Installing joineRML...
+ 
+→ Will install 4 packages.
+→ Will download 4 CRAN packages (3.33 MB).
++ cobs          1.3-9-1 [bld][cmp][dl] (134.32 kB)
++ joineRML      0.4.7   [bld][cmp][dl] (1.63 MB)
++ randtoolbox   2.0.5   [bld][cmp][dl] (1.51 MB)
++ rngWELL       0.10-10 [bld][cmp][dl] (58.95 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 4 pkgs (3.33 MB)
+✔ Got cobs 1.3-9-1 (source) (134.32 kB)
+✔ Got rngWELL 0.10-10 (source) (58.95 kB)
+✔ Got randtoolbox 2.0.5 (source) (1.51 MB)
+✔ Got joineRML 0.4.7 (source) (1.63 MB)
+ℹ Building cobs 1.3-9-1
+ℹ Building rngWELL 0.10-10
+✔ Built rngWELL 0.10-10 (3.1s)
+✔ Installed rngWELL 0.10-10  (121ms)
+ℹ Building randtoolbox 2.0.5
+✔ Built cobs 1.3-9-1 (4.4s)
+✔ Installed cobs 1.3-9-1  (150ms)
+✔ Built randtoolbox 2.0.5 (6s)
+✔ Installed randtoolbox 2.0.5  (169ms)
+ℹ Building joineRML 0.4.7
+✔ Built joineRML 0.4.7 (45.1s)
+✔ Installed joineRML 0.4.7  (288ms)
+✔ 1 pkg + 47 deps: kept 43, added 4, dld 4 (3.33 MB) [57.6s]
+Installing jomo...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 26 deps: kept 26 [1.2s]
+Installing jose...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [707ms]
+Installing jpeg...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [654ms]
+Installing jqr...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (34.71 kB).
++ jqr   1.4.0 [bld][cmp][dl] (34.71 kB) + ✔ libjq-dev
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (34.71 kB)
+✔ Got jqr 1.4.0 (source) (34.71 kB)
+ℹ Building jqr 1.4.0
+✔ Built jqr 1.4.0 (1.5s)
+✔ Installed jqr 1.4.0  (1.1s)
+✔ 1 pkg + 2 deps: kept 2, added 1, dld 1 (34.71 kB) [3.9s]
+Installing jquerylib...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [729ms]
+Installing jsonify...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 1 [696ms]
+Installing jsonlite...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [867ms]
+Installing jsonvalidate...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [803ms]
+Installing juicyjuice...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.12 MB).
++ juicyjuice   0.1.0 [bld][dl] (1.12 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (1.12 MB)
+✔ Got juicyjuice 0.1.0 (source) (1.12 MB)
+ℹ Building juicyjuice 0.1.0
+✔ Built juicyjuice 0.1.0 (890ms)
+✔ Installed juicyjuice 0.1.0  (1.1s)
+✔ 1 pkg + 4 deps: kept 3, added 1, dld 1 (1.12 MB) [3.4s]
+Installing kableExtra...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (1.95 MB).
++ kableExtra   1.4.0 [bld][dl] (1.82 MB)
++ svglite      2.2.2 [bld][cmp][dl] (125.65 kB) + ✔ libpng-dev
+✔ All system requirements are already installed.
+  
+ℹ Getting 2 pkgs (1.95 MB)
+✔ Got svglite 2.2.2 (source) (125.65 kB)
+✔ Got kableExtra 1.4.0 (source) (1.82 MB)
+ℹ Building svglite 2.2.2
+✔ Built svglite 2.2.2 (8.1s)
+✔ Installed svglite 2.2.2  (186ms)
+ℹ Building kableExtra 1.4.0
+✔ Built kableExtra 1.4.0 (4.1s)
+✔ Installed kableExtra 1.4.0  (249ms)
+✔ 1 pkg + 41 deps: kept 40, added 2, dld 2 (1.95 MB) [15s]
+Installing katex...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (211.23 kB).
++ katex   1.5.0 [bld][dl] (211.23 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (211.23 kB)
+✔ Got katex 1.5.0 (source) (211.23 kB)
+ℹ Building katex 1.5.0
+✔ Built katex 1.5.0 (1.3s)
+✔ Installed katex 1.5.0  (158ms)
+✔ 1 pkg + 4 deps: kept 3, added 1, dld 1 (211.23 kB) [3s]
+Installing KEGGdzPathwaysGEO...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ KEGGdzPathwaysGEO   1.48.0 [bld]
+  
+ℹ No downloads are needed, 1 pkg is cached
+✔ Got KEGGdzPathwaysGEO 1.48.0 (source) (314.64 MB)
+ℹ Building KEGGdzPathwaysGEO 1.48.0
+✔ Built KEGGdzPathwaysGEO 1.48.0 (22.2s)
+✔ Installed KEGGdzPathwaysGEO 1.48.0  (2.2s)
+✔ 1 pkg + 3 deps: kept 3, added 1, dld 1 (314.64 MB) [36.4s]
+Installing KEGGgraph...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ KEGGgraph   1.70.0 [bld]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 1 pkg is cached
+✔ Got KEGGgraph 1.70.0 (source) (1.38 MB)
+ℹ Building KEGGgraph 1.70.0
+✔ Built KEGGgraph 1.70.0 (3.7s)
+✔ Installed KEGGgraph 1.70.0  (1.2s)
+✔ 1 pkg + 7 deps: kept 7, added 1, dld 1 (1.38 MB) [6.3s]
+Installing KEGGREST...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 17 deps: kept 18 [906ms]
+Installing Kendall...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (12.11 kB).
++ Kendall   2.2.2 [bld][cmp][dl] (12.11 kB)
+  
+ℹ Getting 1 pkg (12.11 kB)
+✔ Got Kendall 2.2.2 (source) (12.11 kB)
+ℹ Building Kendall 2.2.2
+✔ Built Kendall 2.2.2 (908ms)
+✔ Installed Kendall 2.2.2  (126ms)
+✔ 1 pkg + 1 dep: kept 1, added 1, dld 1 (12.11 kB) [2.6s]
+Installing keras...
+ 
+→ Will install 5 packages.
+→ Will download 5 CRAN packages (5.76 MB).
++ config        0.3.2  [bld][dl] (83.48 kB)
++ keras         2.16.0 [bld][dl] (3.55 MB)
++ tensorflow    2.20.0 [bld][dl] (68.11 kB)
++ tfautograph   0.3.2  [bld][dl] (47.37 kB)
++ tfruns        1.5.4  [bld][dl] (2.01 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 5 pkgs (5.76 MB)
+✔ Got config 0.3.2 (source) (83.48 kB)
+✔ Got tensorflow 2.20.0 (source) (68.11 kB)
+✔ Got tfautograph 0.3.2 (source) (47.37 kB)
+✔ Got tfruns 1.5.4 (source) (2.01 MB)
+✔ Got keras 2.16.0 (source) (3.55 MB)
+ℹ Building config 0.3.2
+ℹ Building tfautograph 0.3.2
+✔ Built config 0.3.2 (849ms)
+✔ Installed config 0.3.2  (180ms)
+ℹ Building tfruns 1.5.4
+✔ Built tfruns 1.5.4 (1.8s)
+✔ Installed tfruns 1.5.4  (229ms)
+✔ Built tfautograph 0.3.2 (3.5s)
+✔ Installed tfautograph 0.3.2  (112ms)
+ℹ Building tensorflow 2.20.0
+✔ Built tensorflow 2.20.0 (3.7s)
+✔ Installed tensorflow 2.20.0  (138ms)
+ℹ Building keras 2.16.0
+✔ Built keras 2.16.0 (9.8s)
+✔ Installed keras 2.16.0  (1.3s)
+✔ 1 pkg + 32 deps: kept 27, added 5, dld 5 (5.76 MB) [21.4s]
+Installing kernlab...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [753ms]
+Installing KFAS...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (482.31 kB).
++ KFAS   1.6.0 [bld][cmp][dl] (482.31 kB)
+  
+ℹ Getting 1 pkg (482.31 kB)
+✔ Got KFAS 1.6.0 (source) (482.31 kB)
+ℹ Building KFAS 1.6.0
+✔ Built KFAS 1.6.0 (12.9s)
+✔ Installed KFAS 1.6.0  (167ms)
+✔ 1 pkg: added 1, dld 1 (482.31 kB) [14.5s]
+Installing kknn...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (396.63 kB).
++ kknn   1.4.1 [bld][cmp][dl] (396.63 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (396.63 kB)
+✔ Got kknn 1.4.1 (source) (396.63 kB)
+ℹ Building kknn 1.4.1
+✔ Built kknn 1.4.1 (3.2s)
+✔ Installed kknn 1.4.1  (147ms)
+✔ 1 pkg + 10 deps: kept 10, added 1, dld 1 (396.63 kB) [4.8s]
+Installing km.ci...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (29.27 kB).
++ km.ci   0.5-6 [bld][dl] (29.27 kB)
+  
+ℹ Getting 1 pkg (29.27 kB)
+✔ Got km.ci 0.5-6 (source) (29.27 kB)
+ℹ Building km.ci 0.5-6
+✔ Built km.ci 0.5-6 (2.6s)
+✔ Installed km.ci 0.5-6  (1.1s)
+✔ 1 pkg + 3 deps: kept 3, added 1, dld 1 (29.27 kB) [5.3s]
+Installing KMsurv...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (70.64 kB).
++ KMsurv   0.1-6 [bld][dl] (70.64 kB)
+  
+ℹ Getting 1 pkg (70.64 kB)
+✔ Got KMsurv 0.1-6 (source) (70.64 kB)
+ℹ Building KMsurv 0.1-6
+✔ Built KMsurv 0.1-6 (896ms)
+✔ Installed KMsurv 0.1-6  (200ms)
+✔ 1 pkg: added 1, dld 1 (70.64 kB) [2.3s]
+Installing knitr...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 4 deps: kept 5 [780ms]
+Installing knitrBootstrap...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.50 MB).
++ knitrBootstrap   1.0.4 [bld][dl] (1.50 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (1.50 MB)
+✔ Got knitrBootstrap 1.0.4 (source) (1.50 MB)
+ℹ Building knitrBootstrap 1.0.4
+✔ Built knitrBootstrap 1.0.4 (1.5s)
+✔ Installed knitrBootstrap 1.0.4  (243ms)
+✔ 1 pkg + 29 deps: kept 29, added 1, dld 1 (1.50 MB) [3.9s]
+Installing ks...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 12 deps: kept 12 [915ms]
+Installing kSamples...
+ 
+→ Will install 2 packages.
+→ Will download 2 CRAN packages (216.49 kB).
++ kSamples    1.2-12  [bld][cmp][dl] (75.73 kB)
++ SuppDists   1.1-9.9 [bld][cmp][dl] (140.76 kB)
+  
+ℹ Getting 2 pkgs (216.49 kB)
+✔ Got kSamples 1.2-12 (source) (75.73 kB)
+✔ Got SuppDists 1.1-9.9 (source) (140.76 kB)
+ℹ Building SuppDists 1.1-9.9
+✔ Built SuppDists 1.1-9.9 (3.2s)
+✔ Installed SuppDists 1.1-9.9  (115ms)
+ℹ Building kSamples 1.2-12
+✔ Built kSamples 1.2-12 (2.7s)
+✔ Installed kSamples 1.2-12  (120ms)
+✔ 1 pkg + 1 dep: added 2, dld 2 (216.49 kB) [7.9s]
+Installing labeling...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [719ms]
+Installing labelled...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (263.60 kB).
++ labelled   2.16.0 [bld][dl] (263.60 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (263.60 kB)
+✔ Got labelled 2.16.0 (source) (263.60 kB)
+ℹ Building labelled 2.16.0
+✔ Built labelled 2.16.0 (3s)
+✔ Installed labelled 2.16.0  (230ms)
+✔ 1 pkg + 29 deps: kept 29, added 1, dld 1 (263.60 kB) [5.3s]
+Installing laeken...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [816ms]
+Installing Lahman...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (6.12 MB).
++ Lahman   13.0-0 [bld][dl] (6.12 MB)
+  
+ℹ Getting 1 pkg (6.12 MB)
+✔ Got Lahman 13.0-0 (source) (6.12 MB)
+ℹ Building Lahman 13.0-0
+✔ Built Lahman 13.0-0 (25.3s)
+✔ Installed Lahman 13.0-0  (295ms)
+✔ 1 pkg + 15 deps: kept 15, added 1, dld 1 (6.12 MB) [27.3s]
+Installing lambda.r...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [1.1s]
+Installing langevitour...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (362.56 kB).
++ langevitour   0.8.1 [bld][dl] (362.56 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (362.56 kB)
+✔ Got langevitour 0.8.1 (source) (362.56 kB)
+ℹ Building langevitour 0.8.1
+✔ Built langevitour 0.8.1 (913ms)
+✔ Installed langevitour 0.8.1  (184ms)
+✔ 1 pkg + 31 deps: kept 31, added 1, dld 1 (362.56 kB) [3s]
+Installing languageserver...
+ 
+→ Will install 7 packages.
+→ Will download 7 CRAN packages (2.42 MB).
++ brew             1.0-10  [bld][dl] (71.09 kB)
++ collections      0.3.9   [bld][cmp][dl] (111.63 kB)
++ languageserver   0.3.16  [bld][cmp][dl] (86.63 kB)
++ lintr            3.3.0-1 [bld][dl] (1.41 MB)
++ roxygen2         7.3.3   [bld][cmp][dl] (303.52 kB)
++ styler           1.11.0  [bld][dl] (431.74 kB)
++ xmlparsedata     1.0.5   [bld][dl] (8.99 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 7 pkgs (2.42 MB)
+✔ Got xmlparsedata 1.0.5 (source) (8.99 kB)
+✔ Got languageserver 0.3.16 (source) (86.63 kB)
+✔ Got brew 1.0-10 (source) (71.09 kB)
+✔ Got lintr 3.3.0-1 (source) (1.41 MB)
+✔ Got collections 0.3.9 (source) (111.63 kB)
+✔ Got styler 1.11.0 (source) (431.74 kB)
+✔ Got roxygen2 7.3.3 (source) (303.52 kB)
+ℹ Building brew 1.0-10
+ℹ Building collections 0.3.9
+ℹ Building styler 1.11.0
+ℹ Building xmlparsedata 1.0.5
+✔ Built brew 1.0-10 (1.2s)
+✔ Built xmlparsedata 1.0.5 (1.1s)
+✔ Installed brew 1.0-10  (160ms)
+ℹ Building roxygen2 7.3.3
+✔ Installed xmlparsedata 1.0.5  (122ms)
+ℹ Building lintr 3.3.0-1
+✔ Built collections 0.3.9 (3.2s)
+✔ Installed collections 0.3.9  (161ms)
+✔ Built styler 1.11.0 (4.7s)
+✔ Installed styler 1.11.0  (229ms)
+✔ Built lintr 3.3.0-1 (6.5s)
+✔ Installed lintr 3.3.0-1  (210ms)
+✔ Built roxygen2 7.3.3 (10.1s)
+✔ Installed roxygen2 7.3.3  (235ms)
+ℹ Building languageserver 0.3.16
+✔ Built languageserver 0.3.16 (8.7s)
+✔ Installed languageserver 0.3.16  (144ms)
+✔ 1 pkg + 43 deps: kept 37, added 7, dld 7 (2.42 MB) [23.1s]
+Installing lars...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [731ms]
+Installing later...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 2 [742ms]
+Installing latex2exp...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.50 MB).
++ latex2exp   0.9.6 [bld][dl] (1.50 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (1.50 MB)
+✔ Got latex2exp 0.9.6 (source) (1.50 MB)
+ℹ Building latex2exp 0.9.6
+✔ Built latex2exp 0.9.6 (1.7s)
+✔ Installed latex2exp 0.9.6  (180ms)
+✔ 1 pkg + 8 deps: kept 8, added 1, dld 1 (1.50 MB) [3.4s]
+Installing latticeExtra...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 8 [1.2s]
+Installing lava...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.1s]
+Installing lavaan...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [794ms]
+Installing lazyeval...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [733ms]
+Installing lda...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (3.80 MB).
++ lda   1.5.2 [bld][cmp][dl] (3.80 MB)
+  
+ℹ Getting 1 pkg (3.80 MB)
+✔ Got lda 1.5.2 (source) (3.80 MB)
+ℹ Building lda 1.5.2
+✔ Built lda 1.5.2 (2.2s)
+✔ Installed lda 1.5.2  (220ms)
+✔ 1 pkg: added 1, dld 1 (3.80 MB) [3.9s]
+Installing leafem...
+ 
+→ Will install 7 packages.
+→ Will download 5 CRAN packages (4.65 MB), cached: 2 (12.84 MB).
++ leafem              0.2.5  [bld][dl] (963.67 kB)
++ leaflet             2.2.3  [bld][dl] (2.01 MB)
++ leaflet.providers   2.0.0  [bld][dl] (34.09 kB)
++ raster              3.6-32 [bld][cmp][dl] (575.81 kB)
++ s2                  1.1.9  [bld][cmp] + ✖ libabsl-dev, ✔ cmake, ✔ libssl-dev
++ sf                  1.0-23 [bld][cmp] + ✔ libgdal-dev, ✔ gdal-bin, ✔ libgeos-dev, ✔ libproj-dev, ✔ libsqlite3-dev
++ terra               1.8-86 [bld][cmp][dl] (1.06 MB) + ✔ libgdal-dev, ✔ gdal-bin, ✔ libgeos-dev, ✔ libproj-dev, ✔ libsqlite3-dev
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ Getting 5 pkgs (4.65 MB), 2 (12.84 MB) cached
+✔ Got leaflet 2.2.3 (source) (2.01 MB)
+✔ Got leaflet.providers 2.0.0 (source) (34.09 kB)
+✔ Got leafem 0.2.5 (source) (963.67 kB)
+✔ Got raster 3.6-32 (source) (575.81 kB)
+✔ Got terra 1.8-86 (source) (1.06 MB)
+ℹ Building leaflet.providers 2.0.0
+ℹ Building s2 1.1.9
+ℹ Building terra 1.8-86
+✔ Built leaflet.providers 2.0.0 (958ms)
+✔ Installed leaflet.providers 2.0.0  (118ms)
+✔ Built terra 1.8-86 (5m 40.6s)
+✔ Installed terra 1.8-86  (2s)
+ℹ Building raster 3.6-32
+✔ Built raster 3.6-32 (1m 20.9s)
+✔ Installed raster 3.6-32  (296ms)
+✔ Built s2 1.1.9 (7m 9.3s)
+✔ Installed s2 1.1.9  (697ms)
+ℹ Building sf 1.0-23
+✔ Built sf 1.0-23 (1m 21.1s)
+✔ Installed sf 1.0-23  (2.1s)
+ℹ Building leaflet 2.2.3
+✔ Built leaflet 2.2.3 (2.8s)
+✔ Installed leaflet 2.2.3  (596ms)
+ℹ Building leafem 0.2.5
+✔ Built leafem 0.2.5 (10s)
+✔ Installed leafem 0.2.5  (279ms)
+✔ 1 pkg + 55 deps: kept 48, added 7, dld 5 (4.65 MB) [8m 50.3s]
+Installing leaflet...
+ 
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed
+✔ 1 pkg + 53 deps: kept 53 [1.6s]
+Installing leaflet.providers...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [862ms]
+Installing leafsync...
+ 
+→ Will install 1 package.
+→ The package (833.53 kB) is cached.
++ leafsync   0.1.0 [bld]
+✖ Missing 1 system package. You'll probably need to install it manually:
++ libabsl-dev  - s2
+ℹ No downloads are needed, 1 pkg (833.53 kB) is cached
+ℹ Building leafsync 0.1.0
+✔ Built leafsync 0.1.0 (728ms)
+✔ Installed leafsync 0.1.0  (144ms)
+✔ 1 pkg + 54 deps: kept 53, added 1 [2.6s]
+Installing leaps...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (29.38 kB).
++ leaps   3.2 [bld][cmp][dl] (29.38 kB)
+  
+ℹ Getting 1 pkg (29.38 kB)
+✔ Got leaps 3.2 (source) (29.38 kB)
+ℹ Building leaps 3.2
+✔ Built leaps 3.2 (1.6s)
+✔ Installed leaps 3.2  (225ms)
+✔ 1 pkg: added 1, dld 1 (29.38 kB) [3.2s]
+Installing LearnBayes...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (794.62 kB).
++ LearnBayes   2.15.1 [bld][dl] (794.62 kB)
+  
+ℹ Getting 1 pkg (794.62 kB)
+✔ Got LearnBayes 2.15.1 (source) (794.62 kB)
+ℹ Building LearnBayes 2.15.1
+✔ Built LearnBayes 2.15.1 (1.9s)
+✔ Installed LearnBayes 2.15.1  (1.4s)
+✔ 1 pkg: added 1, dld 1 (794.62 kB) [4.7s]

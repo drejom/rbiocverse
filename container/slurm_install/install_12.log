@@ -1,0 +1,747 @@
+Installing packages from: /home/domeally/workspaces/vscode-rbioc/slurm_install/pkgs_012.txt
+Target library: /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+Installing nonnest2...
+ℹ Loading metadata database
+✔ Loading metadata database ... done
+
+ 
+→ Will install 6 packages.
+→ Will download 6 CRAN packages (2.25 MB).
++ CompQuadForm   1.4.4  [bld][cmp][dl] (19.80 kB)
++ lavaan         0.6-21 [bld][dl] (1.08 MB)
++ mnormt         2.1.1  [bld][cmp][dl] (65.81 kB)
++ mvtnorm        1.3-3  [bld][cmp][dl] (837.95 kB)
++ nonnest2       0.5-8  [bld][dl] (237.21 kB)
++ pbivnorm       0.6.0  [bld][cmp][dl] (8.59 kB)
+  
+ℹ Getting 6 pkgs (2.25 MB)
+✔ Got lavaan 0.6-21 (source) (1.08 MB)
+✔ Got CompQuadForm 1.4.4 (source) (19.80 kB)
+✔ Got mnormt 2.1.1 (source) (65.81 kB)
+✔ Got mvtnorm 1.3-3 (source) (837.95 kB)
+✔ Got nonnest2 0.5-8 (source) (237.21 kB)
+✔ Got pbivnorm 0.6.0 (source) (8.59 kB)
+ℹ Building CompQuadForm 1.4.4
+ℹ Building mnormt 2.1.1
+ℹ Building mvtnorm 1.3-3
+ℹ Building pbivnorm 0.6.0
+✔ Built pbivnorm 0.6.0 (1.3s)
+✔ Installed pbivnorm 0.6.0  (141ms)
+✔ Built CompQuadForm 1.4.4 (3.2s)
+✔ Built mnormt 2.1.1 (3.2s)
+✔ Installed CompQuadForm 1.4.4  (216ms)
+✔ Installed mnormt 2.1.1  (130ms)
+ℹ Building lavaan 0.6-21
+✔ Built mvtnorm 1.3-3 (4.5s)
+✔ Installed mvtnorm 1.3-3  (195ms)
+✔ Built lavaan 0.6-21 (35s)
+✔ Installed lavaan 0.6-21  (178ms)
+ℹ Building nonnest2 0.5-8
+✔ Built nonnest2 0.5-8 (1.4s)
+✔ Installed nonnest2 0.5-8  (1.1s)
+✔ 1 pkg + 11 deps: kept 6, added 6, dld 6 (2.25 MB) [47.4s]
+Installing norm...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (18.95 kB).
++ norm   1.0-11.1 [bld][cmp][dl] (18.95 kB)
+  
+ℹ Getting 1 pkg (18.95 kB)
+✔ Got norm 1.0-11.1 (source) (18.95 kB)
+ℹ Building norm 1.0-11.1
+✔ Built norm 1.0-11.1 (1.6s)
+✔ Installed norm 1.0-11.1  (118ms)
+✔ 1 pkg: added 1, dld 1 (18.95 kB) [3.2s]
+Installing nortest...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (6.18 kB).
++ nortest   1.0-4 [bld][dl] (6.18 kB)
+  
+ℹ Getting 1 pkg (6.18 kB)
+✔ Got nortest 1.0-4 (source) (6.18 kB)
+ℹ Building nortest 1.0-4
+✔ Built nortest 1.0-4 (755ms)
+✔ Installed nortest 1.0-4  (100ms)
+✔ 1 pkg: added 1, dld 1 (6.18 kB) [2.1s]
+Installing numDeriv...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [565ms]
+Installing nycflights13...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (4.50 MB).
++ nycflights13   1.0.2 [bld][dl] (4.50 MB)
+  
+ℹ Getting 1 pkg (4.50 MB)
+✔ Got nycflights13 1.0.2 (source) (4.50 MB)
+ℹ Building nycflights13 1.0.2
+✔ Built nycflights13 1.0.2 (10.1s)
+✔ Installed nycflights13 1.0.2  (155ms)
+✔ 1 pkg + 10 deps: kept 10, added 1, dld 1 (4.50 MB) [11.7s]
+Installing oaqc...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (87.98 kB).
++ oaqc   2.0.0 [bld][cmp][dl] (87.98 kB)
+  
+ℹ Getting 1 pkg (87.98 kB)
+✔ Got oaqc 2.0.0 (source) (87.98 kB)
+ℹ Building oaqc 2.0.0
+✔ Built oaqc 2.0.0 (2.1s)
+✔ Installed oaqc 2.0.0  (154ms)
+✔ 1 pkg: added 1, dld 1 (87.98 kB) [3.4s]
+Installing odbc...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (359.92 kB).
++ odbc   1.6.4.1 [bld][cmp][dl] (359.92 kB) + ✔ make, ✔ unixodbc-dev
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (359.92 kB)
+✔ Got odbc 1.6.4.1 (source) (359.92 kB)
+ℹ Building odbc 1.6.4.1
+✔ Built odbc 1.6.4.1 (43.2s)
+✔ Installed odbc 1.6.4.1  (304ms)
+✔ 1 pkg + 12 deps: kept 11, added 1, dld 1 (359.92 kB) [44.9s]
+Installing officer...
+ 
+→ Will install 4 packages.
+→ Will download 4 CRAN packages (2.33 MB).
++ officer       0.7.2 [bld][dl] (1.22 MB)
++ ragg          1.5.0 [bld][cmp][dl] (436.95 kB) + ✔ libfreetype6-dev, ✔ libjpeg-dev, ✔ libpng-dev, ✔ libtiff-dev, ✔ libwebp-dev
++ systemfonts   1.3.1 [bld][cmp][dl] (593.31 kB) + ✔ libfontconfig1-dev, ✔ libfreetype6-dev
++ textshaping   1.0.4 [bld][cmp][dl] (76.74 kB) + ✔ libfreetype6-dev, ✔ libfribidi-dev, ✔ libharfbuzz-dev
+✔ All system requirements are already installed.
+  
+ℹ Getting 4 pkgs (2.33 MB)
+✔ Got ragg 1.5.0 (source) (436.95 kB)
+✔ Got systemfonts 1.3.1 (source) (593.31 kB)
+✔ Got textshaping 1.0.4 (source) (76.74 kB)
+✔ Got officer 0.7.2 (source) (1.22 MB)
+ℹ Building systemfonts 1.3.1
+✔ Built systemfonts 1.3.1 (29.8s)
+✔ Installed systemfonts 1.3.1  (273ms)
+ℹ Building textshaping 1.0.4
+✔ Built textshaping 1.0.4 (13.5s)
+✔ Installed textshaping 1.0.4  (262ms)
+ℹ Building ragg 1.5.0
+✔ Built ragg 1.5.0 (2m 53.6s)
+✔ Installed ragg 1.5.0  (436ms)
+ℹ Building officer 0.7.2
+✔ Built officer 0.7.2 (11.1s)
+✔ Installed officer 0.7.2  (320ms)
+✔ 1 pkg + 31 deps: kept 28, added 4, dld 4 (2.33 MB) [3m 51.7s]
+Installing ontologyIndex...
+ 
+→ Will install 1 package.
+→ The package (2.06 MB) is cached.
++ ontologyIndex   2.12 [bld]
+  
+ℹ No downloads are needed, 1 pkg (2.06 MB) is cached
+ℹ Building ontologyIndex 2.12
+✔ Built ontologyIndex 2.12 (1s)
+✔ Installed ontologyIndex 2.12  (175ms)
+✔ 1 pkg: added 1 [2.2s]
+Installing ontologyPlot...
+ 
+→ Will install 2 packages.
+→ All 2 packages (195.13 kB) are cached.
++ ontologyPlot   1.7 [bld]
++ paintmap       1.0 [bld]
+  
+ℹ No downloads are needed, 2 pkgs (195.13 kB) are cached
+ℹ Building paintmap 1.0
+✔ Built paintmap 1.0 (665ms)
+✔ Installed paintmap 1.0  (1.1s)
+ℹ Building ontologyPlot 1.7
+✔ Built ontologyPlot 1.7 (1.6s)
+✔ Installed ontologyPlot 1.7  (1.1s)
+✔ 1 pkg + 6 deps: kept 5, added 2 [5.6s]
+Installing openai...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.19 MB).
++ openai   0.4.1 [bld][dl] (1.19 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (1.19 MB)
+✔ Got openai 0.4.1 (source) (1.19 MB)
+ℹ Building openai 0.4.1
+✔ Built openai 0.4.1 (1.9s)
+✔ Installed openai 0.4.1  (204ms)
+✔ 1 pkg + 14 deps: kept 14, added 1, dld 1 (1.19 MB) [3.9s]
+Installing openssl...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 2 deps: kept 3 [783ms]
+Installing openxlsx...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (1.41 MB).
++ openxlsx   4.2.8.1 [bld][cmp][dl] (1.41 MB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (1.41 MB)
+✔ Got openxlsx 4.2.8.1 (source) (1.41 MB)
+ℹ Building openxlsx 4.2.8.1
+✔ Built openxlsx 4.2.8.1 (47.2s)
+✔ Installed openxlsx 4.2.8.1  (368ms)
+✔ 1 pkg + 3 deps: kept 2, added 1, dld 1 (1.41 MB) [48.8s]
+Installing options...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (55.29 kB).
++ options   0.3.1 [bld][dl] (55.29 kB)
+  
+ℹ Getting 1 pkg (55.29 kB)
+✔ Got options 0.3.1 (source) (55.29 kB)
+ℹ Building options 0.3.1
+✔ Built options 0.3.1 (1.1s)
+✔ Installed options 0.3.1  (165ms)
+✔ 1 pkg: added 1, dld 1 (55.29 kB) [3.1s]
+Installing ordinal...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 6 deps: kept 7 [1.2s]
+Installing org.Hs.eg.db...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ org.Hs.eg.db   3.22.0 [bld]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 1 pkg is cached
+✔ Got org.Hs.eg.db 3.22.0 (source) (104.97 MB)
+ℹ Building org.Hs.eg.db 3.22.0
+✔ Built org.Hs.eg.db 3.22.0 (3m 56.5s)
+✔ Installed org.Hs.eg.db 3.22.0  (3.7s)
+✔ 1 pkg + 34 deps: kept 34, added 1, dld 1 (104.97 MB) [4m 3.6s]
+Installing org.Mm.eg.db...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ org.Mm.eg.db   3.22.0 [bld]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 1 pkg is cached
+ℹ Building org.Mm.eg.db 3.22.0
+✔ Built org.Mm.eg.db 3.22.0 (3m 39.4s)
+✔ Installed org.Mm.eg.db 3.22.0  (3s)
+✔ 1 pkg + 34 deps: kept 34, added 1 [3m 44.2s]
+Installing org.Rn.eg.db...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 34 deps: kept 35 [1.1s]
+Installing org.Sc.sgd.db...
+ 
+→ Will install 1 package.
+→ The package (0 B) is cached.
++ org.Sc.sgd.db   3.22.0 [bld]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 1 pkg is cached
+✔ Got org.Sc.sgd.db 3.22.0 (source) (14.69 MB)
+ℹ Building org.Sc.sgd.db 3.22.0
+✔ Built org.Sc.sgd.db 3.22.0 (40s)
+✔ Installed org.Sc.sgd.db 3.22.0  (505ms)
+✔ 1 pkg + 34 deps: kept 34, added 1, dld 1 (14.69 MB) [43.1s]
+Installing OrganismDbi...
+ 
+→ Will install 3 packages.
+→ All 3 packages (14.31 MB) are cached.
++ BH            1.90.0-1 [bld]
++ OrganismDbi   1.52.0   [bld]
++ RBGL          1.86.0   [bld][cmp]
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed, 3 pkgs (14.31 MB) are cached
+✔ Installed BH 1.90.0-1  (1m 54.2s)
+ℹ Building RBGL 1.86.0
+✖ Failed to build RBGL 1.86.0 (376ms)
+  FAILED: ! error in pak subprocess
+Caused by error in `stop_task_build(state, worker)`:
+! Failed to build source package RBGL.
+Full installation output:
+ERROR: dependency ‘BH’ is not available for package ‘RBGL’
+Perhaps try a variation of:
+install.packages('BH')
+* removing ‘/tmp/Rtmp1FELtr/pkg-lib106c5b3082fe20/RBGL’
+Installing orthogene...
+  FAILED: ! error in pak subprocess
+Caused by error: 
+! Could not solve package dependencies:
+* orthogene: Can't install dependency grr
+* grr: Can't find package called grr.
+Installing otel...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [776ms]
+Installing OUTRIDER...
+ 
+→ Will install 4 packages.
+→ Will download 2 CRAN packages (672.40 kB), cached: 2 (0 B).
++ BBmisc      1.13   [bld][cmp][dl] (85.96 kB)
++ OUTRIDER    1.28.0 [bld][cmp]
++ RMTstat     0.3.1  [bld][dl] (586.45 kB)
++ txdbmaker   1.6.2  [bld]
+✔ All system requirements are already installed.
+  
+ℹ Getting 2 pkgs (672.40 kB), 2 cached
+✔ Got BBmisc 1.13 (source) (85.96 kB)
+✔ Got RMTstat 0.3.1 (source) (586.45 kB)
+✔ Got txdbmaker 1.6.2 (source) (1.04 MB)
+✔ Got OUTRIDER 1.28.0 (source) (2.74 MB)
+ℹ Building BBmisc 1.13
+ℹ Building RMTstat 0.3.1
+ℹ Building txdbmaker 1.6.2
+✔ Built RMTstat 0.3.1 (920ms)
+✔ Installed RMTstat 0.3.1  (113ms)
+✔ Built BBmisc 1.13 (2.1s)
+✔ Installed BBmisc 1.13  (116ms)
+✔ Built txdbmaker 1.6.2 (19.1s)
+✔ Installed txdbmaker 1.6.2  (1.2s)
+ℹ Building OUTRIDER 1.28.0
+✔ Built OUTRIDER 1.28.0 (34.3s)
+✔ Installed OUTRIDER 1.28.0  (222ms)
+✔ 1 pkg + 158 deps: kept 154, added 4, dld 4 (4.45 MB) [59.2s]
+Installing oz...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (22.02 kB).
++ oz   1.0-22 [bld][dl] (22.02 kB)
+  
+ℹ Getting 1 pkg (22.02 kB)
+✔ Got oz 1.0-22 (source) (22.02 kB)
+ℹ Building oz 1.0-22
+✔ Built oz 1.0-22 (709ms)
+✔ Installed oz 1.0-22  (104ms)
+✔ 1 pkg: added 1, dld 1 (22.02 kB) [3.2s]
+Installing packrat...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (378.43 kB).
++ packrat   0.9.3 [bld][dl] (378.43 kB)
+  
+ℹ Getting 1 pkg (378.43 kB)
+✔ Got packrat 0.9.3 (source) (378.43 kB)
+ℹ Building packrat 0.9.3
+✔ Built packrat 0.9.3 (3.6s)
+✔ Installed packrat 0.9.3  (1.2s)
+✔ 1 pkg: added 1, dld 1 (378.43 kB) [6.3s]
+Installing pacman...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (274.40 kB).
++ pacman   0.5.1 [bld][dl] (274.40 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (274.40 kB)
+✔ Got pacman 0.5.1 (source) (274.40 kB)
+ℹ Building pacman 0.5.1
+✔ Built pacman 0.5.1 (1.4s)
+✔ Installed pacman 0.5.1  (1.2s)
+✔ 1 pkg + 1 dep: kept 1, added 1, dld 1 (274.40 kB) [4.4s]
+Installing PADOG...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 49 deps: kept 50 [1.3s]
+Installing pagedown...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (254.04 kB).
++ pagedown   0.23 [bld][dl] (254.04 kB) + ✔ pandoc
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (254.04 kB)
+✔ Got pagedown 0.23 (source) (254.04 kB)
+ℹ Building pagedown 0.23
+✔ Built pagedown 0.23 (1.3s)
+✔ Installed pagedown 0.23  (374ms)
+✔ 1 pkg + 37 deps: kept 36, added 1, dld 1 (254.04 kB) [3.3s]
+Installing paintmap...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [800ms]
+Installing pak...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [791ms]
+Installing paletteer...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 14 deps: kept 15 [1.1s]
+Installing palmerpenguins...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (3.00 MB).
++ palmerpenguins   0.1.1 [bld][dl] (3.00 MB)
+  
+ℹ Getting 1 pkg (3.00 MB)
+✔ Got palmerpenguins 0.1.1 (source) (3.00 MB)
+ℹ Building palmerpenguins 0.1.1
+✔ Built palmerpenguins 0.1.1 (1.2s)
+✔ Installed palmerpenguins 0.1.1  (191ms)
+✔ 1 pkg: added 1, dld 1 (3.00 MB) [2.8s]
+Installing pamr...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (528.93 kB).
++ pamr   1.57 [bld][dl] (528.93 kB)
+  
+ℹ Getting 1 pkg (528.93 kB)
+✔ Got pamr 1.57 (source) (528.93 kB)
+ℹ Building pamr 1.57
+✔ Built pamr 1.57 (2.9s)
+✔ Installed pamr 1.57  (150ms)
+✔ 1 pkg + 4 deps: kept 4, added 1, dld 1 (528.93 kB) [4.8s]
+Installing pan...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [734ms]
+Installing pander...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (396.77 kB).
++ pander   0.6.6 [bld][cmp][dl] (396.77 kB) + ✔ pandoc
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (396.77 kB)
+✔ Got pander 0.6.6 (source) (396.77 kB)
+ℹ Building pander 0.6.6
+✔ Built pander 0.6.6 (11.1s)
+✔ Installed pander 0.6.6  (1.3s)
+✔ 1 pkg + 2 deps: kept 1, added 1, dld 1 (396.77 kB) [14.1s]
+Installing parallelly...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [932ms]
+Installing parameters...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [911ms]
+Installing parsedate...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [763ms]
+Installing parsnip...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 33 deps: kept 34 [1.3s]
+Installing partitions...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 6 [1s]
+Installing party...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (754.88 kB).
++ party   1.3-18 [bld][cmp][dl] (754.88 kB)
+  
+ℹ Getting 1 pkg (754.88 kB)
+✔ Got party 1.3-18 (source) (754.88 kB)
+ℹ Building party 1.3-18
+✔ Built party 1.3-18 (7.2s)
+✔ Installed party 1.3-18  (185ms)
+✔ 1 pkg + 15 deps: kept 15, added 1, dld 1 (754.88 kB) [8.9s]
+Installing partykit...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 8 deps: kept 9 [963ms]
+Installing pastecs...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (136.95 kB).
++ pastecs   1.4.2 [bld][dl] (136.95 kB)
+  
+ℹ Getting 1 pkg (136.95 kB)
+✔ Got pastecs 1.4.2 (source) (136.95 kB)
+ℹ Building pastecs 1.4.2
+✔ Built pastecs 1.4.2 (3.1s)
+✔ Installed pastecs 1.4.2  (145ms)
+✔ 1 pkg + 1 dep: kept 1, added 1, dld 1 (136.95 kB) [4.8s]
+Installing PASWR...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (175.03 kB).
++ PASWR   1.3 [bld][dl] (175.03 kB)
+  
+ℹ Getting 1 pkg (175.03 kB)
+✔ Got PASWR 1.3 (source) (175.03 kB)
+ℹ Building PASWR 1.3
+✔ Built PASWR 1.3 (2s)
+✔ Installed PASWR 1.3  (119ms)
+✔ 1 pkg + 5 deps: kept 5, added 1, dld 1 (175.03 kB) [3.9s]
+Installing patchwork...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 16 deps: kept 17 [976ms]
+Installing pathview...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 41 deps: kept 42 [1.2s]
+Installing patrick...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (8.91 kB).
++ patrick   0.3.1 [bld][dl] (8.91 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (8.91 kB)
+✔ Got patrick 0.3.1 (source) (8.91 kB)
+ℹ Building patrick 0.3.1
+✔ Built patrick 0.3.1 (1.3s)
+✔ Installed patrick 0.3.1  (1.1s)
+✔ 1 pkg + 32 deps: kept 32, added 1, dld 1 (8.91 kB) [4.2s]
+Installing paws...
+ 
+→ Will install 15 packages.
+→ Will download 15 CRAN packages (11.75 MB).
++ paws                           0.9.0 [bld][dl] (890.15 kB)
++ paws.analytics                 0.9.0 [bld][dl] (1.49 MB)
++ paws.application.integration   0.9.0 [bld][dl] (334.58 kB)
++ paws.common                    0.8.7 [bld][cmp][dl] (148.61 kB) + ✔ pandoc
++ paws.compute                   0.9.0 [bld][dl] (1.27 MB)
++ paws.cost.management           0.9.0 [bld][dl] (173.05 kB)
++ paws.customer.engagement       0.9.0 [bld][dl] (579.92 kB)
++ paws.database                  0.9.0 [bld][dl] (1.00 MB)
++ paws.developer.tools           0.9.0 [bld][dl] (491.16 kB)
++ paws.end.user.computing        0.9.0 [bld][dl] (252.86 kB)
++ paws.machine.learning          0.9.0 [bld][dl] (1.11 MB)
++ paws.management                0.9.0 [bld][dl] (1.34 MB)
++ paws.networking                0.9.0 [bld][dl] (759.62 kB)
++ paws.security.identity         0.9.0 [bld][dl] (1.33 MB)
++ paws.storage                   0.9.0 [bld][dl] (574.66 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 15 pkgs (11.75 MB)
+✔ Got paws.analytics 0.9.0 (source) (1.49 MB)
+✔ Got paws.customer.engagement 0.9.0 (source) (579.92 kB)
+✔ Got paws.application.integration 0.9.0 (source) (334.58 kB)
+✔ Got paws 0.9.0 (source) (890.15 kB)
+✔ Got paws.developer.tools 0.9.0 (source) (491.16 kB)
+✔ Got paws.security.identity 0.9.0 (source) (1.33 MB)
+✔ Got paws.database 0.9.0 (source) (1.00 MB)
+✔ Got paws.networking 0.9.0 (source) (759.62 kB)
+✔ Got paws.cost.management 0.9.0 (source) (173.05 kB)
+✔ Got paws.storage 0.9.0 (source) (574.66 kB)
+✔ Got paws.management 0.9.0 (source) (1.34 MB)
+✔ Got paws.compute 0.9.0 (source) (1.27 MB)
+✔ Got paws.end.user.computing 0.9.0 (source) (252.86 kB)
+✔ Got paws.common 0.8.7 (source) (148.61 kB)
+✔ Got paws.machine.learning 0.9.0 (source) (1.11 MB)
+ℹ Building paws.common 0.8.7
+✔ Built paws.common 0.8.7 (31.9s)
+✔ Installed paws.common 0.8.7  (174ms)
+ℹ Building paws.analytics 0.9.0
+ℹ Building paws.application.integration 0.9.0
+ℹ Building paws.compute 0.9.0
+ℹ Building paws.cost.management 0.9.0
+ℹ Building paws.customer.engagement 0.9.0
+ℹ Building paws.database 0.9.0
+ℹ Building paws.developer.tools 0.9.0
+ℹ Building paws.end.user.computing 0.9.0
+ℹ Building paws.machine.learning 0.9.0
+ℹ Building paws.management 0.9.0
+ℹ Building paws.networking 0.9.0
+ℹ Building paws.security.identity 0.9.0
+ℹ Building paws.storage 0.9.0
+✔ Built paws.cost.management 0.9.0 (24.6s)
+✔ Installed paws.cost.management 0.9.0  (160ms)
+✔ Built paws.end.user.computing 0.9.0 (35.2s)
+✔ Installed paws.end.user.computing 0.9.0  (147ms)
+✔ Built paws.application.integration 0.9.0 (38.3s)
+✔ Installed paws.application.integration 0.9.0  (149ms)
+✔ Built paws.storage 0.9.0 (57.5s)
+✔ Installed paws.storage 0.9.0  (167ms)
+✔ Built paws.developer.tools 0.9.0 (1m 17.6s)
+✔ Installed paws.developer.tools 0.9.0  (168ms)
+✔ Built paws.database 0.9.0 (1m 24.9s)
+✔ Installed paws.database 0.9.0  (183ms)
+✔ Built paws.customer.engagement 0.9.0 (1m 33.5s)
+✔ Installed paws.customer.engagement 0.9.0  (170ms)
+✔ Built paws.networking 0.9.0 (1m 44.4s)
+✔ Installed paws.networking 0.9.0  (194ms)
+✔ Built paws.compute 0.9.0 (1m 53.1s)
+✔ Installed paws.compute 0.9.0  (220ms)
+✔ Built paws.management 0.9.0 (1m 53.2s)
+✔ Installed paws.management 0.9.0  (193ms)
+✔ Built paws.security.identity 0.9.0 (2m 3.5s)
+✔ Installed paws.security.identity 0.9.0  (163ms)
+✔ Built paws.machine.learning 0.9.0 (2m 6.4s)
+✔ Installed paws.machine.learning 0.9.0  (158ms)
+✔ Built paws.analytics 0.9.0 (12m 31.1s)
+✔ Installed paws.analytics 0.9.0  (1.7s)
+ℹ Building paws 0.9.0
+✔ Built paws 0.9.0 (6.3s)
+✔ Installed paws 0.9.0  (142ms)
+✔ 1 pkg + 33 deps: kept 18, added 15, dld 15 (11.75 MB) [13m 15s]
+Installing paws.analytics...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing paws.application.integration...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1s]
+Installing paws.common...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 19 deps: kept 19 [1.2s]
+Installing paws.compute...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.2s]
+Installing paws.cost.management...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing paws.customer.engagement...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.3s]
+Installing paws.database...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.2s]
+Installing paws.developer.tools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.2s]
+Installing paws.end.user.computing...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.2s]
+Installing paws.machine.learning...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.3s]
+Installing paws.management...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing paws.networking...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.2s]
+Installing paws.security.identity...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1s]
+Installing paws.storage...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 20 deps: kept 20 [1.1s]
+Installing pbapply...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [833ms]
+Installing pbivnorm...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [780ms]
+Installing pbkrtest...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 63 deps: kept 63 [1.8s]
+Installing pbmcapply...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg: kept 1 [885ms]
+Installing pcaMethods...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [910ms]
+Installing pcaPP...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 1 dep: kept 2 [847ms]
+Installing pdftools...
+ 
+✔ All system requirements are already installed.
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [1s]
+Installing pec...
+ 
+→ Will install 1 package.
+→ Will download 1 CRAN package (170.90 kB).
++ pec   2025.06.24 [bld][cmp][dl] (170.90 kB)
+✔ All system requirements are already installed.
+  
+ℹ Getting 1 pkg (170.90 kB)
+✔ Got pec 2025.06.24 (source) (170.90 kB)
+ℹ Building pec 2025.06.24
+✔ Built pec 2025.06.24 (5.6s)
+✔ Installed pec 2025.06.24  (139ms)
+✔ 1 pkg + 95 deps: kept 94, added 1, dld 1 (170.90 kB) [8.7s]
+Installing pegas...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 5 deps: kept 5 [943ms]
+Installing performance...
+ 
+  
+ℹ No downloads are needed
+✔ 1 pkg + 3 deps: kept 4 [927ms]
