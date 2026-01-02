@@ -70,11 +70,20 @@ const rstudioProxy = httpProxy.createProxyServer({
 });
 
 rstudioProxy.on('error', (err, req, res) => {
-  log.proxyError('RStudio proxy error', { error: err.message });
+  log.proxyError('RStudio proxy error', { error: err.message, code: err.code, url: req?.url });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>RStudio not available</h1><p><a href="/">Back to launcher</a></p>');
   }
+});
+
+// Log when proxy successfully connects to target
+rstudioProxy.on('open', (proxySocket) => {
+  log.debug('RStudio proxy socket opened');
+});
+
+rstudioProxy.on('close', (res, socket, head) => {
+  log.debug('RStudio proxy connection closed');
 });
 
 // Log proxy requests for debugging
@@ -98,19 +107,15 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
   // Our wrapper loads RStudio in an iframe, so we must strip this header
   delete proxyRes.headers['x-frame-options'];
 
-  // Debug: log all responses (especially RPC calls)
+  // Debug: log ALL responses to diagnose proxy issues
   const isRpc = req.url.includes('/rpc/');
-  if (isRpc || status >= 300 && status < 400 || setCookies) {
-    log.debug(`RStudio proxyRes`, {
-      status,
-      url: req.url,
-      location: location || 'none',
-      setCookies: setCookies ? 'yes' : 'none',
-      contentLength: proxyRes.headers['content-length'] || 'unknown',
-      transferEncoding: proxyRes.headers['transfer-encoding'] || 'none',
-      connection: proxyRes.headers['connection'] || 'none',
-    });
-  }
+  log.debug(`RStudio proxyRes`, {
+    status,
+    url: req.url,
+    location: location || 'none',
+    setCookies: setCookies ? 'yes' : 'none',
+    contentLength: proxyRes.headers['content-length'] || 'unknown',
+  });
 
   // For RPC calls, log when data starts flowing
   if (isRpc) {
