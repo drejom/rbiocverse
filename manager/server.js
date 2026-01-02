@@ -116,9 +116,10 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       // modification (like URL-encoding pipes) will cause signature validation
       // to fail, resulting in redirect loops.
 
-      // Set path to / for broadest cookie matching - ensures cookies are sent for all paths
-      // RStudio sets path=/rstudio-direct but browser may not send them for subpaths
-      modified = modified.replace(/path=\/[^;]*/i, 'path=/');
+      // Keep path=/rstudio-direct - RStudio validates cookies match www-root-path
+      // Changing to path=/ breaks rsession spawning (rserver rejects mismatched cookies)
+      // NO trailing slash for RFC 6265 compliance
+      modified = modified.replace(/path=\/rstudio-direct\/?/i, 'path=/rstudio-direct');
 
       // For iframe compatibility: SameSite=None requires Secure flag
       // Remove any existing SameSite directive first

@@ -322,3 +322,93 @@ But the JavaScript app still references `/rstudio/*.cache.js` files.
 - rsession spawning: YES
 - Login: Works
 - Asset loading: FAILS (wrong paths)
+
+---
+
+## 2026-01-02: Cookie and rsession Investigation
+
+### Problem
+After fixing asset paths, RStudio still shows spinner. Investigated whether cookies were being sent correctly.
+
+### Findings
+
+1. **Cookie path issue identified**
+   - RStudio sets cookies with `path=/rstudio-direct`
+   - Browser wasn't sending `user-id` cookie in subsequent requests
+   - Changed cookie path rewriting to `path=/` for broadest matching
+
+2. **Puppeteer testing reveals truth**
+   - Used Puppeteer to bypass Safari/browser quirks
+   - Cookies ARE being set correctly: `user-id`, `csrf-token`, `rs-csrf-token`, `user-list-id`
+   - Cookies ARE being sent in requests (verified via request interception)
+   - Full cookie header in client_init request includes `user-id=domeally|...`
+
+3. **But rsession.log NEVER created**
+   - Despite cookies working correctly
+   - Despite login succeeding
+   - Despite client_init being called
+   - rsession.sh is NEVER executed by rserver
+
+### Key Evidence
+```bash
+# Puppeteer shows cookies sent correctly:
+cookie: "rs-csrf-token=...; csrf-token=...; user-id=domeally|...; user-list-id=..."
+
+# But rsession.log doesn't exist:
+ls ~/.rstudio-slurm/
+# Only shows: rserver.log, workdir/
+
+# Cleared stale sessions:
+rm -rf ~/.local/share/rstudio/sessions/active/*
+# Still no rsession.log created
+```
+
+### Current State
+- Job: 28775623 on g-c-1-7-30
+- rserver: Running (serves login, accepts auth)
+- Cookies: Working (verified via Puppeteer)
+- rsession.sh: NEVER CALLED
+- rsession.log: Never created
+
+### What's Actually Broken
+rserver receives valid authentication but does NOT spawn rsession. This is NOT:
+- A cookie issue (cookies work)
+- A browser issue (Puppeteer shows same behavior)
+- An iframe issue (direct access shows same behavior)
+- A session state issue (cleared sessions, still broken)
+
+### Next Investigation - SYSTEMATIC APPROACH
+
+**Stop guessing. Be methodical.**
+
+Two different failure modes observed:
+- Job 28775110: rsession CALLED but CRASHING (abend=1, multiple launcher tokens in log)
+- Job 28775623: rsession NEVER CALLED (no log file created)
+
+Main change between them: cookie path from `/rstudio-direct` to `/`
+
+**5 Systematic Checks (in sequence):**
+
+1. **Git log**: Identify exact commits between "rsession spawning" and "rsession never called"
+   - Find the breaking change
+
+2. **Revert and test**: Deploy code from when rsession WAS spawning
+   - Confirm rsession.log gets created (even if rsession crashes)
+   - This validates we can reproduce the "better" broken state
+
+3. **Compare HTTP exchanges**: Use Puppeteer to capture FULL request/response for:
+   - Direct SSH tunnel (working)
+   - Proxy (broken)
+   - Find the difference in what rserver receives
+
+4. **Check rserver's perspective**:
+   - Is there rserver debug logging without `--server-log-level`?
+   - Check /var/log inside container namespace
+   - What does rserver see vs what we send?
+
+5. **Isolate variables**: If cookie path is suspect:
+   - Test with path=/rstudio-direct + all OTHER fixes kept
+   - Confirm hypothesis before acting on it
+
+**Key Insight**: Direct tunnel works. Proxy worked partially (rsession spawned but crashed).
+Now proxy is worse (rsession never called). We regressed - find what caused regression.
