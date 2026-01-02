@@ -76,7 +76,7 @@ rstudioProxy.on('error', (err, req, res) => {
 
 // Inject X-RStudio-Root-Path header so RStudio knows its proxy path
 rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
-  proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio');
+  proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
   log.debug(`RStudio proxyReq`, {
     method: req.method,
     url: req.url,
@@ -116,8 +116,10 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       // modification (like URL-encoding pipes) will cause signature validation
       // to fail, resulting in redirect loops.
 
-      // Ensure path matches our proxy mount (with trailing slash for broad matching)
-      modified = modified.replace(/path=\/rstudio(?![\/;])/i, 'path=/rstudio/');
+      // Ensure path matches our proxy mount - NO trailing slash for broader cookie matching
+      // path=/rstudio-direct matches both /rstudio-direct and /rstudio-direct/*
+      // path=/rstudio-direct/ would NOT match /rstudio-direct (no slash) per RFC 6265
+      modified = modified.replace(/path=\/rstudio-direct\/?/i, 'path=/rstudio-direct');
 
       // For iframe compatibility: SameSite=None requires Secure flag
       // Remove any existing SameSite directive first
@@ -144,13 +146,13 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
     // Rewrite absolute URLs pointing to the internal RStudio port
     rewritten = rewritten.replace(
       /^https?:\/\/127\.0\.0\.1:8787/,
-      '/rstudio'
+      '/rstudio-direct'
     );
 
     // Rewrite root-relative redirects (e.g., "/" or "/auth-sign-in")
     // that aren't already prefixed with our proxy path
-    if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio')) {
-      rewritten = '/rstudio' + rewritten;
+    if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
+      rewritten = '/rstudio-direct' + rewritten;
     }
 
     if (rewritten !== location) {
