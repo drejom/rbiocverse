@@ -134,7 +134,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       modified = modified + '; SameSite=None';
 
       if (modified !== cookie) {
-        log.debug(`Cookie rewritten: ${cookie.substring(0, 80)}... -> ${modified.substring(0, 80)}...`);
+        log.debug(`Cookie rewritten: ${cookie} -> ${modified}`);
       }
       return modified;
     });
