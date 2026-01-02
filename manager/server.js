@@ -64,6 +64,9 @@ const rstudioProxy = httpProxy.createProxyServer({
   changeOrigin: true,
   proxyTimeout: 5 * 60 * 1000,  // 5 minutes for long-polling
   timeout: 5 * 60 * 1000,       // 5 minutes connection timeout
+  // Fix "Parse Error: Data after Connection: close" with RStudio
+  // rserver sends Connection: close but http-proxy keeps connection open
+  agent: new (require('http').Agent)({ keepAlive: false }),
 });
 
 rstudioProxy.on('error', (err, req, res) => {
