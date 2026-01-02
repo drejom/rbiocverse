@@ -68,6 +68,24 @@
           frame.style.display = 'block';
         }
       }, 5000);
+
+      // Handle drag messages from menu iframe
+      const menuFrame = document.getElementById('hpc-menu-frame');
+      window.addEventListener('message', function(e) {
+        if (!e.data) return;
+        if (e.data.type === 'hpc-menu-drag') {
+          const rect = menuFrame.getBoundingClientRect();
+          let newTop = rect.top + e.data.dy;
+          let newRight = (window.innerWidth - rect.right) - e.data.dx;
+          newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
+          newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
+          menuFrame.style.top = newTop + 'px';
+          menuFrame.style.right = newRight + 'px';
+        }
+        if (e.data.type === 'hpc-menu-navigate') {
+          window.location.href = e.data.url;
+        }
+      });
     });
   </script>
 </body>
