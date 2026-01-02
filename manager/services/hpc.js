@@ -139,7 +139,10 @@ auth-cookies-force-secure=0
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
 
     const rsessionScript = `#!/bin/sh
-exec 2>>~/.rstudio-slurm/rsession.log
+# Debug: capture all output including rsession stderr
+LOG=~/.rstudio-slurm/rsession.log
+echo "=== rsession.sh called at \\$(date) ===" >> \\$LOG
+echo "Args: \\$@" >> \\$LOG
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
@@ -148,7 +151,11 @@ export R_LIBS_SITE=${this.cluster.rLibsSite}
 export R_LIBS_USER=~/R/bioc-3.19
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
-exec /usr/lib/rstudio-server/bin/rsession "$@"
+# Run rsession and capture exit code (don't use exec so we can log exit)
+/usr/lib/rstudio-server/bin/rsession "\\$@" 2>> \\$LOG
+RC=\\$?
+echo "=== rsession exited with code \\$RC at \\$(date) ===" >> \\$LOG
+exit \\$RC
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
