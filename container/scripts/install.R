@@ -5,22 +5,22 @@
 #
 # Usage:
 #   singularity exec --env R_LIBS_SITE=/path/to/rlibs container.sif \
-#     Rscript /opt/rbiocverse/scripts/install.R
+#     Rscript /mnt/rbiocverse/scripts/install.R
 #
 # Or for HPC parallel install (two-phase: deps first, then leaves):
-#   Rscript /opt/rbiocverse/scripts/install.R --slurm-smart 20
+#   Rscript /mnt/rbiocverse/scripts/install.R --slurm-smart 20
 #
 # Or legacy single-phase (may have lock contention):
-#   Rscript /opt/rbiocverse/scripts/install.R --slurm 20
+#   Rscript /mnt/rbiocverse/scripts/install.R --slurm 20
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-# Path to DESCRIPTION (in container at /opt/rbiocverse)
+# Path to DESCRIPTION (mounted at /mnt/rbiocverse in container)
 DESCRIPTION_PATH <- Sys.getenv(
   "RBIOCVERSE_DESCRIPTION",
-  "/opt/rbiocverse/DESCRIPTION"
+  "/mnt/rbiocverse/rbiocverse/DESCRIPTION"
 )
 
 # =============================================================================
@@ -707,7 +707,7 @@ if (!interactive()) {
     message("Examples:")
     message("  # Direct install (in container)")
     message("  singularity exec --env R_LIBS_SITE=/path/to/rlibs container.sif \\")
-    message("    Rscript /opt/rbiocverse/scripts/install.R")
+    message("    Rscript /mnt/rbiocverse/scripts/install.R")
     message("")
     message("  # Two-phase SLURM install (recommended)")
     message("  R_LIBS_SITE=/path/to/rlibs Rscript install.R --slurm-smart 20")
