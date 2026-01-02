@@ -77,13 +77,13 @@ describe('E2E: Launcher Page', function() {
       await page.waitForFunction(
         () => {
           const indicator = document.querySelector('#cache-indicator');
-          return indicator && indicator.textContent.includes('Updated');
+          return indicator && indicator.textContent.includes('Updating');
         },
         { timeout: 15000 }
       );
 
       const cacheText = await page.$eval('#cache-indicator', el => el.textContent);
-      expect(cacheText).to.include('Updated');
+      expect(cacheText).to.include('Updating');
     });
 
     it('should display cluster status after loading', async () => {
@@ -195,9 +195,9 @@ describe('E2E: Launcher Page', function() {
         { timeout: 10000 }
       );
 
-      // Cache should show fresh data
+      // Cache should show fresh data (time until next update)
       const newText = await page.$eval('#cache-indicator', el => el.textContent);
-      expect(newText).to.include('Updated');
+      expect(newText).to.include('Updating');
     });
   });
 

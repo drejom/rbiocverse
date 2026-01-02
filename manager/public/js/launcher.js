@@ -32,6 +32,10 @@ let walltimes = {};
 let lastStatusUpdate = null;
 let statusCacheTtl = 120;
 
+// Launch cancellation tracking
+let currentLaunch = null; // { hpc, ide, abortController }
+let launchCancelled = false;
+
 /**
  * Get session key for countdown/walltime tracking
  */
@@ -474,7 +478,16 @@ async function refreshStatus() {
 }
 
 /**
- * Update cache age indicator
+ * Format seconds to a compact human-readable string
+ */
+function formatSecondsCompact(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+/**
+ * Update cache age indicator - shows time until next update
  */
 function updateCacheIndicator() {
   if (isRefreshing) return;
@@ -482,13 +495,17 @@ function updateCacheIndicator() {
   const indicator = document.getElementById('cache-indicator');
   if (!indicator || !lastStatusUpdate) return;
 
-  const ageSeconds = Math.floor((Date.now() - lastStatusUpdate.getTime()) / 1000);
-  const ageText = ageSeconds < 60 ? `${ageSeconds}s` : `${Math.floor(ageSeconds / 60)}m ${ageSeconds % 60}s`;
-  const stale = ageSeconds > statusCacheTtl;
+  const ageMs = Date.now() - lastStatusUpdate.getTime();
+  const timeUntilNextPoll = Math.max(0, currentPollInterval - ageMs);
+  const secondsUntilNext = Math.ceil(timeUntilNextPoll / 1000);
+
+  const updateText = secondsUntilNext > 0
+    ? `Updating in ${formatSecondsCompact(secondsUntilNext)}`
+    : 'Updating...';
 
   indicator.innerHTML = `
-    <span class="cache-age ${stale ? 'stale' : ''}">Updated ${ageText} ago</span>
-    <button id="refresh-btn" class="refresh-btn" onclick="refreshStatus()" title="Refresh status">
+    <span class="cache-age">${updateText}</span>
+    <button id="refresh-btn" class="refresh-btn" onclick="refreshStatus()" title="Refresh now">
       <i data-lucide="refresh-cw" class="icon-sm"></i>
     </button>
   `;
@@ -553,12 +570,20 @@ async function launch(hpc) {
 
   const overlay = document.getElementById('loading-overlay');
   const loadingText = document.getElementById('loading-text');
+  const cancelBtn = document.getElementById('cancel-launch-btn');
   const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
   overlay.style.display = 'flex';
   const ideName = availableIdes[ide]?.name || ide;
   loadingText.textContent = `Submitting ${ideName} job to ${hpc}...`;
+
+  // Show cancel button and track current launch
+  const abortController = new AbortController();
+  currentLaunch = { hpc, ide, abortController };
+  launchCancelled = false;
+  cancelBtn.style.display = 'inline-flex';
+  lucide.createIcons();
 
   try {
     const cpus = document.getElementById(hpc + '-cpus').value;
@@ -568,13 +593,16 @@ async function launch(hpc) {
     const res = await fetch('/api/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, ide, cpus, mem, time })
+      body: JSON.stringify({ hpc, ide, cpus, mem, time }),
+      signal: abortController.signal
     });
 
     if (!res.ok) {
       const data = await res.json();
       if (data.error && data.error.includes('already')) {
         overlay.style.display = 'none';
+        cancelBtn.style.display = 'none';
+        currentLaunch = null;
         if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
           connect(hpc, ide);
         }
@@ -584,13 +612,79 @@ async function launch(hpc) {
     }
 
     // Redirect to IDE
+    currentLaunch = null;
+    cancelBtn.style.display = 'none';
     const ideConfig = availableIdes[ide];
     window.location.href = ideConfig?.proxyPath || '/code/';
   } catch (e) {
+    // Don't show error if user cancelled
+    if (e.name === 'AbortError' || launchCancelled) {
+      console.log('[Launcher] Launch cancelled by user');
+      return;
+    }
     overlay.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    currentLaunch = null;
     errorEl.textContent = e.message;
     errorEl.style.display = 'block';
   }
+}
+
+/**
+ * Cancel an in-progress launch
+ */
+async function cancelLaunch() {
+  if (!currentLaunch) return;
+
+  const { hpc, ide, abortController } = currentLaunch;
+  const ideName = availableIdes[ide]?.name || ide;
+  console.log('[Launcher] Cancel requested:', hpc, ide);
+
+  launchCancelled = true;
+
+  // Abort the fetch request
+  abortController.abort();
+
+  const overlay = document.getElementById('loading-overlay');
+  const loadingText = document.getElementById('loading-text');
+  const cancelBtn = document.getElementById('cancel-launch-btn');
+
+  loadingText.textContent = `Cancelling ${ideName} on ${hpc}...`;
+  cancelBtn.disabled = true;
+
+  let cancelFailed = false;
+  try {
+    // Cancel the job on the server
+    const res = await fetch(`/api/stop/${hpc}/${ide}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancelJob: true })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Server returned ${res.status}`);
+    }
+    console.log('[Launcher] Job cancelled successfully');
+  } catch (e) {
+    console.error('[Launcher] Cancel error:', e);
+    cancelFailed = true;
+  }
+
+  // Reset UI
+  overlay.style.display = 'none';
+  cancelBtn.style.display = 'none';
+  cancelBtn.disabled = false;
+  currentLaunch = null;
+
+  // Show error if cancellation failed
+  if (cancelFailed) {
+    const errorEl = document.getElementById('error');
+    errorEl.textContent = `Warning: Could not confirm cancellation of ${ideName} on ${hpc}. The job may still be running.`;
+    errorEl.style.display = 'block';
+  }
+
+  // Refresh status to show updated state
+  await fetchStatus(true);
 }
 
 /**
@@ -868,4 +962,7 @@ document.addEventListener('DOMContentLoaded', function() {
   fetchStatus();
   startPolling();
   document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  // Attach cancel button event listener
+  document.getElementById('cancel-launch-btn').addEventListener('click', cancelLaunch);
 });

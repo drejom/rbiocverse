@@ -338,6 +338,22 @@ h1 {
   margin-bottom: 15px;
 }
 
+/* Cancel button in loading overlay */
+.btn-cancel {
+  margin-top: 20px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
 .estimated-start {
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.85rem;
