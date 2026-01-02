@@ -504,13 +504,15 @@ suggest_packages <- function(path = DESCRIPTION_PATH,
 }
 
 #' Sync DESCRIPTION with current environment
-#' Adds all installed packages to DESCRIPTION, removes unavailable ones
+#' Adds all installed packages to DESCRIPTION
 #' Also discovers GitHub packages and updates Remotes with pinned commits
 #' @param dry_run If TRUE, just show what would change
+#' @param merge If TRUE (default), only add packages, never remove. Set FALSE to replace.
 #' @param exclude Packages to exclude
 #' @param lib Library path to scan (defaults to R_LIBS_SITE or .libPaths()[1])
 #' @export
 sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
+                                   merge = TRUE,
                                    exclude = c("rbiocverse"),
                                    lib = Sys.getenv("R_LIBS_SITE", .libPaths()[1])) {
   desc <- read_description(path)
@@ -553,11 +555,19 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
   cran_bioc <- installed[installed$Source %in% c("CRAN", "Bioconductor", "Unknown"), "Package"]
 
   # GitHub packages should be in Imports too (the package name)
-  all_imports_set <- unique(c(cran_bioc, github_pkg_names))
+  installed_pkgs <- unique(c(cran_bioc, github_pkg_names))
+
+  # In merge mode: union of current + installed (never remove)
+  # In replace mode: just installed packages
+  if (merge) {
+    all_imports_set <- unique(c(current_imports, installed_pkgs))
+  } else {
+    all_imports_set <- installed_pkgs
+  }
 
   # Find what's new vs current
-  new_pkgs <- setdiff(all_imports_set, current_imports)
-  removed_pkgs <- setdiff(current_imports, all_imports_set)
+  new_pkgs <- setdiff(installed_pkgs, current_imports)
+  removed_pkgs <- if (merge) character(0) else setdiff(current_imports, installed_pkgs)
 
   # Compare remotes
   current_remote_strs <- sapply(current_remotes, function(r) r$full)
@@ -581,6 +591,7 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
 
   message("=== Sync from Environment ===")
   message("Library: ", lib)
+  message("Mode: ", if (merge) "merge (add only)" else "replace")
   message("Current DESCRIPTION imports: ", length(current_imports))
   message("Installed (CRAN/Bioc): ", length(cran_bioc))
   message("Installed (GitHub): ", length(github_pkg_names))
@@ -620,8 +631,32 @@ sync_from_environment <- function(dry_run = TRUE, path = DESCRIPTION_PATH,
     imports_str <- paste("    ", all_imports, collapse = ",\n")
     desc$Imports <- paste0("\n", imports_str)
 
-    # Combine remotes: URL remotes + discovered GitHub remotes
-    all_remotes <- c(url_remote_strs, discovered_remotes)
+    # Merge remotes: keep existing + add/update from discovered
+    if (merge) {
+      # Build a map of repo -> remote string for merging
+      # Start with current remotes
+      remote_map <- list()
+      for (r in current_remotes) {
+        # Extract repo identifier (user/repo) for deduplication
+        repo_key <- gsub("@.*$", "", r$full)  # Remove @ref suffix
+        repo_key <- gsub("^url::", "", repo_key)  # Handle URL remotes
+        remote_map[[repo_key]] <- r$full
+      }
+      # Update/add discovered remotes (these take precedence)
+      for (pkg in github_pkg_names) {
+        info <- github_pkgs[[pkg]]
+        repo_key <- paste0(info$user, "/", info$repo)
+        if (!is.null(info$subdir) && info$subdir != "" && info$subdir != ".") {
+          repo_key <- paste0(repo_key, "/", info$subdir)
+        }
+        remote_map[[repo_key]] <- info$remote
+      }
+      all_remotes <- unname(unlist(remote_map))
+    } else {
+      # Replace mode: URL remotes + discovered GitHub remotes
+      all_remotes <- c(url_remote_strs, discovered_remotes)
+    }
+
     if (length(all_remotes) > 0) {
       remotes_str <- paste("    ", all_remotes, collapse = ",\n")
       desc$Remotes <- paste0("\n", remotes_str)
@@ -710,34 +745,40 @@ if (!interactive()) {
     message("Usage: Rscript update-description.R <command> [options]")
     message("")
     message("Commands:")
-    message("  sync [--apply]     Sync DESCRIPTION with installed packages (MIGRATION)")
+    message("  sync [--apply] [--merge|--replace]")
+    message("                     Sync DESCRIPTION with installed packages")
+    message("                     --merge (default): only add packages, never remove")
+    message("                     --replace: replace with installed packages")
     message("  check [--apply]    Check package availability, remove unavailable")
     message("  remotes [--apply]  Update GitHub remote pins (dry-run by default)")
     message("  suggest            Show installed packages not in DESCRIPTION")
     message("  bump [type]        Bump version (patch|minor|major|bioc)")
     message("  update [--apply]   Full update (check + remotes + bump)")
     message("")
-    message("Migration workflow (3.19 -> 3.22):")
-    message("  1. Run from CURRENT environment (3.19):")
+    message("Multi-cluster sync workflow:")
+    message("  1. Sync from Cluster A (merge mode, adds packages):")
     message("     Rscript update-description.R sync --apply")
-    message("  2. Check availability for NEW Bioconductor:")
+    message("  2. Sync from Cluster B (merge mode, adds more packages):")
+    message("     Rscript update-description.R sync --apply")
+    message("  3. Check availability and cleanup:")
     message("     Rscript update-description.R check --apply")
-    message("  3. Update remotes and bump version:")
-    message("     Rscript update-description.R update --apply")
     message("")
     message("Examples:")
-    message("  Rscript update-description.R sync          # Preview sync")
-    message("  Rscript update-description.R sync --apply  # Apply sync")
-    message("  Rscript update-description.R check --apply # Remove unavailable")
-    message("  Rscript update-description.R bump bioc     # 3.22.0 -> 3.23.0")
+    message("  Rscript update-description.R sync              # Preview (merge mode)")
+    message("  Rscript update-description.R sync --apply      # Apply (merge mode)")
+    message("  Rscript update-description.R sync --replace    # Preview (replace mode)")
+    message("  Rscript update-description.R check --apply     # Remove unavailable")
+    message("  Rscript update-description.R bump bioc         # 3.22.0 -> 3.23.0")
     quit(status = 0)
   }
 
   cmd <- args[1]
   apply_flag <- "--apply" %in% args
+  replace_flag <- "--replace" %in% args
+  merge_mode <- !replace_flag  # merge is default
 
   if (cmd == "sync") {
-    sync_from_environment(dry_run = !apply_flag)
+    sync_from_environment(dry_run = !apply_flag, merge = merge_mode)
   } else if (cmd == "check") {
     check_packages(fix = apply_flag)
   } else if (cmd == "remotes") {
