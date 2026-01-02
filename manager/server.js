@@ -149,6 +149,13 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       '/rstudio-direct'
     );
 
+    // Rewrite absolute URLs pointing to external host (RStudio generates these)
+    // e.g., https://hpc.omeally.com:443/rstudio-direct/ -> /rstudio-direct/
+    rewritten = rewritten.replace(
+      /^https?:\/\/[^\/]+\/rstudio-direct/,
+      '/rstudio-direct'
+    );
+
     // Rewrite root-relative redirects (e.g., "/" or "/auth-sign-in")
     // that aren't already prefixed with our proxy path
     if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
