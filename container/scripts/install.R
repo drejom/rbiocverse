@@ -250,15 +250,25 @@ install_all <- function(ncpus = parallel::detectCores()) {
     }
   )
 
-  # Install GitHub packages
+  # Install GitHub packages using remotes (pak has issues with subdirectory syntax)
   if (length(pkgs$remotes) > 0) {
     message("\n=== Installing GitHub packages ===")
+    if (!requireNamespace("remotes", quietly = TRUE)) {
+      message("Installing remotes...")
+      install.packages("remotes", lib = lib)
+    }
     for (remote in pkgs$remotes) {
       message("Installing: ", remote)
-      tryCatch(
-        pak::pkg_install(remote, lib = lib, upgrade = FALSE),
-        error = function(e) message("  FAILED: ", conditionMessage(e))
-      )
+      tryCatch({
+        # Parse remote to determine install method
+        if (grepl("^url::", remote)) {
+          # URL-based remote (archived CRAN packages)
+          pak::pkg_install(remote, lib = lib, upgrade = FALSE)
+        } else {
+          # GitHub remote - use remotes:: to handle subdirectories properly
+          remotes::install_github(remote, lib = lib, upgrade = "never")
+        }
+      }, error = function(e) message("  FAILED: ", conditionMessage(e)))
     }
   }
 
@@ -329,10 +339,18 @@ singularity exec \\
     pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
       message(sprintf(\\"Installing %%s...\\", pkg))
-      tryCatch(
-        pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
-        error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e)))
-      )
+      tryCatch({
+        if (grepl(\\\"^url::\\\", pkg)) {
+          # URL remote (archived CRAN)
+          pak::pkg_install(pkg, lib = lib, upgrade = FALSE)
+        } else if (grepl(\\\"/\\\", pkg)) {
+          # GitHub remote - use remotes:: to handle subdirs properly
+          remotes::install_github(pkg, lib = lib, upgrade = \\"never\\")
+        } else {
+          # CRAN/Bioc package
+          pak::pkg_install(pkg, lib = lib, upgrade = FALSE)
+        }
+      }, error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e))))
     }
   "
 ', jobs, config$phase2_cpus, config$phase2_mem, config$phase2_time,
@@ -442,18 +460,51 @@ singularity exec \\
     lib <- Sys.getenv(\\"R_LIBS_SITE\\")
     pkgs <- readLines(\\"%s/pkgs_deps.txt\\")
     message(\\"Installing \\", length(pkgs), \\" core dependencies using \\", ncpus, \\" CPUs...\\")
-    tryCatch(
-      pak::pkg_install(pkgs, lib = lib, upgrade = FALSE),
-      error = function(e) {
-        message(\\"Batch install failed, trying one by one...\\")
-        for (pkg in pkgs) {
-          tryCatch(
-            pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
-            error = function(e) message(sprintf(\\"  FAILED: %%s - %%s\\", pkg, conditionMessage(e)))
-          )
+
+    # Separate URL remotes, GitHub remotes, and regular packages
+    url_pkgs <- pkgs[grepl(\\\"^url::\\\", pkgs)]
+    github_pkgs <- pkgs[grepl(\\\"/\\\", pkgs) & !grepl(\\\"^url::\\\", pkgs)]
+    cran_bioc_pkgs <- pkgs[!grepl(\\\"/\\\", pkgs) & !grepl(\\\"^url::\\\", pkgs)]
+
+    # Install CRAN/Bioc packages with pak
+    if (length(cran_bioc_pkgs) > 0) {
+      message(\\"Installing \\", length(cran_bioc_pkgs), \\" CRAN/Bioc packages...\\")
+      tryCatch(
+        pak::pkg_install(cran_bioc_pkgs, lib = lib, upgrade = FALSE),
+        error = function(e) {
+          message(\\"Batch install failed, trying one by one...\\")
+          for (pkg in cran_bioc_pkgs) {
+            tryCatch(
+              pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
+              error = function(e) message(sprintf(\\"  FAILED: %%s - %%s\\", pkg, conditionMessage(e)))
+            )
+          }
         }
+      )
+    }
+
+    # Install URL remotes (archived CRAN) with pak
+    if (length(url_pkgs) > 0) {
+      message(\\"Installing \\", length(url_pkgs), \\" archived packages...\\")
+      for (pkg in url_pkgs) {
+        tryCatch(
+          pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
+          error = function(e) message(sprintf(\\"  FAILED: %%s - %%s\\", pkg, conditionMessage(e)))
+        )
       }
-    )
+    }
+
+    # Install GitHub remotes with remotes:: (pak has issues with subdirs)
+    if (length(github_pkgs) > 0) {
+      message(\\"Installing \\", length(github_pkgs), \\" GitHub packages...\\")
+      for (pkg in github_pkgs) {
+        tryCatch(
+          remotes::install_github(pkg, lib = lib, upgrade = \\"never\\"),
+          error = function(e) message(sprintf(\\"  FAILED: %%s - %%s\\", pkg, conditionMessage(e)))
+        )
+      }
+    }
+
     message(\\"Phase 1 complete\\")
   "
 ', config$phase1_cpus, config$phase1_mem, config$phase1_time, output_dir_abs,
@@ -508,10 +559,18 @@ singularity exec \\
     pkgs <- readLines(\\"$PKGFILE\\")
     for (pkg in pkgs) {
       message(sprintf(\\"Installing %%s...\\", pkg))
-      tryCatch(
-        pak::pkg_install(pkg, lib = lib, upgrade = FALSE),
-        error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e)))
-      )
+      tryCatch({
+        if (grepl(\\\"^url::\\\", pkg)) {
+          # URL remote (archived CRAN)
+          pak::pkg_install(pkg, lib = lib, upgrade = FALSE)
+        } else if (grepl(\\\"/\\\", pkg)) {
+          # GitHub remote - use remotes:: to handle subdirs properly
+          remotes::install_github(pkg, lib = lib, upgrade = \\"never\\")
+        } else {
+          # CRAN/Bioc package
+          pak::pkg_install(pkg, lib = lib, upgrade = FALSE)
+        }
+      }, error = function(e) message(sprintf(\\"  FAILED: %%s\\", conditionMessage(e))))
     }
   "
 ', jobs, config$phase2_cpus, config$phase2_mem, config$phase2_time, output_dir_abs,
