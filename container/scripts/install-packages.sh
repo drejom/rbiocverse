@@ -42,7 +42,7 @@ usage() {
 
 main() {
     local to_version=""
-    local jobs=20
+    local jobs=40
     local submit=false
 
     # Parse arguments

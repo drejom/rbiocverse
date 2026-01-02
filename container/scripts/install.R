@@ -282,7 +282,7 @@ install_all <- function(ncpus = parallel::detectCores()) {
 }
 
 #' Generate legacy SLURM job array (single phase, may have lock contention)
-generate_slurm <- function(jobs = 20, output_dir = "slurm_install",
+generate_slurm <- function(jobs = 40, output_dir = "slurm_install",
                            cluster = detect_cluster(), bioc_version = "3.22") {
   lib <- Sys.getenv("R_LIBS_SITE")
   if (lib == "") {
@@ -378,7 +378,7 @@ singularity exec \\
 
 #' Generate two-phase SLURM install (deps first, then leaves)
 #' This avoids lock contention by installing shared deps in phase 1
-generate_slurm_smart <- function(jobs = 20, output_dir = "slurm_install",
+generate_slurm_smart <- function(jobs = 40, output_dir = "slurm_install",
                                   cluster = detect_cluster(), bioc_version = "3.22") {
   config <- get_cluster_config(cluster, bioc_version)
 
@@ -731,7 +731,7 @@ if (!interactive()) {
   }
 
   # Get jobs count if specified
-  jobs <- 20
+  jobs <- 40
   for (flag in c("--slurm", "--slurm-smart")) {
     flag_idx <- which(args == flag)
     if (length(flag_idx) > 0 && length(args) > flag_idx) {
