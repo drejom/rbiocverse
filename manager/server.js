@@ -295,11 +295,7 @@ app.use('/rstudio-direct', (req, res, next) => {
     log.debug('[RStudio-Direct] No session, redirecting to /');
     return res.redirect('/');
   }
-  rstudioProxy.web(req, res, {}, (err) => {
-    if (err) {
-      log.error(`[RStudio-Direct] proxy.web error on ${req.method} ${req.path}`, { error: err.message, code: err.code });
-    }
-  });
+  rstudioProxy.web(req, res);
 });
 
 // Proxy to Live Server (port 5500) - access at /live/
