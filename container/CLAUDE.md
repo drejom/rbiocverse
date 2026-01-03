@@ -142,7 +142,8 @@ GitHub Actions (`.github/workflows/publish-to-github-package.yaml`) builds on:
 - SLURM commands use SSH wrappers to passthrough from container to host
 - Container targets `linux/amd64` only (HPC requirement)
 - R session watcher pre-configured for VSCode R extension
-- renv cache at `/opt/renv/cache` with Posit Package Manager for fast binary installs
+- renv cache at `/usr/local/share/renv/cache` with Posit Package Manager for fast binary installs
+- Container paths use `/usr/local/share/` instead of `/opt/` (Apollo bind mounts `/opt` from host)
 - `R_LIBS_SITE` configurable via environment variable for flexibility
 - GitHub packages use `remotes::install_github` (pak has issues with subdirectory syntax)
 - URL remotes for archived CRAN packages use pak

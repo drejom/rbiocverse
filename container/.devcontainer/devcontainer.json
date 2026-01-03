@@ -27,7 +27,7 @@
   },
   "remoteUser": "rstudio",
   "containerEnv": {
-    "RENV_PATHS_CACHE": "/opt/renv/cache",
+    "RENV_PATHS_CACHE": "/usr/local/share/renv/cache",
     "RENV_CONFIG_REPOS_OVERRIDE": "https://packagemanager.posit.co/cran/__linux__/jammy/latest",
     "R_LIBS_SITE": "${localEnv:R_LIBS_SITE:-/opt/rlibs}"
   },

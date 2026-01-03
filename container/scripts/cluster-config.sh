@@ -87,6 +87,29 @@ get_library_path() {
     esac
 }
 
+get_python_path() {
+    local cluster="$1"
+    local version="$2"
+
+    case "$cluster" in
+        gemini)
+            echo "/packages/singularity/shared_cache/rbioc/python/bioc-${version}"
+            ;;
+        apollo)
+            echo "/opt/singularity-images/rbioc/python/bioc-${version}"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Check if cluster has GPU support
+has_gpu_support() {
+    local cluster="$1"
+    [[ "$cluster" == "gemini" ]]
+}
+
 get_bind_paths() {
     local cluster="$1"
 
@@ -258,19 +281,23 @@ validate_library() {
 # =============================================================================
 
 show_config() {
-    local cluster version container lib bind_paths module
+    local cluster version container lib python_lib bind_paths module gpu_support
     cluster=$(detect_cluster)
     version=$(get_bioc_version)
     container=$(get_container_path "$cluster" "$version")
     lib=$(get_library_path "$cluster" "$version")
+    python_lib=$(get_python_path "$cluster" "$version")
     bind_paths=$(get_bind_paths "$cluster")
     module=$(get_singularity_module "$cluster")
+    gpu_support=$(has_gpu_support "$cluster" && echo "yes" || echo "no")
 
     echo "=== Cluster Configuration ==="
     echo "Cluster:        $cluster"
     echo "Bioc Version:   $version"
     echo "Container:      $container"
-    echo "Library:        $lib"
+    echo "R Library:      $lib"
+    echo "Python Library: $python_lib"
+    echo "GPU Support:    $gpu_support"
     echo "Bind Paths:     $bind_paths"
     echo "Singularity:    $module"
     echo ""

@@ -1,0 +1,46 @@
+[project]
+name = "rbiocverse-python"
+version = "3.22.0"
+description = "Python packages for rbioc HPC environment (SCverse single-cell ecosystem)"
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Denis O'Meally", email = "domeally@coh.org"}
+]
+
+# Core dependencies installed on all clusters
+dependencies = [
+    # SCverse core ecosystem
+    "scanpy>=1.10",
+    "anndata>=0.10",
+    "scvi-tools>=1.1",
+    "squidpy",
+    "cellrank",
+    "muon",
+    "pertpy",
+
+    # Single-cell utilities
+    "harmonypy",
+    "bbknn",
+    "scanorama",
+    "scrublet",
+    "doubletdetection",
+
+    # Visualization
+    "plotnine",
+    "session-info",
+]
+
+[project.optional-dependencies]
+# GPU-accelerated packages (Gemini only, requires CUDA)
+# Install with: pip install ".[gpu]"
+gpu = [
+    "rapids-singlecell",
+    "cupy-cuda12x",
+    "jax[cuda12]",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

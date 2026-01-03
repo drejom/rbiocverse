@@ -11,16 +11,18 @@ Docker container extending [Bioconductor Docker](https://bioconductor.org/help/d
 │  Container (lean, ~2-3GB)                                   │
 │  - System dependencies (libhdf5, libgdal, etc.)            │
 │  - Genomics tools (bcftools, bedtools, sra-tools)          │
-│  - Python (dxpy, jupyterlab, radian)                       │
+│  - Python (dxpy, jupyterlab, radian, rpy2)                 │
 │  - VSCode CLI, SLURM wrappers                              │
+│  - JupyterLab with R kernel (IRkernel)                     │
 └─────────────────────────────────────────────────────────────┘
                             │
-                            │ mounts R_LIBS_SITE
+                            │ mounts R_LIBS_SITE + PYTHONPATH
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Shared Library (on HPC storage)                           │
-│  /packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22  │
-│  - 1500+ R packages                                         │
+│  Shared Libraries (on HPC storage)                         │
+│  /packages/singularity/shared_cache/rbioc/                 │
+│  ├── rlibs/bioc-3.22/    # 1500+ R packages                │
+│  └── python/bioc-3.22/   # SCverse Python packages         │
 │  - Shared by all users                                      │
 │  - Updated independently of container                       │
 └─────────────────────────────────────────────────────────────┘
@@ -79,12 +81,17 @@ Run after the new container is built and available:
 # 1. Pull new container (auto-detects cluster: Gemini/Apollo)
 ./scripts/pull-container.sh --force
 
-# 2. Generate and submit two-phase SLURM install
+# 2. Generate and submit two-phase SLURM install for R packages
 ./scripts/install-packages.sh --to 3.22 --submit
+
+# 3. Install Python packages (SCverse ecosystem)
+./scripts/install-python.sh --to 3.22 --submit
 
 # Or generate without submitting:
 ./scripts/install-packages.sh --to 3.22
+./scripts/install-python.sh --to 3.22
 ./slurm_install/submit_install.sh
+./slurm_install/submit_python.sh
 ```
 
 ### Two-Phase Installation Strategy
@@ -97,9 +104,10 @@ The install uses a two-phase SLURM strategy to avoid NFS lock contention:
 Each job uses a local pak cache (`/tmp/pak_cache_*`) to prevent NFS lock issues.
 
 ### Update Launch Scripts
-Update `R_LIBS_SITE` in `~/bin/ij` and job scripts:
+Update `R_LIBS_SITE` and `PYTHONPATH` in `~/bin/ij` and job scripts:
 ```sh
 R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
+PYTHONPATH=/packages/singularity/shared_cache/rbioc/python/bioc-3.22
 ```
 
 ## What's Included
@@ -114,11 +122,19 @@ R_LIBS_SITE=/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22
 ### Genomics Tools
 bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, sra-tools
 
-### Python
+### Python (in container)
 - radian (better R console)
 - dxpy (DNAnexus toolkit)
-- jupyterlab
+- jupyterlab + ipykernel, ipywidgets, jupyterlab-git
+- rpy2 (Python → R integration)
+- matplotlib, seaborn, plotly
 - numpy, scipy, scikit-learn, umap-learn, leidenalg (Seurat Python deps)
+
+### Python (shared library via PYTHONPATH)
+SCverse single-cell ecosystem:
+- scanpy, anndata, scvi-tools, squidpy, cellrank, muon, pertpy
+- harmonypy, bbknn, scanorama, scrublet, doubletdetection
+- GPU packages on Gemini: rapids-singlecell, cupy, jax[cuda]
 
 ### Other
 - VSCode CLI (`code serve-web`, tunnels)
@@ -128,13 +144,18 @@ bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, sra-tools
 
 ## rbiocverse Metapackage
 
-The `rbiocverse/` directory contains a metapackage that serves as the **single source of truth** for the R package environment:
+The `rbiocverse/` directory contains package manifests that serve as the **single source of truth** for the environment:
 
-- **DESCRIPTION** defines all packages to install (CRAN, Bioconductor, GitHub)
-- **Version** in DESCRIPTION drives container versioning (3.22.0 = Bioconductor 3.22)
-- GitHub remotes are pinned to specific commits/tags for reproducibility
+**R Packages (`DESCRIPTION`)**:
+- Defines all R packages to install (CRAN, Bioconductor, GitHub)
+- Version drives container versioning (3.22.0 = Bioconductor 3.22)
+- GitHub remotes pinned to specific commits/tags for reproducibility
 
-See `rbiocverse/DESCRIPTION` for the full package list organized by category:
+**Python Packages (`pyproject.toml`)**:
+- SCverse ecosystem for single-cell Python analysis
+- Optional GPU dependencies for Gemini cluster
+
+See `rbiocverse/DESCRIPTION` for R packages:
 - Development (BiocManager, devtools, targets, renv)
 - Tidyverse & Data
 - Bioconductor Core
@@ -142,13 +163,19 @@ See `rbiocverse/DESCRIPTION` for the full package list organized by category:
 - Bulk RNA-seq (DESeq2, edgeR, limma)
 - Visualization (ggplot2, ComplexHeatmap, dittoSeq)
 
+See `rbiocverse/pyproject.toml` for Python packages:
+- SCverse core (scanpy, anndata, scvi-tools, squidpy, cellrank, muon)
+- Single-cell utilities (harmonypy, bbknn, scanorama, scrublet)
+- GPU acceleration (rapids-singlecell, cupy, jax)
+
 ## Scripts
 
 ### Wrapper Scripts (recommended)
 | Script | Purpose | When to Use |
 |--------|---------|-------------|
 | `sync-packages.sh --from X.Y` | Sync DESCRIPTION from existing library | Pre-release: capture packages |
-| `install-packages.sh --to X.Y` | Generate/submit SLURM install jobs | Post-release: install packages |
+| `install-packages.sh --to X.Y` | Generate/submit SLURM R package install | Post-release: install R packages |
+| `install-python.sh --to X.Y` | Generate/submit SLURM Python install | Post-release: install Python packages |
 | `pull-container.sh` | Pull container to cluster storage | Post-release: before install |
 
 ### R Scripts (called by wrappers)
@@ -174,13 +201,17 @@ See `rbiocverse/DESCRIPTION` for the full package list organized by category:
 ├── .github/workflows/
 │   └── publish-to-github-package.yaml
 ├── rbiocverse/
-│   ├── DESCRIPTION             # Package manifest (source of truth)
+│   ├── DESCRIPTION             # R package manifest (source of truth)
+│   ├── pyproject.toml          # Python package manifest
 │   ├── LICENSE
 │   └── NAMESPACE
+├── config/
+│   └── jupyter_lab_config.py   # JupyterLab HPC config
 ├── scripts/
 │   ├── cluster-config.sh       # Shared cluster detection and paths
 │   ├── sync-packages.sh        # Pre-release: sync from old environment
-│   ├── install-packages.sh     # Post-release: install to new environment
+│   ├── install-packages.sh     # Post-release: install R packages
+│   ├── install-python.sh       # Post-release: install Python packages
 │   ├── pull-container.sh       # Pull container to HPC storage
 │   ├── update-description.R    # DESCRIPTION management (sync/check/bump)
 │   ├── install.R               # R install logic and SLURM generation

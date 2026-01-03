@@ -84,14 +84,22 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 # =============================================================================
 # radian: Better R console
 # dxpy: DNAnexus toolkit
-# jupyterlab: Jupyter notebook server
+# jupyterlab: Jupyter notebook server + extensions
 # Seurat Python deps (#6): numpy scipy scikit-learn umap-learn leidenalg
+# rpy2: Python → R integration
+# Visualization: matplotlib seaborn plotly
 
 RUN pip3 install --no-cache-dir --break-system-packages \
     radian \
     dxpy \
     jupyterlab \
-    numpy scipy scikit-learn umap-learn leidenalg
+    ipykernel \
+    ipywidgets \
+    jupyterlab-git \
+    nbconvert \
+    numpy scipy scikit-learn umap-learn leidenalg \
+    matplotlib seaborn plotly \
+    rpy2
 
 # =============================================================================
 # External Tools (pinned versions for reproducibility)
@@ -108,6 +116,7 @@ RUN curl -fsSL "https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/${SRATOOLKIT_VERSION}
     && rm sratoolkit.tar.gz
 
 # VSCode CLI - for code serve-web and tunnels
+# Also download VS Code Server for headless extension installation
 RUN curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64" -o vscode_cli.tar.gz \
     && tar -xzf vscode_cli.tar.gz \
     && chmod +x code \
@@ -120,13 +129,19 @@ RUN curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-a
 # Location: /usr/local/share/vscode-extensions (not /opt due to Apollo bind mounts)
 # Extensions are copied to user's ~/.vscode-server/extensions on first run
 # See: https://github.com/drejom/vscode-rbioc/issues/14
+#
+# The standalone VS Code CLI cannot install extensions without a full VS Code
+# installation. We download extensions directly from the VS Code Marketplace.
 
 ENV VSCODE_EXTENSIONS_DIR=/usr/local/share/vscode-extensions
 
-RUN mkdir -p ${VSCODE_EXTENSIONS_DIR} \
-    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension REditorSupport.r \
-    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension RDebugger.r-debugger \
-    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension ms-python.python
+# Helper script to download and extract VS Code extensions from marketplace
+COPY scripts/install-vscode-extension.sh /tmp/
+RUN chmod +x /tmp/install-vscode-extension.sh \
+    && /tmp/install-vscode-extension.sh REditorSupport.r ${VSCODE_EXTENSIONS_DIR} \
+    && /tmp/install-vscode-extension.sh RDebugger.r-debugger ${VSCODE_EXTENSIONS_DIR} \
+    && /tmp/install-vscode-extension.sh ms-python.python ${VSCODE_EXTENSIONS_DIR} \
+    && rm /tmp/install-vscode-extension.sh
 
 # =============================================================================
 # SLURM Wrappers (SSH passthrough for HPC container usage)
@@ -149,21 +164,36 @@ ENV R_LIBS=/usr/local/lib/R/site-library
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
 
 # renv cache directory (shared across projects)
-RUN mkdir -p /opt/renv/cache && chmod 777 /opt/renv/cache
-ENV RENV_PATHS_CACHE=/opt/renv/cache
+# NOTE: Use /usr/local/share, not /opt (Apollo bind mounts /opt from host)
+RUN mkdir -p /usr/local/share/renv/cache && chmod 777 /usr/local/share/renv/cache
+ENV RENV_PATHS_CACHE=/usr/local/share/renv/cache
 
 # Configure renv to use Posit Package Manager for fast binary installs
 # NOTE: Bioconductor 3.22 uses Ubuntu Noble (24.04)
 ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/noble/latest"
 
 # =============================================================================
+# Jupyter Configuration
+# =============================================================================
+# R kernel for Jupyter (system-wide installation)
+# See: https://github.com/drejom/vscode-rbioc/issues/15
+
+RUN R -e "install.packages('IRkernel', repos='https://cloud.r-project.org')" \
+    && R -e "IRkernel::installspec(user = FALSE, name = 'ir', displayname = 'R 4.4')"
+
+# JupyterLab default config (HPC-friendly: no auth, remote access enabled)
+RUN mkdir -p /etc/jupyter
+COPY config/jupyter_lab_config.py /etc/jupyter/
+
+# =============================================================================
 # Finalize
 # =============================================================================
 
 # Copy metapackage and scripts for easy package installation
-COPY rbiocverse/ /opt/rbiocverse/
-COPY scripts/install.R /opt/rbiocverse/scripts/
-COPY scripts/migrate-packages.R /opt/rbiocverse/scripts/
+# NOTE: Use /usr/local/share, not /opt (Apollo bind mounts /opt from host)
+COPY rbiocverse/ /usr/local/share/rbiocverse/
+COPY scripts/install.R /usr/local/share/rbiocverse/scripts/
+COPY scripts/migrate-packages.R /usr/local/share/rbiocverse/scripts/
 
 # Default user (matches Bioconductor base image)
 USER rstudio
