@@ -130,7 +130,7 @@ class HpcService {
 
   /**
    * Build sbatch wrap command for VS Code
-   * Writes Machine settings and pre-installs extensions before starting server
+   * Writes Machine settings and bootstraps extensions before starting server
    */
   buildVscodeWrap() {
     const ideConfig = ides.vscode;
@@ -140,20 +140,22 @@ class HpcService {
     const machineSettingsDir = `${dataDir}/data/Machine`;
     const extensionsDir = `${dataDir}/extensions`;
     const userDataDir = '\\$HOME/.vscode-slurm/user-data';
+    const builtinExtDir = vscodeDefaults.builtinExtensionsDir;
 
     // Machine settings JSON (base64 encoded to avoid escaping issues)
     const machineSettings = JSON.stringify(vscodeDefaults.settings, null, 2);
     const machineSettingsBase64 = Buffer.from(machineSettings).toString('base64');
 
-    // Setup: create dirs and write Machine settings
+    // Setup: create dirs, write Machine settings, bootstrap extensions (if available)
+    // Extension bootstrap: copy from image's builtin dir to user dir if not present
+    // Conditional: older images (3.19) don't have builtin extensions - gracefully skip
+    // See: https://github.com/drejom/vscode-rbioc/issues/14
     const setup = [
-      `mkdir -p ${machineSettingsDir}`,
+      `mkdir -p ${machineSettingsDir} ${extensionsDir}`,
       `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
+      // Bootstrap extensions only if builtin dir exists in image (backward compatible)
+      `[ -d ${builtinExtDir} ] && for ext in ${builtinExtDir}/*; do [ -d "${extensionsDir}/\\$(basename \\$ext)" ] || cp -r "\\$ext" ${extensionsDir}/; done || true`,
     ].join(' && ');
-
-    // NOTE: code serve-web does NOT support --install-extension flag
-    // Extensions are recommended via Machine settings (extensions.recommendations)
-    // Users can install via Extensions panel in the UI
 
     // Singularity command
     const singularityCmd = [

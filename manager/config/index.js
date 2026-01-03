@@ -54,14 +54,11 @@ const vscodeDefaults = {
     'files.autoSaveDelay': 1000,
     'python.defaultInterpreterPath': '/usr/local/bin/python3',
 
-    // Recommended extensions - shown in Extensions panel
-    // NOTE: code serve-web doesn't support --install-extension flag
-    'extensions.recommendations': [
-      'reditorsupport.r',
-      'rdebugger.r-debugger',
-      'ms-python.python',
-    ],
   },
+
+  // Pre-installed extensions baked into Singularity image (see github.com/drejom/vscode-rbioc#14)
+  // Copied to user's extensions dir on first run if not present
+  builtinExtensionsDir: '/opt/vscode-extensions',
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
