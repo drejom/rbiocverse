@@ -160,21 +160,20 @@ fi
 # Set up paths
 CONTAINER="$container"
 PYTHON_LIB="$python_lib"
-REPO_ROOT="$repo_root"
 
 echo "Container: \$CONTAINER"
 echo "Python Library: \$PYTHON_LIB"
 echo ""
 
-# Install packages using pip
+# Install packages using pip (from container's bundled pyproject.toml)
 echo "Installing Python packages..."
 singularity exec \\
     --env PYTHONPATH="\$PYTHON_LIB" \\
-    -B "$bind_paths","\$REPO_ROOT":/mnt/rbiocverse \\
+    -B "$bind_paths" \\
     "\$CONTAINER" \\
     pip3 install --no-cache-dir --break-system-packages \\
         --target="\$PYTHON_LIB" \\
-        /mnt/rbiocverse/rbiocverse${pip_extras}
+        /usr/local/share/rbiocverse${pip_extras}
 
 echo ""
 echo "=== Installation Complete ==="
