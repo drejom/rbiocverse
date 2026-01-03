@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const net = require('net');
+const http = require('http');
 const { config, clusters, ides } = require('../config');
 const { log } = require('../lib/logger');
 
@@ -55,6 +56,63 @@ class TunnelService {
   }
 
   /**
+   * Check if IDE is actually responding (not just port open)
+   * Makes HTTP request to verify the IDE server is ready
+   * @param {number} port - Port to check
+   * @param {number} timeout - Timeout in milliseconds
+   * @returns {Promise<boolean>} True if IDE responds
+   */
+  checkIdeReady(port, timeout = 2000) {
+    return new Promise((resolve) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/',
+        method: 'GET',
+        timeout,
+      }, (res) => {
+        // Any HTTP response means the IDE is ready (even redirects/errors)
+        // Consume response to prevent resource leak
+        res.resume();
+        resolve(true);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+
+      req.on('error', () => {
+        resolve(false);
+      });
+
+      req.end();
+    });
+  }
+
+  /**
+   * Wait for IDE to be ready after tunnel establishes
+   * @param {number} port - Port to check
+   * @param {string} ide - IDE type for logging
+   * @param {string} hpcName - HPC name for logging
+   * @param {number} maxAttempts - Maximum attempts (default 15 = ~30s)
+   * @returns {Promise<boolean>} True if IDE became ready
+   */
+  async waitForIdeReady(port, ide, hpcName, maxAttempts = 15) {
+    for (let i = 0; i < maxAttempts; i++) {
+      const ready = await this.checkIdeReady(port);
+      log.debugFor('tunnel', `IDE ready check`, { port, ide, hpc: hpcName, attempt: i + 1, ready });
+      if (ready) {
+        log.tunnel(`IDE ready`, { hpc: hpcName, ide, port, attempts: i + 1 });
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    log.tunnel(`IDE not ready after ${maxAttempts} attempts`, { hpc: hpcName, ide, port });
+    return false;
+  }
+
+  /**
    * Start SSH tunnel to compute node for a specific IDE
    * @param {string} hpcName - HPC cluster name
    * @param {string} node - Compute node name
@@ -75,6 +133,15 @@ class TunnelService {
 
     const sessionKey = this.getSessionKey(hpcName, ide);
     const port = ideConfig.port;
+
+    // Stop any existing tunnel using this port (same IDE type, any cluster)
+    // This prevents "Address in use" errors when switching between clusters
+    const stoppedTunnel = this.stopByIde(ide);
+
+    // Brief delay for OS to release the port after tunnel termination
+    if (stoppedTunnel) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
 
     // Build port forwarding arguments
     const portForwards = [`-L`, `${port}:${node}:${port}`];
@@ -143,6 +210,14 @@ class TunnelService {
       if (portOpen) {
         log.tunnel(`Established on port ${port}`, { hpc: hpcName, ide });
         this.tunnels.set(sessionKey, tunnel);
+
+        // Wait for IDE to actually be ready (responds to HTTP)
+        // This prevents ECONNRESET errors when IDE is still starting
+        const ideReady = await this.waitForIdeReady(port, ide, hpcName);
+        if (!ideReady) {
+          log.tunnel(`Warning: IDE may not be fully ready`, { hpc: hpcName, ide });
+        }
+
         return tunnel;
       }
     }
@@ -175,6 +250,25 @@ class TunnelService {
         }
       }
     }
+  }
+
+  /**
+   * Stop all tunnels for a specific IDE type (across all clusters)
+   * Used to free the local port before starting a new tunnel
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
+   * @returns {boolean} True if any tunnel was stopped
+   */
+  stopByIde(ide) {
+    let stopped = false;
+    for (const [key, tunnel] of this.tunnels.entries()) {
+      if (key.endsWith(`-${ide}`)) {
+        log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
+        tunnel.kill();
+        this.tunnels.delete(key);
+        stopped = true;
+      }
+    }
+    return stopped;
   }
 
   /**

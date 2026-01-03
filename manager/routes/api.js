@@ -27,22 +27,20 @@ const tunnelService = new TunnelService();
 const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 1800000; // 30 minutes default
 
 // Timing constants for launch/stop operations
-const IDE_STARTUP_WAIT_MS = 5000;      // Wait for IDE to start after node assignment
 const SLURM_CANCEL_DELAY_MS = 1000;    // Wait for SLURM to process cancellation
 
 // Per-cluster cache to avoid invalidating both clusters on single job change
 const statusCache = createClusterCache(STATUS_CACHE_TTL);
 
 // Progress weights (cumulative percentages) based on observed timing
-// See plan for timing analysis: submit ~3s, wait ~3.5s, IDE startup 5s (hardcoded)
+// Timing: submit ~3s, wait ~3.5s, tunnel+IDE ready ~2-5s (dynamic polling)
 const LAUNCH_PROGRESS = {
-  connecting: 3,      // Quick SSH connect check
-  submitting: 28,     // 2-4s SSH + sbatch
-  submitted: 33,      // Instant milestone (shows job ID)
-  waiting: 58,        // 3-4s SLURM scheduling (CV 22%)
-  starting: 63,       // Instant milestone (shows node name)
-  startingIde: 95,    // 5s hardcoded wait for IDE startup
-  establishing: 100,  // Tunnel setup complete
+  connecting: 5,      // Quick SSH connect check
+  submitting: 30,     // 2-4s SSH + sbatch
+  submitted: 35,      // Instant milestone (shows job ID)
+  waiting: 60,        // 3-4s SLURM scheduling (CV 22%)
+  starting: 65,       // Instant milestone (shows node name)
+  establishing: 100,  // Tunnel + IDE readiness check (~2-5s)
 };
 
 /**
@@ -412,10 +410,7 @@ function createApiRouter(stateManager) {
       session.node = waitResult.node;
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
-      // Wait a moment for IDE to start
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      // Start tunnel and wait for it to establish
+      // Start tunnel - it will verify IDE is responding before returning
       session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
         // Tunnel exit callback
         log.tunnel(`Exit callback`, { hpc, ide, code });
@@ -537,9 +532,9 @@ function createApiRouter(stateManager) {
 
       const session = state.sessions[sessionKey];
 
-      // If already running, just switch to this session (reconnect)
+      // If already running, just switch to this session (reconnect tunnel)
       if (session.status === 'running') {
-        sendProgress('connecting', 'Reconnecting to existing session...');
+        sendProgress('connecting', 'Reconnecting tunnel...');
 
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
@@ -594,71 +589,83 @@ function createApiRouter(stateManager) {
       await stateManager.save();
 
       // Step 1: Connecting
-      sendProgress('connecting', `Connecting to ${hpc}...`);
+      sendProgress('connecting', 'Connecting...');
 
       const hpcService = new HpcService(hpc);
 
       // Check for existing job for this IDE
       let jobInfo = await hpcService.getJobInfo(ide);
 
+      // Helper to wait for node assignment (avoids duplication)
+      const handleWaitForNode = async () => {
+        const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+          maxAttempts: 6,
+          returnPendingOnTimeout: true,
+        });
+
+        if (waitResult.pending) {
+          session.status = 'pending';
+          await stateManager.save();
+          stateManager.releaseLock(lockName);
+
+          res.write(`data: ${JSON.stringify({
+            type: 'pending-timeout',
+            jobId: session.jobId,
+            message: 'Job queued, check back soon',
+          })}\n\n`);
+          res.end();
+          return false; // Response ended
+        }
+
+        session.node = waitResult.node;
+        sendProgress('starting', `Running on ${session.node}`, { node: session.node });
+        return true; // Success
+      };
+
       if (!jobInfo) {
-        // Step 2: Submitting
+        // Fresh launch - submit new job
         const gpuLabel = gpu !== 'none' ? ` (${gpu.toUpperCase()})` : '';
-        sendProgress('submitting', `Submitting job${gpuLabel}...`);
+        sendProgress('submitting', `Requesting resources${gpuLabel}...`);
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu });
 
         const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu });
         session.jobId = result.jobId;
         session.token = result.token;  // Auth token for VS Code/Jupyter
 
-        // Step 3: Submitted (milestone)
-        sendProgress('submitted', `Job submitted (ID: ${session.jobId})`, { jobId: session.jobId });
+        sendProgress('submitted', `Job ${session.jobId} submitted`, { jobId: session.jobId });
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
+
+        // Wait for node assignment
+        sendProgress('waiting', 'Waiting for resources...');
+        log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
+
+        if (!(await handleWaitForNode())) {
+          return;
+        }
       } else {
+        // Found existing job - connect to it
         session.jobId = jobInfo.jobId;
         session.node = jobInfo.node;
-        sendProgress('submitted', `Found existing job (ID: ${session.jobId})`, { jobId: session.jobId });
-        log.job(`Found existing job`, { hpc, ide, jobId: session.jobId });
+
+        if (jobInfo.node) {
+          // Job is running - skip straight to connecting
+          sendProgress('starting', `Connecting to running job on ${session.node}`, { jobId: session.jobId, node: session.node });
+          log.job(`Found running job`, { hpc, ide, jobId: session.jobId, node: session.node });
+        } else {
+          // Job is pending - wait for node
+          sendProgress('submitted', `Found job ${session.jobId}`, { jobId: session.jobId });
+          sendProgress('waiting', 'Waiting for resources...');
+          log.job(`Found pending job`, { hpc, ide, jobId: session.jobId });
+
+          if (!(await handleWaitForNode())) {
+            return;
+          }
+        }
       }
-
-      // Step 4: Waiting for node (include job ID for reconnect visibility)
-      sendProgress('waiting', `Waiting for node... (Job ${session.jobId})`);
-      log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
-
-      // Wait for job to get a node (30s timeout for pending handling)
-      // 6 attempts * 5s = 30s, return pending instead of throwing on timeout
-      const waitResult = await hpcService.waitForNode(session.jobId, ide, {
-        maxAttempts: 6,
-        returnPendingOnTimeout: true,
-      });
-
-      if (waitResult.pending) {
-        // Job still pending after 30s - return to launcher with pending state
-        session.status = 'pending';
-        await stateManager.save();
-        stateManager.releaseLock(lockName);
-
-        res.write(`data: ${JSON.stringify({
-          type: 'pending-timeout',
-          jobId: session.jobId,
-          message: 'Job queued, check back soon',
-        })}\n\n`);
-        return res.end();
-      }
-
-      session.node = waitResult.node;
-
-      // Step 5: Starting on node (milestone)
-      sendProgress('starting', `Starting on ${session.node}...`, { node: session.node });
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
-      // Step 6: Starting IDE
-      const ideName = ides[ide]?.name || ide;
-      sendProgress('startingIde', `Starting ${ideName}...`);
-      await new Promise(resolve => setTimeout(resolve, IDE_STARTUP_WAIT_MS));
-
-      // Step 7: Establishing connection
-      sendProgress('establishing', 'Establishing connection...');
+      // Step 6: Establishing tunnel and waiting for IDE
+      sendProgress('establishing', 'Almost ready...');
 
       // Start tunnel and wait for it to establish
       session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
@@ -859,7 +866,7 @@ function createApiRouter(stateManager) {
       const sessionKey = getSessionKey(hpc, ide);
       const session = state.sessions[sessionKey];
 
-      sendProgress('cancelling', 'Cancelling job...');
+      sendProgress('cancelling', 'Stopping...');
 
       // Stop tunnel if exists
       tunnelService.stop(hpc, ide);
