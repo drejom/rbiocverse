@@ -44,8 +44,8 @@ const vscodeDefaults = {
     'r.workspaceViewer.showObjectSize': true,
     'r.rmarkdown.chunkBackgroundColor': 'rgba(128, 128, 128, 0.3)',
 
-    // Terminal with nerdfont fallback chain
-    'terminal.integrated.fontFamily': "'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
+    // Terminal with nerdfont fallback chain (user has FiraCode Nerd Font locally)
+    'terminal.integrated.fontFamily': "'FiraCode Nerd Font', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
     'terminal.integrated.fontSize': 14,
     'terminal.integrated.suggest.enabled': true,
 
@@ -154,7 +154,8 @@ const vscodeDefaults = {
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
-// Note: No font settings - let RStudio use defaults, browser renders fonts
+// Font settings: browser_fixed_width_fonts tells RStudio which local fonts to try
+// User needs FiraCode Nerd Font installed locally for nerd font glyphs
 const rstudioDefaults = {
   // Workspace behavior (HPC-friendly - no large .RData files)
   save_workspace: 'never',
@@ -170,8 +171,21 @@ const rstudioDefaults = {
   auto_append_newline: true,
   strip_trailing_whitespace: true,
 
-  // Terminal (starship works via ~/.bashrc mount if user has nerdfonts)
-  terminal_shell: 'bash',
+  // Font settings (rendered by browser from local fonts)
+  font_size_points: 14,
+  browser_fixed_width_fonts: [
+    'FiraCode Nerd Font',
+    'JetBrainsMono Nerd Font',
+    'Hack Nerd Font',
+    'Fira Code',
+    'Source Code Pro',
+    'Consolas',
+    'Monaco',
+    'monospace',
+  ],
+
+  // Terminal
+  posix_terminal_shell: 'bash',
   terminal_initial_directory: 'home',
 };
 
