@@ -38,16 +38,24 @@ const vscodeDefaults = {
     'r.bracketedPaste': true,
     'r.plot.useHttpgd': true,
     'r.session.levelOfObjectDetail': 'Detailed',
+    'r.alwaysUseActiveTerminal': true,
+    'r.sessionWatcher': true,
+    'r.removeLeadingComments': true,
+    'r.workspaceViewer.showObjectSize': true,
+    'r.rmarkdown.chunkBackgroundColor': 'rgba(128, 128, 128, 0.3)',
 
     // Terminal with nerdfont fallback chain
     'terminal.integrated.fontFamily': "'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
     'terminal.integrated.fontSize': 14,
     'terminal.integrated.suggest.enabled': true,
 
-    // Editor fonts
+    // Editor
     'editor.fontFamily': "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace",
     'editor.fontLigatures': true,
     'editor.fontSize': 14,
+    'editor.bracketPairColorization.enabled': true,
+    'editor.inlineSuggest.enabled': true,
+    'diffEditor.ignoreTrimWhitespace': false,
 
     // General HPC-friendly settings
     'files.autoSave': 'afterDelay',
