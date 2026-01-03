@@ -152,6 +152,7 @@ echo ""
 
 # Load singularity (if module specified)
 if [[ -n "$module" ]]; then
+    export MODULEPATH=/opt/modulefiles:/opt/easybuild/modules/all:/opt/modulefiles/Linux:/opt/modulefiles/Core:/opt/lmod/lmod/modulefiles/Core
     source /opt/lmod/lmod/init/bash 2>/dev/null || source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null || true
     module load $module
 fi
