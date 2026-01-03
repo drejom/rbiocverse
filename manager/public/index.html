@@ -44,9 +44,16 @@
 
   <div id="loading-overlay" class="loading-overlay" style="display:none;">
     <div class="loading-content">
-      <div class="spinner"></div>
-      <div id="loading-text">Connecting...</div>
-      <button id="cancel-launch-btn" class="btn btn-cancel" style="display:none;">
+      <div class="progress-container">
+        <div class="progress-header" id="progress-header">Launching...</div>
+        <div class="progress-step" id="progress-step">Connecting...</div>
+        <div class="progress-bar">
+          <div class="progress-bar-estimate" id="progress-estimate" style="width: 0%"></div>
+          <div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="progress-error" id="progress-error" style="display:none;"></div>
+      </div>
+      <button id="cancel-launch-btn" class="btn btn-cancel" style="display:none; margin-top: 20px;">
         <i data-lucide="x" class="lucide"></i> Cancel
       </button>
     </div>

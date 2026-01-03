@@ -605,3 +605,88 @@ h1 {
 .launch-section {
   margin-top: 5px;
 }
+
+/* Progress Bar with Uncertainty Visualization */
+.progress-container {
+  text-align: center;
+  padding: 20px;
+}
+
+.progress-header {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #fff;
+}
+
+.progress-step {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 15px;
+  min-height: 1.2em;
+}
+
+.progress-bar {
+  height: 4px;
+  background: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  margin: 0 20px;
+}
+
+/* Uncertainty band - shows expected step completion range */
+.progress-bar-estimate {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.1));
+  position: absolute;
+  left: 0;
+  transition: width 0.3s ease;
+}
+
+/* Pulsing fill - shows confirmed progress */
+.progress-bar-fill {
+  height: 100%;
+  background: #10b981;
+  position: absolute;
+  left: 0;
+  animation: pulse-fill 1.5s ease-in-out infinite;
+  transition: width 0.3s ease;
+}
+
+@keyframes pulse-fill {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pending state (amber) */
+.progress-bar-fill.pending {
+  background: #f59e0b;
+}
+
+.progress-bar-estimate.pending {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), rgba(245, 158, 11, 0.1));
+}
+
+/* Indeterminate state for cancel (high variance) */
+.progress-bar-fill.indeterminate {
+  width: 30% !important;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% { left: -30%; }
+  100% { left: 100%; }
+}
+
+/* Error state */
+.progress-bar-fill.error {
+  background: #ef4444;
+  animation: none;
+}
+
+.progress-error {
+  color: #fca5a5;
+  font-size: 0.9rem;
+  margin-top: 15px;
+}

@@ -33,8 +33,20 @@ let lastStatusUpdate = null;
 let statusCacheTtl = 120;
 
 // Launch cancellation tracking
-let currentLaunch = null; // { hpc, ide, abortController }
+let currentLaunch = null; // { hpc, ide, eventSource }
 let launchCancelled = false;
+
+// Step estimate widths (slightly ahead of fill to show uncertainty band)
+// Based on timing analysis: CV ~22-24% for submit/wait steps
+const STEP_ESTIMATES = {
+  connecting: 10,    // 3% fill + buffer
+  submitting: 35,    // 28% fill + buffer
+  submitted: 40,     // 33% fill + buffer
+  waiting: 65,       // 58% fill + buffer
+  starting: 70,      // 63% fill + buffer
+  startingIde: 100,  // 95% fill + buffer
+  establishing: 100, // full
+};
 
 /**
  * Get session key for countdown/walltime tracking
@@ -562,72 +574,164 @@ function tickCountdowns() {
 }
 
 /**
- * Launch session with selected IDE
+ * Update progress UI elements
+ */
+function updateProgress(progress, message, step, options = {}) {
+  const header = document.getElementById('progress-header');
+  const stepEl = document.getElementById('progress-step');
+  const fill = document.getElementById('progress-fill');
+  const estimate = document.getElementById('progress-estimate');
+  const errorEl = document.getElementById('progress-error');
+
+  if (options.header) {
+    header.textContent = options.header;
+  }
+
+  stepEl.textContent = message;
+
+  // Update fill width
+  fill.style.width = progress + '%';
+
+  // Update estimate band (slightly ahead to show uncertainty)
+  const estimateWidth = STEP_ESTIMATES[step] || progress + 5;
+  estimate.style.width = Math.min(100, estimateWidth) + '%';
+
+  // Handle special states
+  if (options.pending) {
+    fill.classList.add('pending');
+    estimate.classList.add('pending');
+  } else {
+    fill.classList.remove('pending');
+    estimate.classList.remove('pending');
+  }
+
+  if (options.error) {
+    fill.classList.add('error');
+    errorEl.textContent = options.error;
+    errorEl.style.display = 'block';
+  } else {
+    fill.classList.remove('error');
+    errorEl.style.display = 'none';
+  }
+}
+
+/**
+ * Reset progress UI to initial state
+ */
+function resetProgress() {
+  updateProgress(0, 'Connecting...', 'connecting', { header: 'Launching...' });
+  const fill = document.getElementById('progress-fill');
+  const estimate = document.getElementById('progress-estimate');
+  fill.classList.remove('pending', 'error', 'indeterminate');
+  estimate.classList.remove('pending');
+}
+
+/**
+ * Launch session with selected IDE using SSE for real-time progress
  */
 async function launch(hpc) {
   const ide = selectedIde[hpc];
   console.log('[Launcher] Launch requested:', hpc, ide);
 
   const overlay = document.getElementById('loading-overlay');
-  const loadingText = document.getElementById('loading-text');
   const cancelBtn = document.getElementById('cancel-launch-btn');
   const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
   overlay.style.display = 'flex';
-  const ideName = availableIdes[ide]?.name || ide;
-  loadingText.textContent = `Submitting ${ideName} job to ${hpc}...`;
+  resetProgress();
 
-  // Show cancel button and track current launch
-  const abortController = new AbortController();
-  currentLaunch = { hpc, ide, abortController };
+  const ideName = availableIdes[ide]?.name || ide;
+  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Launching ${ideName}...` });
+
+  // Get form values
+  const cpus = document.getElementById(hpc + '-cpus').value;
+  const mem = document.getElementById(hpc + '-mem').value;
+  const time = document.getElementById(hpc + '-time').value;
+
+  // Build SSE URL with query params
+  const params = new URLSearchParams({ cpus, mem, time });
+  const url = `/api/launch/${hpc}/${ide}/stream?${params}`;
+
+  // Create EventSource for SSE
+  const eventSource = new EventSource(url);
+  currentLaunch = { hpc, ide, eventSource };
   launchCancelled = false;
   cancelBtn.style.display = 'inline-flex';
   lucide.createIcons();
 
-  try {
-    const cpus = document.getElementById(hpc + '-cpus').value;
-    const mem = document.getElementById(hpc + '-mem').value;
-    const time = document.getElementById(hpc + '-time').value;
+  eventSource.onmessage = function(event) {
+    if (launchCancelled) return;
 
-    const res = await fetch('/api/launch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, ide, cpus, mem, time }),
-      signal: abortController.signal
-    });
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[Launcher] SSE event:', data);
 
-    if (!res.ok) {
-      const data = await res.json();
-      if (data.error && data.error.includes('already')) {
-        overlay.style.display = 'none';
-        cancelBtn.style.display = 'none';
-        currentLaunch = null;
-        if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
-          connect(hpc, ide);
-        }
-        return;
+      switch (data.type) {
+        case 'progress':
+          updateProgress(data.progress, data.message, data.step);
+          break;
+
+        case 'pending-timeout':
+          // Job is pending - return to launcher showing pending state
+          console.log('[Launcher] Job pending, returning to launcher');
+          eventSource.close();
+          currentLaunch = null;
+          cancelBtn.style.display = 'none';
+          overlay.style.display = 'none';
+          // Refresh status to show pending job
+          fetchStatus(true);
+          break;
+
+        case 'complete':
+          console.log('[Launcher] Launch complete, redirecting');
+          eventSource.close();
+          currentLaunch = null;
+          cancelBtn.style.display = 'none';
+          window.location.href = data.redirectUrl || '/code/';
+          break;
+
+        case 'error':
+          console.error('[Launcher] Launch error:', data.message);
+          eventSource.close();
+          currentLaunch = null;
+          cancelBtn.style.display = 'none';
+
+          // Handle "already running" case
+          if (data.message && data.message.includes('already')) {
+            overlay.style.display = 'none';
+            if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
+              connect(hpc, ide);
+            }
+            return;
+          }
+
+          updateProgress(0, '', 'error', { error: data.message, header: 'Launch Failed' });
+          // Auto-hide after 5 seconds
+          setTimeout(() => {
+            if (overlay.style.display !== 'none') {
+              overlay.style.display = 'none';
+              errorEl.textContent = data.message;
+              errorEl.style.display = 'block';
+            }
+          }, 5000);
+          break;
       }
-      throw new Error(data.error || 'Launch failed');
+    } catch (e) {
+      console.error('[Launcher] Failed to parse SSE data:', e);
     }
+  };
 
-    // Redirect to IDE
+  eventSource.onerror = function(event) {
+    if (launchCancelled) return;
+    console.error('[Launcher] SSE connection error');
+    eventSource.close();
     currentLaunch = null;
     cancelBtn.style.display = 'none';
-    const ideConfig = availableIdes[ide];
-    window.location.href = ideConfig?.proxyPath || '/code/';
-  } catch (e) {
-    // Don't show error if user cancelled
-    if (e.name === 'AbortError' || launchCancelled) {
-      console.log('[Launcher] Launch cancelled by user');
-      return;
-    }
     overlay.style.display = 'none';
-    cancelBtn.style.display = 'none';
-    currentLaunch = null;
-    errorEl.textContent = e.message;
+    errorEl.textContent = 'Connection lost. Please try again.';
     errorEl.style.display = 'block';
-  }
+  };
 }
 
 /**
@@ -636,20 +740,24 @@ async function launch(hpc) {
 async function cancelLaunch() {
   if (!currentLaunch) return;
 
-  const { hpc, ide, abortController } = currentLaunch;
+  const { hpc, ide, eventSource } = currentLaunch;
   const ideName = availableIdes[ide]?.name || ide;
   console.log('[Launcher] Cancel requested:', hpc, ide);
 
   launchCancelled = true;
 
-  // Abort the fetch request
-  abortController.abort();
+  // Close the SSE connection
+  if (eventSource) {
+    eventSource.close();
+  }
 
   const overlay = document.getElementById('loading-overlay');
-  const loadingText = document.getElementById('loading-text');
   const cancelBtn = document.getElementById('cancel-launch-btn');
 
-  loadingText.textContent = `Cancelling ${ideName} on ${hpc}...`;
+  // Show cancelling progress with indeterminate bar
+  updateProgress(0, `Cancelling ${ideName} on ${hpc}...`, 'cancelling', { header: 'Cancelling...' });
+  const fill = document.getElementById('progress-fill');
+  fill.classList.add('indeterminate');
   cancelBtn.disabled = true;
 
   let cancelFailed = false;
@@ -674,6 +782,7 @@ async function cancelLaunch() {
   overlay.style.display = 'none';
   cancelBtn.style.display = 'none';
   cancelBtn.disabled = false;
+  fill.classList.remove('indeterminate');
   currentLaunch = null;
 
   // Show error if cancellation failed

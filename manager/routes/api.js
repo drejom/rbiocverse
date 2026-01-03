@@ -29,6 +29,18 @@ const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 1800000; // 3
 // Per-cluster cache to avoid invalidating both clusters on single job change
 const statusCache = createClusterCache(STATUS_CACHE_TTL);
 
+// Progress weights (cumulative percentages) based on observed timing
+// See plan for timing analysis: submit ~3s, wait ~3.5s, IDE startup 5s (hardcoded)
+const LAUNCH_PROGRESS = {
+  connecting: 3,      // Quick SSH connect check
+  submitting: 28,     // 2-4s SSH + sbatch
+  submitted: 33,      // Instant milestone (shows job ID)
+  waiting: 58,        // 3-4s SLURM scheduling (CV 22%)
+  starting: 63,       // Instant milestone (shows node name)
+  startingIde: 95,    // 5s hardcoded wait for IDE startup
+  establishing: 100,  // Tunnel setup complete
+};
+
 /**
  * Invalidate the cluster status cache
  * Call after job state changes (cancel, submit) to force fresh poll
@@ -388,7 +400,11 @@ function createApiRouter(stateManager) {
 
       // Wait for job to get a node
       log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
-      session.node = await hpcService.waitForNode(session.jobId, ide);
+      const waitResult = await hpcService.waitForNode(session.jobId, ide);
+      if (waitResult.pending) {
+        throw new Error('Timeout waiting for node assignment');
+      }
+      session.node = waitResult.node;
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
       // Wait a moment for IDE to start
@@ -441,6 +457,221 @@ function createApiRouter(stateManager) {
       if (!res.headersSent) {
         res.status(500).json({ error: error.message });
       }
+    } finally {
+      stateManager.releaseLock(lockName);
+    }
+  });
+
+  // Launch session with SSE progress streaming
+  // Returns real-time progress events during job submission and startup
+  router.get('/launch/:hpc/:ide/stream', async (req, res) => {
+    const { hpc, ide } = req.params;
+    const cpus = req.query.cpus || config.defaultCpus;
+    const mem = req.query.mem || config.defaultMem;
+    const time = req.query.time || config.defaultTime;
+
+    // Validate IDE type
+    if (!ides[ide]) {
+      return res.status(400).json({ error: `Unknown IDE: ${ide}` });
+    }
+
+    // Set up SSE response
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders();
+
+    // Helper to send progress events
+    const sendProgress = (step, message, extra = {}) => {
+      const progress = LAUNCH_PROGRESS[step] || 0;
+      const data = JSON.stringify({ type: 'progress', step, progress, message, ...extra });
+      res.write(`data: ${data}\n\n`);
+    };
+
+    // Helper to send error event
+    const sendError = (message) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
+      res.end();
+    };
+
+    // Helper to send completion event
+    const sendComplete = (data) => {
+      res.write(`data: ${JSON.stringify({ type: 'complete', ...data })}\n\n`);
+      res.end();
+    };
+
+    const sessionKey = getSessionKey(hpc, ide);
+    const lockName = `launch:${sessionKey}`;
+
+    // Acquire lock to prevent concurrent launches
+    try {
+      stateManager.acquireLock(lockName);
+    } catch (e) {
+      return sendError(e.message);
+    }
+
+    try {
+      // Initialize session if needed
+      if (!state.sessions[sessionKey]) {
+        state.sessions[sessionKey] = createSession(ide);
+      }
+
+      const session = state.sessions[sessionKey];
+
+      // If already running, just switch to this session (reconnect)
+      if (session.status === 'running') {
+        sendProgress('connecting', 'Reconnecting to existing session...');
+
+        // Ensure tunnel is running for this session
+        if (!session.tunnelProcess) {
+          try {
+            session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+              if (session.status === 'running') {
+                session.status = 'idle';
+              }
+              session.tunnelProcess = null;
+            });
+          } catch (error) {
+            stateManager.releaseLock(lockName);
+            return sendError(error.message);
+          }
+        }
+
+        state.activeSession = { hpc, ide };
+        await stateManager.save();
+        stateManager.releaseLock(lockName);
+
+        const ideConfig = ides[ide];
+        return sendComplete({
+          status: 'connected',
+          hpc,
+          ide,
+          jobId: session.jobId,
+          node: session.node,
+          redirectUrl: ideConfig?.proxyPath || '/code/',
+        });
+      }
+
+      // Reject if starting/pending (in progress)
+      if (session.status !== 'idle') {
+        stateManager.releaseLock(lockName);
+        return sendError(`${hpc} ${ide} is already ${session.status}`);
+      }
+
+      // SECURITY: Validate inputs before using in shell command
+      try {
+        validateSbatchInputs(cpus, mem, time);
+      } catch (e) {
+        stateManager.releaseLock(lockName);
+        return sendError(e.message);
+      }
+
+      session.status = 'starting';
+      session.ide = ide;
+      session.error = null;
+      session.cpus = cpus;
+      session.memory = mem;
+      session.walltime = time;
+      await stateManager.save();
+
+      // Step 1: Connecting
+      sendProgress('connecting', `Connecting to ${hpc}...`);
+
+      const hpcService = new HpcService(hpc);
+
+      // Check for existing job for this IDE
+      let jobInfo = await hpcService.getJobInfo(ide);
+
+      if (!jobInfo) {
+        // Step 2: Submitting
+        sendProgress('submitting', 'Submitting job...');
+        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
+
+        const result = await hpcService.submitJob(cpus, mem, time, ide);
+        session.jobId = result.jobId;
+
+        // Step 3: Submitted (milestone)
+        sendProgress('submitted', `Job submitted (ID: ${session.jobId})`, { jobId: session.jobId });
+        log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
+      } else {
+        session.jobId = jobInfo.jobId;
+        session.node = jobInfo.node;
+        sendProgress('submitted', `Found existing job (ID: ${session.jobId})`, { jobId: session.jobId });
+        log.job(`Found existing job`, { hpc, ide, jobId: session.jobId });
+      }
+
+      // Step 4: Waiting for node
+      sendProgress('waiting', 'Waiting for node...');
+      log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
+
+      // Wait for job to get a node (30s timeout for pending handling)
+      const waitResult = await hpcService.waitForNode(session.jobId, ide, 6); // 6 attempts * 5s = 30s
+
+      if (waitResult.pending) {
+        // Job still pending after 30s - return to launcher with pending state
+        session.status = 'pending';
+        await stateManager.save();
+        stateManager.releaseLock(lockName);
+
+        res.write(`data: ${JSON.stringify({
+          type: 'pending-timeout',
+          jobId: session.jobId,
+          message: 'Job queued, check back soon',
+        })}\n\n`);
+        return res.end();
+      }
+
+      session.node = waitResult.node;
+
+      // Step 5: Starting on node (milestone)
+      sendProgress('starting', `Starting on ${session.node}...`, { node: session.node });
+      log.job(`Running on node`, { hpc, ide, node: session.node });
+
+      // Step 6: Starting IDE (5s hardcoded wait)
+      const ideName = ides[ide]?.name || ide;
+      sendProgress('startingIde', `Starting ${ideName}...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Step 7: Establishing connection
+      sendProgress('establishing', 'Establishing connection...');
+
+      // Start tunnel and wait for it to establish
+      session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+        log.tunnel(`Exit callback`, { hpc, ide, code });
+        if (session.status === 'running') {
+          session.status = 'idle';
+        }
+        session.tunnelProcess = null;
+      });
+
+      session.status = 'running';
+      session.startedAt = new Date().toISOString();
+      state.activeSession = { hpc, ide };
+      await stateManager.save();
+
+      // Invalidate cache for this cluster
+      invalidateStatusCache(hpc);
+
+      const ideConfig = ides[ide];
+      sendComplete({
+        status: 'running',
+        jobId: session.jobId,
+        node: session.node,
+        hpc,
+        ide,
+        redirectUrl: ideConfig?.proxyPath || '/code/',
+      });
+
+    } catch (error) {
+      log.error('Launch stream error', { hpc, ide, error: error.message });
+      const session = state.sessions[sessionKey];
+      if (session) {
+        session.status = 'idle';
+        session.error = error.message;
+        await stateManager.save();
+      }
+      sendError(error.message);
     } finally {
       stateManager.releaseLock(lockName);
     }
@@ -564,6 +795,97 @@ function createApiRouter(stateManager) {
       ide,
       clusterStatus,  // Include fresh status if job was cancelled
     });
+  });
+
+  // Stop session with SSE progress streaming (indeterminate progress)
+  // Due to high variance in cancel times (CV 74%), uses indeterminate animation
+  router.get('/stop/:hpc/:ide/stream', async (req, res) => {
+    const { hpc, ide } = req.params;
+
+    // Validate IDE type
+    if (!ides[ide]) {
+      return res.status(400).json({ error: `Unknown IDE: ${ide}` });
+    }
+
+    // Set up SSE response
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Helper to send progress events (indeterminate - no percentage)
+    const sendProgress = (step, message) => {
+      res.write(`data: ${JSON.stringify({ type: 'progress', step, message })}\n\n`);
+    };
+
+    // Helper to send completion event
+    const sendComplete = (data) => {
+      res.write(`data: ${JSON.stringify({ type: 'complete', ...data })}\n\n`);
+      res.end();
+    };
+
+    // Helper to send error event
+    const sendError = (message) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
+      res.end();
+    };
+
+    try {
+      const sessionKey = getSessionKey(hpc, ide);
+      const session = state.sessions[sessionKey];
+
+      sendProgress('cancelling', 'Cancelling job...');
+
+      // Stop tunnel if exists
+      tunnelService.stop(hpc, ide);
+
+      // Cancel SLURM job
+      let jobCancelled = false;
+      const hpcService = new HpcService(hpc);
+
+      // Get job ID from session or query SLURM directly
+      let jobId = session?.jobId;
+      if (!jobId) {
+        const jobInfo = await hpcService.getJobInfo(ide);
+        if (jobInfo) {
+          jobId = jobInfo.jobId;
+        }
+      }
+
+      if (jobId) {
+        await hpcService.cancelJob(jobId);
+        log.job(`Cancelled`, { hpc, ide, jobId });
+        jobCancelled = true;
+      }
+
+      // Reset session
+      state.sessions[sessionKey] = createSession(ide);
+
+      // Clear active session if this was it
+      if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {
+        state.activeSession = null;
+      }
+
+      await stateManager.save();
+
+      // Invalidate cache and fetch fresh status
+      if (jobCancelled) {
+        invalidateStatusCache(hpc);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      sendComplete({
+        status: 'stopped',
+        hpc,
+        ide,
+        jobCancelled,
+      });
+
+    } catch (error) {
+      log.error('Stop stream error', { hpc, ide, error: error.message });
+      sendError(error.message);
+    }
   });
 
   return router;

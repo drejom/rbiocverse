@@ -44,6 +44,33 @@
       0%, 100% { opacity: 1; background: #ef4444; }
       50% { opacity: 0.7; background: #dc2626; }
     }
+    /* Kill progress bar */
+    .kill-progress {
+      margin: 8px 0;
+    }
+    .kill-progress-text {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 6px;
+    }
+    .kill-progress-bar {
+      height: 3px;
+      background: #374151;
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .kill-progress-fill {
+      height: 100%;
+      width: 30%;
+      background: #ef4444;
+      position: absolute;
+      animation: kill-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes kill-indeterminate {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
     #panel {
       display: none;
       position: absolute;
@@ -514,32 +541,60 @@
       // Prevent UI updates during kill
       isKilling = true;
 
-      // Update button text to "Killing..."
-      const btn = document.querySelector('button.danger');
-      if (btn) {
-        btn.innerHTML = '<i data-lucide="loader" class="lucide"></i> Killing...';
-        btn.disabled = true;
-        lucide.createIcons();
+      // Replace actions with progress indicator
+      const actionsEl = document.querySelector('.actions');
+      if (actionsEl) {
+        actionsEl.innerHTML =
+          '<div class="kill-progress">' +
+          '<div class="kill-progress-text">Cancelling job...</div>' +
+          '<div class="kill-progress-bar"><div class="kill-progress-fill"></div></div>' +
+          '</div>';
       }
 
       // Pulse the status dot red while killing
       const dot = document.querySelector('.cluster-name .dot');
       if (dot) dot.classList.add('killing');
-      try {
-        const resp = await fetch('/api/stop/' + hpc + '/' + ide, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({cancelJob: true})
-        });
-        if (!resp.ok) {
-          const data = await resp.json();
-          alert('Failed: ' + (data.error || 'Unknown error'));
+
+      // Use SSE for progress (even though it's indeterminate, keeps connection alive)
+      const eventSource = new EventSource('/api/stop/' + hpc + '/' + ide + '/stream');
+
+      eventSource.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[Menu] Kill SSE event:', data);
+
+          if (data.type === 'progress') {
+            const textEl = document.querySelector('.kill-progress-text');
+            if (textEl) textEl.textContent = data.message;
+          }
+
+          if (data.type === 'complete' || data.type === 'error') {
+            eventSource.close();
+            if (data.type === 'error') {
+              alert('Failed: ' + (data.message || 'Unknown error'));
+            }
+            window.top.location.href = '/?menu=1';
+          }
+        } catch(e) {
+          console.error('[Menu] Kill SSE parse error:', e);
         }
-      } catch(e) {
-        console.error('Kill error:', e);
-        alert('Failed to kill job: ' + e.message);
-      }
-      window.top.location.href = '/?menu=1';
+      };
+
+      eventSource.onerror = function() {
+        console.error('[Menu] Kill SSE connection error');
+        eventSource.close();
+        // Fallback to direct navigation
+        window.top.location.href = '/?menu=1';
+      };
+
+      // Fallback timeout - if SSE hangs, redirect after 15s
+      setTimeout(function() {
+        if (isKilling) {
+          console.log('[Menu] Kill timeout, redirecting');
+          eventSource.close();
+          window.top.location.href = '/?menu=1';
+        }
+      }, 15000);
     }
 
     // Live Server Modal functions
