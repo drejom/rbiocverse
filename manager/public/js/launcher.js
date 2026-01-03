@@ -641,38 +641,17 @@ function resetProgress() {
 }
 
 /**
- * Launch session with selected IDE using SSE for real-time progress
+ * Setup SSE event handlers for launch/connect streams
+ * Shared between launch() and connect() to avoid code duplication
+ * @param {EventSource} eventSource - SSE connection
+ * @param {string} hpc - Cluster name
+ * @param {string} ide - IDE type
  */
-async function launch(hpc) {
-  const ide = selectedIde[hpc];
-  console.log('[Launcher] Launch requested:', hpc, ide);
-
+function setupLaunchStreamHandlers(eventSource, hpc, ide) {
   const overlay = document.getElementById('loading-overlay');
   const cancelBtn = document.getElementById('cancel-launch-btn');
   const errorEl = document.getElementById('error');
-
-  errorEl.style.display = 'none';
-  overlay.style.display = 'flex';
-  resetProgress();
-
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Launching ${ideName}...` });
-
-  // Get form values
-  const cpus = document.getElementById(hpc + '-cpus').value;
-  const mem = document.getElementById(hpc + '-mem').value;
-  const time = document.getElementById(hpc + '-time').value;
-
-  // Build SSE URL with query params
-  const params = new URLSearchParams({ cpus, mem, time });
-  const url = `/api/launch/${hpc}/${ide}/stream?${params}`;
-
-  // Create EventSource for SSE
-  const eventSource = new EventSource(url);
-  currentLaunch = { hpc, ide, eventSource };
-  launchCancelled = false;
-  cancelBtn.style.display = 'inline-flex';
-  lucide.createIcons();
 
   eventSource.onmessage = function(event) {
     if (launchCancelled) return;
@@ -749,6 +728,44 @@ async function launch(hpc) {
 }
 
 /**
+ * Launch session with selected IDE using SSE for real-time progress
+ */
+async function launch(hpc) {
+  const ide = selectedIde[hpc];
+  console.log('[Launcher] Launch requested:', hpc, ide);
+
+  const overlay = document.getElementById('loading-overlay');
+  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const errorEl = document.getElementById('error');
+
+  errorEl.style.display = 'none';
+  overlay.style.display = 'flex';
+  resetProgress();
+
+  const ideName = availableIdes[ide]?.name || ide;
+  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Launching ${ideName}...` });
+
+  // Get form values
+  const cpus = document.getElementById(hpc + '-cpus').value;
+  const mem = document.getElementById(hpc + '-mem').value;
+  const time = document.getElementById(hpc + '-time').value;
+
+  // Build SSE URL with query params
+  const params = new URLSearchParams({ cpus, mem, time });
+  const url = `/api/launch/${hpc}/${ide}/stream?${params}`;
+
+  // Create EventSource for SSE
+  const eventSource = new EventSource(url);
+  currentLaunch = { hpc, ide, eventSource };
+  launchCancelled = false;
+  cancelBtn.style.display = 'inline-flex';
+  lucide.createIcons();
+
+  // Use shared SSE handlers
+  setupLaunchStreamHandlers(eventSource, hpc, ide);
+}
+
+/**
  * Cancel an in-progress launch
  */
 async function cancelLaunch() {
@@ -811,39 +828,34 @@ async function cancelLaunch() {
 }
 
 /**
- * Connect to existing session
+ * Connect to existing session using SSE for real-time progress
+ * Uses same streaming endpoint as launch() - detects existing job and establishes tunnel
  */
 async function connect(hpc, ide) {
   console.log('[Launcher] Connect requested:', hpc, ide);
+
   const overlay = document.getElementById('loading-overlay');
   const cancelBtn = document.getElementById('cancel-launch-btn');
+  const errorEl = document.getElementById('error');
+
+  errorEl.style.display = 'none';
   overlay.style.display = 'flex';
-  cancelBtn.style.display = 'none'; // Hide cancel button for connect (quick operation)
+  resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  // Use progress UI for connect
-  resetProgress();
-  updateProgress(50, `Connecting to ${ideName} on ${hpc}...`, 'connecting', { header: 'Connecting...' });
+  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Connecting to ${ideName}...` });
 
-  try {
-    const res = await fetch('/api/launch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, ide })
-    });
+  // Use SSE stream for progress feedback (same endpoint as launch)
+  // Server detects existing job and just establishes tunnel
+  const url = `/api/launch/${hpc}/${ide}/stream`;
+  const eventSource = new EventSource(url);
+  currentLaunch = { hpc, ide, eventSource };
+  launchCancelled = false;
+  cancelBtn.style.display = 'inline-flex';
+  lucide.createIcons();
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Connect failed');
-    }
-
-    const ideConfig = availableIdes[ide];
-    window.location.href = ideConfig?.proxyPath || '/code/';
-  } catch (e) {
-    overlay.style.display = 'none';
-    document.getElementById('error').textContent = e.message;
-    document.getElementById('error').style.display = 'block';
-  }
+  // Use shared SSE handlers
+  setupLaunchStreamHandlers(eventSource, hpc, ide);
 }
 
 /**
