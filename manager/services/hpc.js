@@ -253,7 +253,9 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       throw new Error(`Unknown IDE: ${ide}`);
     }
 
-    const logDir = `/home/${config.hpcUser}/hpc-slurm-logs`;
+    // Logs written to /tmp on compute node - node name available in server logs
+    // To locate logs if needed: ssh <node> cat /tmp/hpc-vscode_<jobid>.log
+    const logDir = '/tmp';
 
     // Build IDE-specific wrap command
     let wrapCmd;
@@ -278,7 +280,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `--time=${time}`,
       `--output=${logDir}/${ideConfig.jobName}_%j.log`,
       `--error=${logDir}/${ideConfig.jobName}_%j.err`,
-      `--wrap='mkdir -p ${logDir} && ${wrapCmd}'`,
+      `--wrap='${wrapCmd}'`,
     ].join(' ');
 
     const output = await this.sshExec(submitCmd);
