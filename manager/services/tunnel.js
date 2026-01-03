@@ -90,6 +90,7 @@ class TunnelService {
       ? [port, ...config.additionalPorts].join(', ')
       : port.toString();
     log.tunnel(`Starting: localhost:{${allPorts}} -> ${node}:{${allPorts}}`, { hpc: hpcName, ide, host: cluster.host });
+    log.debugFor('tunnel', 'spawn args', { portForwards, host: cluster.host });
 
     const tunnel = spawn('ssh', [
       '-o', 'StrictHostKeyChecking=no',

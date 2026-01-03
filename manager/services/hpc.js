@@ -25,6 +25,7 @@ class HpcService {
   sshExec(command) {
     return new Promise((resolve, reject) => {
       log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
+      log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
       exec(
         `ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} "${command}"`,
         { timeout: 30000 },

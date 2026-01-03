@@ -270,14 +270,14 @@ function createApiRouter(stateManager) {
       if (geminiFetchNeeded) {
         promises.push(fetchSingleClusterStatus('gemini'));
       } else {
-        log.debug('Using cached gemini status', { ageMs: geminiCache.age });
+        log.debugFor('cache', 'Using cached gemini status', { ageMs: geminiCache.age });
         promises.push(Promise.resolve(geminiCache.data));
       }
 
       if (apolloFetchNeeded) {
         promises.push(fetchSingleClusterStatus('apollo'));
       } else {
-        log.debug('Using cached apollo status', { ageMs: apolloCache.age });
+        log.debugFor('cache', 'Using cached apollo status', { ageMs: apolloCache.age });
         promises.push(Promise.resolve(apolloCache.data));
       }
 

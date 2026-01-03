@@ -7,6 +7,14 @@ const winston = require('winston');
 
 const { format, transports } = winston;
 
+// Parse DEBUG_COMPONENTS env var into Set
+// Examples: DEBUG_COMPONENTS=vscode,ssh or DEBUG_COMPONENTS=all
+const debugComponentsEnv = process.env.DEBUG_COMPONENTS || '';
+const debugComponents = new Set(
+  debugComponentsEnv.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+);
+const debugAll = debugComponents.has('all');
+
 // Custom format for console output
 const consoleFormat = format.printf(({ level, message, timestamp, ...meta }) => {
   const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
@@ -43,6 +51,11 @@ if (process.env.NODE_ENV === 'production' || process.env.LOG_FILE) {
   }));
 }
 
+// Check if debug is enabled for a component
+function isDebugEnabled(component) {
+  return debugAll || debugComponents.has(component.toLowerCase());
+}
+
 // Convenience methods for structured logging
 const log = {
   // General logging
@@ -50,6 +63,15 @@ const log = {
   info: (msg, meta = {}) => logger.info(msg, meta),
   warn: (msg, meta = {}) => logger.warn(msg, meta),
   error: (msg, meta = {}) => logger.error(msg, meta),
+
+  // Component-specific debug logging
+  // Only logs if DEBUG_COMPONENTS includes this component or 'all'
+  // Components: vscode, rstudio, ssh, cache, ui, state, tunnel
+  debugFor: (component, msg, meta = {}) => {
+    if (logger.isLevelEnabled('debug') && isDebugEnabled(component)) {
+      logger.debug(`[${component}] ${msg}`, meta);
+    }
+  },
 
   // Domain-specific logging
   ssh: (action, meta = {}) => logger.info(`[SSH] ${action}`, meta),
