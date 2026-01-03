@@ -68,6 +68,89 @@ const vscodeDefaults = {
   // Copied to user's extensions dir on first run if not present
   // Use /usr/local/share (not /opt) to avoid conflicts with Apollo's /opt bind mount
   builtinExtensionsDir: '/usr/local/share/vscode-extensions',
+
+  // Keybindings for R development - bootstrapped to user dir on first run
+  // Only written if keybindings.json doesn't exist (preserves user customizations)
+  keybindings: [
+    // Assignment operator <-
+    {
+      key: 'ctrl+shift+,',
+      command: 'editor.action.insertSnippet',
+      when: 'editorTextFocus',
+      args: { snippet: '<-$0' },
+    },
+    {
+      key: 'ctrl+shift+,',
+      command: 'workbench.action.terminal.sendSequence',
+      when: 'terminalFocus',
+      args: { text: '<-' },
+    },
+    // Pipe operator |>
+    {
+      key: 'ctrl+shift+m',
+      command: 'editor.action.insertSnippet',
+      when: 'editorTextFocus',
+      args: { snippet: '|>$0' },
+    },
+    {
+      key: 'ctrl+shift+m',
+      command: 'workbench.action.terminal.sendSequence',
+      when: 'terminalFocus',
+      args: { text: '|>' },
+    },
+    // str() of object at cursor
+    {
+      key: 'ctrl+shift+s',
+      command: 'r.runCommandWithSelectionOrWord',
+      when: 'editorTextFocus',
+      args: 'str($$)',
+    },
+    // head() of object at cursor
+    {
+      key: 'ctrl+shift+h',
+      command: 'r.runCommandWithSelectionOrWord',
+      when: 'editorTextFocus',
+      args: 'head($$)',
+    },
+    // glimpse() of object at cursor
+    {
+      key: 'ctrl+shift+g',
+      command: 'r.runCommandWithSelectionOrWord',
+      when: 'editorTextFocus',
+      args: 'dplyr::glimpse($$)',
+    },
+    // setwd() to currently open file's directory
+    {
+      key: 'ctrl+shift+w',
+      command: 'r.runCommandWithEditorPath',
+      when: 'editorTextFocus',
+      args: "setwd(dirname('$$'))",
+    },
+    // devtools::load_all()
+    {
+      key: 'ctrl+shift+l',
+      command: 'workbench.action.terminal.sendSequence',
+      when: 'editorTextFocus || terminalFocus',
+      args: { text: "devtools::load_all('.')\n" },
+    },
+    // Trim trailing whitespace
+    {
+      key: 'ctrl+shift+t',
+      command: 'editor.action.trimTrailingWhitespace',
+      when: 'editorTextFocus',
+    },
+    // Toggle between terminal and editor
+    {
+      key: 'ctrl+`',
+      command: 'workbench.action.terminal.focus',
+      when: '!terminalFocus',
+    },
+    {
+      key: 'ctrl+`',
+      command: 'workbench.action.focusActiveEditorGroup',
+      when: 'terminalFocus',
+    },
+  ],
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
