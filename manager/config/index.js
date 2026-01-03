@@ -58,7 +58,8 @@ const vscodeDefaults = {
 
   // Pre-installed extensions baked into Singularity image (see github.com/drejom/vscode-rbioc#14)
   // Copied to user's extensions dir on first run if not present
-  builtinExtensionsDir: '/opt/vscode-extensions',
+  // Use /usr/local/share (not /opt) to avoid conflicts with Apollo's /opt bind mount
+  builtinExtensionsDir: '/usr/local/share/vscode-extensions',
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
