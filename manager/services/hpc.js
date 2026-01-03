@@ -151,10 +151,9 @@ class HpcService {
       `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
     ].join(' && ');
 
-    // Build extension install flags (idempotent - skips if already installed)
-    const extensionFlags = vscodeDefaults.extensions
-      .map(ext => `--install-extension ${ext}`)
-      .join(' ');
+    // NOTE: code serve-web does NOT support --install-extension flag
+    // Extensions are recommended via Machine settings (extensions.recommendations)
+    // Users can install via Extensions panel in the UI
 
     // Singularity command
     const singularityCmd = [
@@ -173,7 +172,6 @@ class HpcService {
       `--server-data-dir ${dataDir}`,
       `--extensions-dir ${extensionsDir}`,
       `--user-data-dir ${userDataDir}`,
-      extensionFlags,
     ].join(' ');
 
     return `${setup} && ${singularityCmd}`;
