@@ -42,13 +42,12 @@ let progressElements = null;
 // Step estimate widths (slightly ahead of fill to show uncertainty band)
 // Based on timing analysis: CV ~22-24% for submit/wait steps
 const STEP_ESTIMATES = {
-  connecting: 10,    // 3% fill + buffer
-  submitting: 35,    // 28% fill + buffer
-  submitted: 40,     // 33% fill + buffer
-  waiting: 65,       // 58% fill + buffer
-  starting: 70,      // 63% fill + buffer
-  startingIde: 100,  // 95% fill + buffer
-  establishing: 100, // full
+  connecting: 10,    // 5% fill + buffer
+  submitting: 40,    // 30% fill + buffer
+  submitted: 45,     // 35% fill + buffer
+  waiting: 70,       // 60% fill + buffer
+  starting: 75,      // 65% fill + buffer
+  establishing: 100, // Tunnel + IDE ready (dynamic ~2-5s)
 };
 
 /**
@@ -634,7 +633,7 @@ function updateProgress(progress, message, step, options = {}) {
  * Reset progress UI to initial state
  */
 function resetProgress() {
-  updateProgress(0, 'Connecting...', 'connecting', { header: 'Launching...' });
+  updateProgress(0, 'Connecting...', 'connecting', { header: 'Starting...' });
   const els = getProgressElements();
   els.fill.classList.remove('pending', 'error', 'indeterminate');
   els.estimate.classList.remove('pending');
@@ -743,7 +742,7 @@ async function launch(hpc) {
   resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Launching ${ideName}...` });
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Starting ${ideName}` });
 
   // Get form values
   const cpus = document.getElementById(hpc + '-cpus').value;
@@ -786,7 +785,7 @@ async function cancelLaunch() {
   const cancelBtn = document.getElementById('cancel-launch-btn');
 
   // Show cancelling progress with indeterminate bar
-  updateProgress(0, `Cancelling ${ideName} on ${hpc}...`, 'cancelling', { header: 'Cancelling...' });
+  updateProgress(0, 'Stopping...', 'cancelling', { header: `Stopping ${ideName}` });
   const fill = document.getElementById('progress-fill');
   fill.classList.add('indeterminate');
   cancelBtn.disabled = true;
@@ -843,7 +842,7 @@ async function connect(hpc, ide) {
   resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Reconnecting to ${ideName}...` });
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Connecting to ${ideName}` });
 
   // Use SSE stream for progress feedback (same endpoint as launch)
   // Server detects existing job and just establishes tunnel
