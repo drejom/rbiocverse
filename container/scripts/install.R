@@ -586,32 +586,34 @@ singularity exec \\
   # Phase 3: Summary job (runs after Phase 2)
   phase3_script <- sprintf('#!/bin/bash
 #SBATCH --job-name=rbioc_summary
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=1G
-#SBATCH --time=00:10:00
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=4G
+#SBATCH --time=00:15:00
 #SBATCH --output=%s/install_summary.log
 
 # Phase 3: Generate installation summary
 LOG_DIR="%s"
+LIB_DIR="%s"
+DESCRIPTION="/mnt/rbiocverse/rbiocverse/DESCRIPTION"
 
 echo "=============================================="
 echo "  rbiocverse Installation Summary"
 echo "=============================================="
 echo ""
 echo "Cluster: %s"
-echo "Library: %s"
+echo "Library: $LIB_DIR"
 echo "Generated: $(date)"
 echo ""
 
-# Count successful installs
+# Count successful installs from logs
 SUCCESS=$(grep -h "✔.*pkg" "$LOG_DIR"/install_*.log 2>/dev/null | wc -l)
-echo "Packages processed: $SUCCESS"
+echo "Install operations: $SUCCESS"
 echo ""
 
-# Check for failures
+# Check for failures in logs
 FAILURES=$(grep -h "FAILED:" "$LOG_DIR"/install_*.log 2>/dev/null)
 if [[ -n "$FAILURES" ]]; then
-    echo "=== FAILED PACKAGES ==="
+    echo "=== FAILED PACKAGES (from logs) ==="
     echo "$FAILURES" | sort -u
     echo ""
 fi
@@ -627,12 +629,51 @@ fi
 
 # Verify installed packages
 echo "=== VERIFICATION ==="
-INSTALLED=$(ls -1 "%s" 2>/dev/null | wc -l)
+INSTALLED=$(ls -1 "$LIB_DIR" 2>/dev/null | wc -l)
 echo "Packages in library: $INSTALLED"
 echo ""
 
+# Compare against DESCRIPTION
+if [[ -f "$DESCRIPTION" ]]; then
+    echo "=== DESCRIPTION COMPARISON ==="
+
+    # Extract expected packages from DESCRIPTION (Depends, Imports, Suggests)
+    EXPECTED=$(grep -E "^[[:space:]]+" "$DESCRIPTION" | \\
+        sed "s/,//g" | \\
+        sed "s/([^)]*)//g" | \\
+        tr -s " " "\\n" | \\
+        grep -v "^$" | \\
+        grep -v "^R$" | \\
+        sort -u)
+
+    # Get installed packages
+    INSTALLED_PKGS=$(ls -1 "$LIB_DIR" 2>/dev/null | sort -u)
+
+    # Find missing packages
+    MISSING=""
+    for pkg in $EXPECTED; do
+        if ! echo "$INSTALLED_PKGS" | grep -q "^${pkg}$"; then
+            MISSING="$MISSING $pkg"
+        fi
+    done
+
+    EXPECTED_COUNT=$(echo "$EXPECTED" | wc -w)
+    echo "Expected from DESCRIPTION: $EXPECTED_COUNT packages"
+
+    if [[ -n "$MISSING" ]]; then
+        MISSING_COUNT=$(echo $MISSING | wc -w)
+        echo ""
+        echo "=== MISSING FROM DESCRIPTION ($MISSING_COUNT packages) ==="
+        echo "$MISSING" | tr " " "\\n" | grep -v "^$" | sort
+        echo ""
+    else
+        echo "All DESCRIPTION packages installed!"
+    fi
+fi
+
+echo ""
 echo "Installation complete."
-', output_dir_abs, output_dir_abs, config$name, lib, lib)
+', output_dir_abs, output_dir_abs, lib, config$name)
 
   phase3_path <- file.path(output_dir_abs, "install_phase3_summary.slurm")
   writeLines(phase3_script, phase3_path)

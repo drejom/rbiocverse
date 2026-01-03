@@ -539,9 +539,10 @@ generate_changelog <- function(added, removed, version, changelog_path = "CHANGE
 # =============================================================================
 
 #' Get all available packages from CRAN and Bioconductor
+#' @param bioc_version Bioconductor version to check (default: 3.22)
 #' @return Character vector of available package names
-get_available_packages <- function() {
-  message("Fetching available packages from CRAN and Bioconductor...")
+get_available_packages <- function(bioc_version = "3.22") {
+  message("Fetching available packages from CRAN and Bioconductor ", bioc_version, "...")
 
   # Use filters=NULL to ignore R version constraints
   # This ensures we check package existence, not compatibility with current R
@@ -554,23 +555,26 @@ get_available_packages <- function() {
   })
   message("  CRAN: ", length(cran_pkgs), " packages")
 
-  # Bioconductor repos
+  # Bioconductor repos - use specified version, not "release"
   bioc_repos <- c(
-    "https://bioconductor.org/packages/release/bioc",
-    "https://bioconductor.org/packages/release/data/annotation",
-    "https://bioconductor.org/packages/release/data/experiment"
+    sprintf("https://bioconductor.org/packages/%s/bioc", bioc_version),
+    sprintf("https://bioconductor.org/packages/%s/data/annotation", bioc_version),
+    sprintf("https://bioconductor.org/packages/%s/data/experiment", bioc_version),
+    sprintf("https://bioconductor.org/packages/%s/workflows", bioc_version)
   )
 
   bioc_pkgs <- character(0)
   for (repo in bioc_repos) {
     pkgs <- tryCatch({
-      ap <- available.packages(repos = repo, filters = NULL)
+      # Use filters = list() to disable R version filtering
+      # Bioc 3.22 requires R >= 4.5 but we check existence, not compatibility
+      ap <- available.packages(repos = repo, filters = list())
       rownames(ap)
     }, error = function(e) character(0))
     bioc_pkgs <- c(bioc_pkgs, pkgs)
   }
   bioc_pkgs <- unique(bioc_pkgs)
-  message("  Bioconductor: ", length(bioc_pkgs), " packages")
+  message("  Bioconductor ", bioc_version, ": ", length(bioc_pkgs), " packages")
 
   all_pkgs <- unique(c(cran_pkgs, bioc_pkgs))
   message("  Total available: ", length(all_pkgs), " packages")
@@ -579,45 +583,200 @@ get_available_packages <- function() {
 }
 
 #' Check all packages in DESCRIPTION for availability
+#' Produces a changelog-ready report categorizing packages by status
 #' @param fix If TRUE, remove unavailable packages
+#' @param bioc_version Bioconductor version to check against (target)
+#' @param cluster Cluster name for changelog file (e.g., "gemini", "apollo")
 #' @export
-check_packages <- function(fix = FALSE, path = DESCRIPTION_PATH) {
+check_packages <- function(fix = FALSE, path = DESCRIPTION_PATH, bioc_version = "3.22", cluster = NULL) {
   desc <- read_description(path)
   imports <- parse_imports(desc$Imports)
 
-  message("Checking ", length(imports), " packages...")
+  message("Checking ", length(imports), " packages against CRAN and Bioconductor ", bioc_version, "...")
 
   # Get all available packages (fast batch lookup)
-  available <- get_available_packages()
+  available <- get_available_packages(bioc_version)
 
   # Base packages are always available
   base_pkgs <- rownames(installed.packages(priority = "base"))
   available <- unique(c(available, base_pkgs))
 
-  unavailable <- setdiff(imports, available)
+  # Get packages with Remotes entries - these are handled separately
+  remote_pkgs <- character(0)
+  remote_map <- list()  # pkg_name -> remote_spec
+  if (!is.null(desc$Remotes) && !is.na(desc$Remotes)) {
+    remotes <- strsplit(desc$Remotes, ",\\s*")[[1]]
+    remotes <- trimws(remotes)
+    remotes <- remotes[remotes != ""]
+
+    # Known repo->package name mappings for GitHub packages with non-standard names
+    repo_to_pkg <- c(
+      "azimuth" = "Azimuth",
+      "seurat-data" = "SeuratData",
+      "seurat-disk" = "SeuratDisk",
+      "seurat-wrappers" = "SeuratWrappers"
+    )
+    # Packages provided by seurat-data (datasets)
+    seurat_data_pkgs <- c("pbmc3k.SeuratData", "ifnb.SeuratData", "pbmcsca.SeuratData",
+                          "celegans.embryo.SeuratData", "hcabm40k.SeuratData",
+                          "stxBrain.SeuratData", "thp1.eccite.SeuratData")
+
+    for (remote in remotes) {
+      repo_name <- NULL
+      if (grepl("^url::", remote)) {
+        pkg_name <- sub(".*/([-a-zA-Z0-9.]+)_[0-9].*", "\\1", remote)
+      } else {
+        clean <- sub("@.*$", "", remote)
+        parts <- strsplit(clean, "/")[[1]]
+        repo_name <- parts[2]
+        pkg_name <- if (repo_name %in% names(repo_to_pkg)) {
+          repo_to_pkg[repo_name]
+        } else {
+          repo_name
+        }
+      }
+      remote_pkgs <- c(remote_pkgs, pkg_name)
+      remote_map[[pkg_name]] <- remote
+      # If this is seurat-data, also add all dataset packages it provides
+      if (!is.null(repo_name) && repo_name == "seurat-data") {
+        remote_pkgs <- c(remote_pkgs, seurat_data_pkgs)
+      }
+    }
+    message("  Packages with Remotes entries: ", length(unique(remote_pkgs)))
+  }
+
+  # Categorize unavailable packages
+  unavailable <- setdiff(imports, c(available, unique(remote_pkgs)))
+
+  # Detailed categorization for changelog
+  categories <- list(
+    cran_archived = character(0),
+    bioc_deprecated = character(0),
+    bioc_build_fail = character(0),
+    github_only = character(0),
+    unknown = character(0)
+  )
 
   if (length(unavailable) > 0) {
-    message("\nUnavailable packages:")
+    message("\nAnalyzing ", length(unavailable), " unavailable packages...")
+
     for (pkg in unavailable) {
-      message("  UNAVAILABLE: ", pkg)
+      # Check CRAN archive
+      cran_archive <- tryCatch({
+        url <- sprintf("https://cran.r-project.org/src/contrib/Archive/%s/", pkg)
+        readLines(url, n = 1, warn = FALSE)
+        TRUE
+      }, error = function(e) FALSE)
+
+      # Check Bioconductor page
+      bioc_page <- tryCatch({
+        url <- sprintf("https://bioconductor.org/packages/%s/bioc/html/%s.html", bioc_version, pkg)
+        html <- readLines(url, warn = FALSE)
+        list(
+          exists = TRUE,
+          deprecated = any(grepl("deprecated", html, ignore.case = TRUE)),
+          content = paste(html, collapse = "\n")
+        )
+      }, error = function(e) list(exists = FALSE, deprecated = FALSE, content = ""))
+
+      # Categorize
+      if (bioc_page$exists && bioc_page$deprecated) {
+        categories$bioc_deprecated <- c(categories$bioc_deprecated, pkg)
+      } else if (bioc_page$exists) {
+        # Page exists but not in PACKAGES = build failure
+        categories$bioc_build_fail <- c(categories$bioc_build_fail, pkg)
+      } else if (cran_archive) {
+        categories$cran_archived <- c(categories$cran_archived, pkg)
+      } else {
+        # Check if it might be GitHub-only
+        categories$unknown <- c(categories$unknown, pkg)
+      }
+    }
+  }
+
+  # Print changelog-ready report
+  message("\n", paste(rep("=", 60), collapse = ""))
+  message("PACKAGE AVAILABILITY REPORT - Bioconductor ", bioc_version)
+  message(paste(rep("=", 60), collapse = ""))
+  message("\nTotal packages in DESCRIPTION: ", length(imports))
+  message("Available (CRAN/Bioc): ", sum(imports %in% available))
+  message("Via Remotes: ", length(remote_pkgs))
+  message("Unavailable: ", length(unavailable))
+
+  if (length(categories$cran_archived) > 0) {
+    message("\n## Archived on CRAN (", length(categories$cran_archived), ")")
+    message("   Action: Add URL remotes for archived versions")
+    for (pkg in sort(categories$cran_archived)) {
+      message("   - ", pkg)
+    }
+  }
+
+  if (length(categories$bioc_deprecated) > 0) {
+    message("\n## Deprecated in Bioconductor (", length(categories$bioc_deprecated), ")")
+    message("   Action: Remove from DESCRIPTION")
+    for (pkg in sort(categories$bioc_deprecated)) {
+      message("   - ", pkg)
+    }
+  }
+
+  if (length(categories$bioc_build_fail) > 0) {
+    message("\n## Bioconductor Build Failures (", length(categories$bioc_build_fail), ")")
+    message("   Action: Wait for upstream fix or remove")
+    for (pkg in sort(categories$bioc_build_fail)) {
+      message("   - ", pkg, " (check: https://bioconductor.org/checkResults/", bioc_version, "/bioc-LATEST/", pkg, "/)")
+    }
+  }
+
+  if (length(categories$unknown) > 0) {
+    message("\n## Unknown/GitHub-only (", length(categories$unknown), ")")
+    message("   Action: Add GitHub remote or remove")
+    for (pkg in sort(categories$unknown)) {
+      message("   - ", pkg)
     }
   }
 
   if (length(unavailable) == 0) {
-    message("All packages available!")
-  } else {
-    message("\n", length(unavailable), " unavailable packages")
-    if (fix) {
-      message("Removing unavailable packages from DESCRIPTION...")
-      available_imports <- setdiff(imports, unavailable)
+    message("\n✓ All packages available!")
+  }
+
+  message("\n", paste(rep("=", 60), collapse = ""))
+
+  # Apply fixes if requested
+  if (fix && length(unavailable) > 0) {
+    # Only auto-remove deprecated packages
+    to_remove <- c(categories$bioc_deprecated)
+    if (length(to_remove) > 0) {
+      message("\nRemoving ", length(to_remove), " deprecated packages from DESCRIPTION...")
+      available_imports <- setdiff(imports, to_remove)
       imports_str <- paste("    ", sort(available_imports), collapse = ",\n")
       desc$Imports <- paste0("\n", imports_str)
       write_description(desc, path)
-      message("Removed ", length(unavailable), " packages, ", length(available_imports), " remaining")
+      message("Removed: ", paste(to_remove, collapse = ", "))
+    }
+
+    # Report what still needs manual attention
+    manual_action <- c(categories$cran_archived, categories$bioc_build_fail, categories$unknown)
+    if (length(manual_action) > 0) {
+      message("\nManual action needed for ", length(manual_action), " packages:")
+      message("  - Archived CRAN: add URL remotes")
+      message("  - Build failures: wait or remove")
+      message("  - Unknown: investigate and add remotes or remove")
     }
   }
 
-  invisible(unavailable)
+  # Create cluster-versioned changelog file if cluster specified
+  if (!is.null(cluster) && fix) {
+    changelog_file <- file.path(dirname(path),
+                                sprintf("DESCRIPTION.%s.%s.to", cluster, bioc_version))
+    file.copy(path, changelog_file, overwrite = TRUE)
+    message("\nCreated changelog file: ", changelog_file)
+  }
+
+  invisible(list(
+    unavailable = unavailable,
+    categories = categories,
+    remote_pkgs = remote_pkgs
+  ))
 }
 
 #' Update GitHub remote pins to latest
@@ -943,7 +1102,10 @@ if (!interactive()) {
     message("                     Sync DESCRIPTION with installed packages")
     message("                     --merge (default): only add packages, never remove")
     message("                     --replace: replace with installed packages")
-    message("  check [--apply]    Check package availability, remove unavailable")
+    message("  check [--apply] [--cluster NAME] [--to VERSION]")
+    message("                     Check package availability, remove unavailable")
+    message("                     --cluster: cluster name for changelog (gemini|apollo)")
+    message("                     --to: target Bioconductor version (default: 3.22)")
     message("  validate [--apply] Validate GitHub remotes (refs exist, not on CRAN)")
     message("  remotes [--apply]  Update GitHub remote pins (dry-run by default)")
     message("  suggest            Show installed packages not in DESCRIPTION")
@@ -972,10 +1134,22 @@ if (!interactive()) {
   replace_flag <- "--replace" %in% args
   merge_mode <- !replace_flag  # merge is default
 
+  # Parse --cluster and --to arguments
+  cluster_arg <- NULL
+  to_version <- "3.22"  # default
+  for (i in seq_along(args)) {
+    if (args[i] == "--cluster" && i < length(args)) {
+      cluster_arg <- args[i + 1]
+    }
+    if (args[i] == "--to" && i < length(args)) {
+      to_version <- args[i + 1]
+    }
+  }
+
   if (cmd == "sync") {
     sync_from_environment(dry_run = !apply_flag, merge = merge_mode)
   } else if (cmd == "check") {
-    check_packages(fix = apply_flag)
+    check_packages(fix = apply_flag, bioc_version = to_version, cluster = cluster_arg)
   } else if (cmd == "validate") {
     validate_remotes(fix = apply_flag)
   } else if (cmd == "remotes") {

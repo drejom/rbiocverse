@@ -6,7 +6,8 @@
 # This script:
 # 1. Runs in the specified (--from) Bioc version container
 # 2. Scans the library for installed packages
-# 3. Updates DESCRIPTION with discovered packages (including GitHub remotes with refs)
+# 3. Outputs to DESCRIPTION.{cluster}.{from_version}.from for changelog tracking
+# 4. Merges into main DESCRIPTION (unless --replace)
 #
 # Default behavior (merge mode):
 # - Only ADDS packages to DESCRIPTION, never removes
@@ -17,6 +18,7 @@
 #   ./scripts/sync-packages.sh --from 3.19 [--apply] [--replace]
 #
 # The --apply flag writes changes to DESCRIPTION. Without it, dry-run only.
+# Creates DESCRIPTION.{cluster}.{version}.from for release changelog tracking.
 
 set -euo pipefail
 
@@ -157,12 +159,17 @@ main() {
 
     echo ""
     if [[ -n "$apply_flag" ]]; then
+        # Create cluster-versioned changelog file
+        local changelog_file="$repo_root/rbiocverse/DESCRIPTION.${cluster}.${from_version}.from"
+        cp "$repo_root/rbiocverse/DESCRIPTION" "$changelog_file"
+        echo "Created changelog file: $changelog_file"
+        echo ""
         echo "DESCRIPTION updated from $from_version environment."
         echo ""
         echo "Next steps:"
         echo "  1. Review changes: git diff rbiocverse/DESCRIPTION"
         echo "  2. Check availability for new Bioc:"
-        echo "     Rscript scripts/update-description.R check --apply"
+        echo "     Rscript scripts/update-description.R check --apply --cluster $cluster --to VERSION"
         echo "  3. Update remotes and bump version:"
         echo "     Rscript scripts/update-description.R update --apply"
         echo "  4. Commit and push: git add -A && git commit -m 'Update packages'"
