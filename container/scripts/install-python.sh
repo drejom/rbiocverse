@@ -165,15 +165,13 @@ echo "Container: \$CONTAINER"
 echo "Python Library: \$PYTHON_LIB"
 echo ""
 
-# Install packages using pip (from container's bundled pyproject.toml)
+# Copy rbiocverse to writable /tmp and install from there
 echo "Installing Python packages..."
 singularity exec \\
     --env PYTHONPATH="\$PYTHON_LIB" \\
     -B "$bind_paths" \\
     "\$CONTAINER" \\
-    pip3 install --no-cache-dir --break-system-packages \\
-        --target="\$PYTHON_LIB" \\
-        /usr/local/share/rbiocverse${pip_extras}
+    bash -c "cp -r /usr/local/share/rbiocverse /tmp/ && pip3 install --no-cache-dir --break-system-packages --target=\$PYTHON_LIB /tmp/rbiocverse${pip_extras}"
 
 echo ""
 echo "=== Installation Complete ==="
