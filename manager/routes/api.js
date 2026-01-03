@@ -26,6 +26,10 @@ const tunnelService = new TunnelService();
 // while dramatically reducing SSH load for stable long-running jobs (6-24+ hours)
 const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 1800000; // 30 minutes default
 
+// Timing constants for launch/stop operations
+const IDE_STARTUP_WAIT_MS = 5000;      // Wait for IDE to start after node assignment
+const SLURM_CANCEL_DELAY_MS = 1000;    // Wait for SLURM to process cancellation
+
 // Per-cluster cache to avoid invalidating both clusters on single job change
 const statusCache = createClusterCache(STATUS_CACHE_TTL);
 
@@ -606,7 +610,11 @@ function createApiRouter(stateManager) {
       log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
 
       // Wait for job to get a node (30s timeout for pending handling)
-      const waitResult = await hpcService.waitForNode(session.jobId, ide, 6); // 6 attempts * 5s = 30s
+      // 6 attempts * 5s = 30s, return pending instead of throwing on timeout
+      const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+        maxAttempts: 6,
+        returnPendingOnTimeout: true,
+      });
 
       if (waitResult.pending) {
         // Job still pending after 30s - return to launcher with pending state
@@ -628,10 +636,10 @@ function createApiRouter(stateManager) {
       sendProgress('starting', `Starting on ${session.node}...`, { node: session.node });
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
-      // Step 6: Starting IDE (5s hardcoded wait)
+      // Step 6: Starting IDE
       const ideName = ides[ide]?.name || ide;
       sendProgress('startingIde', `Starting ${ideName}...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, IDE_STARTUP_WAIT_MS));
 
       // Step 7: Establishing connection
       sendProgress('establishing', 'Establishing connection...');
@@ -782,7 +790,7 @@ function createApiRouter(stateManager) {
       invalidateStatusCache(hpc);
       try {
         // Small delay to let SLURM process the cancellation
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
         clusterStatus = await fetchClusterStatus(state);
       } catch (e) {
         log.error('Failed to refresh cluster status after cancel', { error: e.message });
@@ -872,7 +880,7 @@ function createApiRouter(stateManager) {
       // Invalidate cache and fetch fresh status
       if (jobCancelled) {
         invalidateStatusCache(hpc);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
       }
 
       sendComplete({

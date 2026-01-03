@@ -36,6 +36,9 @@ let statusCacheTtl = 120;
 let currentLaunch = null; // { hpc, ide, eventSource }
 let launchCancelled = false;
 
+// Cached DOM elements for progress UI (initialized after DOMContentLoaded)
+let progressElements = null;
+
 // Step estimate widths (slightly ahead of fill to show uncertainty band)
 // Based on timing analysis: CV ~22-24% for submit/wait steps
 const STEP_ESTIMATES = {
@@ -574,44 +577,56 @@ function tickCountdowns() {
 }
 
 /**
+ * Get cached progress UI elements (lazy initialization)
+ */
+function getProgressElements() {
+  if (!progressElements) {
+    progressElements = {
+      header: document.getElementById('progress-header'),
+      step: document.getElementById('progress-step'),
+      fill: document.getElementById('progress-fill'),
+      estimate: document.getElementById('progress-estimate'),
+      error: document.getElementById('progress-error'),
+    };
+  }
+  return progressElements;
+}
+
+/**
  * Update progress UI elements
  */
 function updateProgress(progress, message, step, options = {}) {
-  const header = document.getElementById('progress-header');
-  const stepEl = document.getElementById('progress-step');
-  const fill = document.getElementById('progress-fill');
-  const estimate = document.getElementById('progress-estimate');
-  const errorEl = document.getElementById('progress-error');
+  const els = getProgressElements();
 
   if (options.header) {
-    header.textContent = options.header;
+    els.header.textContent = options.header;
   }
 
-  stepEl.textContent = message;
+  els.step.textContent = message;
 
   // Update fill width
-  fill.style.width = progress + '%';
+  els.fill.style.width = progress + '%';
 
   // Update estimate band (slightly ahead to show uncertainty)
   const estimateWidth = STEP_ESTIMATES[step] || progress + 5;
-  estimate.style.width = Math.min(100, estimateWidth) + '%';
+  els.estimate.style.width = Math.min(100, estimateWidth) + '%';
 
   // Handle special states
   if (options.pending) {
-    fill.classList.add('pending');
-    estimate.classList.add('pending');
+    els.fill.classList.add('pending');
+    els.estimate.classList.add('pending');
   } else {
-    fill.classList.remove('pending');
-    estimate.classList.remove('pending');
+    els.fill.classList.remove('pending');
+    els.estimate.classList.remove('pending');
   }
 
   if (options.error) {
-    fill.classList.add('error');
-    errorEl.textContent = options.error;
-    errorEl.style.display = 'block';
+    els.fill.classList.add('error');
+    els.error.textContent = options.error;
+    els.error.style.display = 'block';
   } else {
-    fill.classList.remove('error');
-    errorEl.style.display = 'none';
+    els.fill.classList.remove('error');
+    els.error.style.display = 'none';
   }
 }
 
@@ -620,10 +635,9 @@ function updateProgress(progress, message, step, options = {}) {
  */
 function resetProgress() {
   updateProgress(0, 'Connecting...', 'connecting', { header: 'Launching...' });
-  const fill = document.getElementById('progress-fill');
-  const estimate = document.getElementById('progress-estimate');
-  fill.classList.remove('pending', 'error', 'indeterminate');
-  estimate.classList.remove('pending');
+  const els = getProgressElements();
+  els.fill.classList.remove('pending', 'error', 'indeterminate');
+  els.estimate.classList.remove('pending');
 }
 
 /**
@@ -802,9 +816,14 @@ async function cancelLaunch() {
 async function connect(hpc, ide) {
   console.log('[Launcher] Connect requested:', hpc, ide);
   const overlay = document.getElementById('loading-overlay');
+  const cancelBtn = document.getElementById('cancel-launch-btn');
   overlay.style.display = 'flex';
+  cancelBtn.style.display = 'none'; // Hide cancel button for connect (quick operation)
+
   const ideName = availableIdes[ide]?.name || ide;
-  document.getElementById('loading-text').textContent = `Connecting to ${ideName} on ${hpc}...`;
+  // Use progress UI for connect
+  resetProgress();
+  updateProgress(50, `Connecting to ${ideName} on ${hpc}...`, 'connecting', { header: 'Connecting...' });
 
   try {
     const res = await fetch('/api/launch', {

@@ -558,6 +558,16 @@
       // Use SSE for progress (even though it's indeterminate, keeps connection alive)
       const eventSource = new EventSource('/api/stop/' + hpc + '/' + ide + '/stream');
 
+      // Fallback timeout - if SSE hangs, redirect after 15s
+      const fallbackTimeout = setTimeout(function() {
+        if (isKilling) {
+          console.log('[Menu] Kill timeout, redirecting');
+          isKilling = false;
+          eventSource.close();
+          window.top.location.href = '/?menu=1';
+        }
+      }, 15000);
+
       eventSource.onmessage = function(event) {
         try {
           const data = JSON.parse(event.data);
@@ -569,6 +579,8 @@
           }
 
           if (data.type === 'complete' || data.type === 'error') {
+            clearTimeout(fallbackTimeout);
+            isKilling = false;
             eventSource.close();
             if (data.type === 'error') {
               alert('Failed: ' + (data.message || 'Unknown error'));
@@ -582,19 +594,12 @@
 
       eventSource.onerror = function() {
         console.error('[Menu] Kill SSE connection error');
+        clearTimeout(fallbackTimeout);
+        isKilling = false;
         eventSource.close();
         // Fallback to direct navigation
         window.top.location.href = '/?menu=1';
       };
-
-      // Fallback timeout - if SSE hangs, redirect after 15s
-      setTimeout(function() {
-        if (isKilling) {
-          console.log('[Menu] Kill timeout, redirecting');
-          eventSource.close();
-          window.top.location.href = '/?menu=1';
-        }
-      }, 15000);
     }
 
     // Live Server Modal functions

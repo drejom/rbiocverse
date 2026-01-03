@@ -306,10 +306,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
    * Wait for job to get node assignment
    * @param {string} jobId - Job ID to monitor
    * @param {string} ide - IDE type ('vscode', 'rstudio')
-   * @param {number} maxAttempts - Maximum polling attempts (default 6 = 30s for SSE, legacy callers use 60)
+   * @param {Object} options - Configuration options
+   * @param {number} options.maxAttempts - Maximum polling attempts (default 60)
+   * @param {boolean} options.returnPendingOnTimeout - Return pending status instead of throwing on timeout (default false)
    * @returns {Promise<{node: string}|{pending: true, jobId: string}>} Node name or pending status
    */
-  async waitForNode(jobId, ide = 'vscode', maxAttempts = 60) {
+  async waitForNode(jobId, ide = 'vscode', options = {}) {
+    const { maxAttempts = 60, returnPendingOnTimeout = false } = options;
     let attempts = 0;
 
     while (attempts < maxAttempts) {
@@ -327,9 +330,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       attempts++;
     }
 
-    // For short timeouts (SSE flow), return pending status instead of throwing
-    // This allows graceful handling of busy clusters
-    if (maxAttempts <= 10) {
+    // Return pending status for graceful handling (SSE flow)
+    if (returnPendingOnTimeout) {
       return { pending: true, jobId };
     }
 
