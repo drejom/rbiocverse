@@ -27,6 +27,9 @@ const config = {
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
   // Additional ports to forward through SSH tunnel (e.g., Live Server: 5500, React: 3000)
   additionalPorts: parseAdditionalPorts(process.env.ADDITIONAL_PORTS),
+  // Session idle timeout in minutes (0 = disabled). Cancels SLURM job after inactivity.
+  // Activity is tracked via proxy data events (HTTP requests, WebSocket messages).
+  sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10),
 };
 
 // VS Code global defaults - written to Machine settings, user settings override
@@ -44,8 +47,8 @@ const vscodeDefaults = {
     'r.workspaceViewer.showObjectSize': true,
     'r.rmarkdown.chunkBackgroundColor': 'rgba(128, 128, 128, 0.3)',
 
-    // Terminal with nerdfont fallback chain
-    'terminal.integrated.fontFamily': "'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
+    // Terminal with nerdfont fallback chain (user has FiraCode Nerd Font locally)
+    'terminal.integrated.fontFamily': "'FiraCode Nerd Font', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
     'terminal.integrated.fontSize': 14,
     'terminal.integrated.suggest.enabled': true,
 
@@ -154,7 +157,8 @@ const vscodeDefaults = {
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
-// Note: No font settings - let RStudio use defaults, browser renders fonts
+// Font settings: browser_fixed_width_fonts tells RStudio which local fonts to try
+// User needs FiraCode Nerd Font installed locally for nerd font glyphs
 const rstudioDefaults = {
   // Workspace behavior (HPC-friendly - no large .RData files)
   save_workspace: 'never',
@@ -170,36 +174,64 @@ const rstudioDefaults = {
   auto_append_newline: true,
   strip_trailing_whitespace: true,
 
-  // Terminal (starship works via ~/.bashrc mount if user has nerdfonts)
-  terminal_shell: 'bash',
+  // Font settings (rendered by browser from local fonts)
+  font_size_points: 14,
+  browser_fixed_width_fonts: [
+    'FiraCode Nerd Font',
+    'JetBrainsMono Nerd Font',
+    'Hack Nerd Font',
+    'Fira Code',
+    'Source Code Pro',
+    'Consolas',
+    'Monaco',
+    'monospace',
+  ],
+
+  // Terminal
+  posix_terminal_shell: 'bash',
   terminal_initial_directory: 'home',
 };
 
-// IDE definitions - extensible for future Jupyter support
-// Icons from Lucide: https://lucide.dev/icons/
+// IDE definitions
+// Icons from devicon.dev
 const ides = {
   vscode: {
     name: 'VS Code',
-    icon: 'devicon-vscode-plain',  // devicon.dev
+    icon: 'devicon-vscode-plain',
     port: 8000,
     jobName: 'hpc-vscode',
     proxyPath: '/code/',
   },
   rstudio: {
     name: 'RStudio',
-    icon: 'devicon-rstudio-plain',  // devicon.dev
+    icon: 'devicon-rstudio-plain',
     port: 8787,
     jobName: 'hpc-rstudio',
     proxyPath: '/rstudio/',
   },
-  // Future: jupyter
-  // jupyter: {
-  //   name: 'Jupyter',
-  //   icon: 'devicon-jupyter-plain',  // devicon.dev
-  //   port: 8888,
-  //   jobName: 'hpc-jupyter',
-  //   proxyPath: '/jupyter/',
-  // },
+  jupyter: {
+    name: 'JupyterLab',
+    icon: 'devicon-jupyter-plain',
+    port: 8888,
+    jobName: 'hpc-jupyter',
+    proxyPath: '/jupyter/',
+  },
+};
+
+// GPU partitions (Gemini only - A100 and V100 available)
+// Apollo has no GPU support
+const gpuConfig = {
+  gemini: {
+    a100: { partition: 'gpu-a100', gres: 'gpu:A100:1', maxTime: '4-00:00:00', mem: '256G' },
+    v100: { partition: 'gpu-v100', gres: 'gpu:V100:1', maxTime: '8-00:00:00', mem: '96G' },
+  },
+  apollo: null,
+};
+
+// Shared Python environment (mirrors R_LIBS_SITE pattern)
+const pythonEnv = {
+  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.19',
+  apollo: '/opt/singularity-images/rbioc/python/bioc-3.19',
 };
 
 const clusters = {
@@ -223,4 +255,4 @@ const clusters = {
   },
 };
 
-module.exports = { config, clusters, ides, vscodeDefaults, rstudioDefaults };
+module.exports = { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults };

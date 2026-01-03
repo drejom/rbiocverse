@@ -12,7 +12,8 @@ const http = require('http');
 const path = require('path');
 const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
-const { config, ides } = require('./config');
+const { config, ides, clusters } = require('./config');
+const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
@@ -36,6 +37,14 @@ app.use((req, res, next) => {
 // Using StateManager for persistence across container restarts
 const stateManager = new StateManager();
 const state = stateManager.state;
+
+// Activity tracking for idle session cleanup
+// Updates lastActivity timestamp on proxy traffic (like JupyterHub's CHP)
+function updateActivity() {
+  if (state.activeSession) {
+    state.activeSession.lastActivity = Date.now();
+  }
+}
 
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
@@ -65,10 +74,12 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
   log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+  updateActivity();
 });
 
 vscodeProxy.on('open', () => {
   log.debugFor('vscode', 'proxy socket opened');
+  updateActivity();
 });
 
 vscodeProxy.on('close', () => {
@@ -109,6 +120,7 @@ rstudioProxy.on('end', (req, res, proxyRes) => {
 // Log when proxy successfully connects to target
 rstudioProxy.on('open', (proxySocket) => {
   log.debugFor('rstudio', 'proxy socket opened');
+  updateActivity();
 });
 
 rstudioProxy.on('close', (res, socket, head) => {
@@ -225,6 +237,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       log.debugFor('rstudio', `redirect rewritten: ${location} -> ${rewritten}`);
     }
   }
+  updateActivity();
 });
 
 // Proxy for Live Server (port 5500) - allows accessing dev server through manager
@@ -241,6 +254,40 @@ liveServerProxy.on('error', (err, req, res) => {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
   }
+});
+
+// Proxy for JupyterLab (port 8888)
+const jupyterProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: `http://127.0.0.1:${ides.jupyter.port}`,
+  changeOrigin: true,
+});
+
+jupyterProxy.on('error', (err, req, res) => {
+  log.proxyError('JupyterLab proxy error', { error: err.message });
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>JupyterLab not available</h1><p><a href="/">Back to launcher</a></p>');
+  }
+});
+
+// Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
+jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
+  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url });
+});
+
+jupyterProxy.on('proxyRes', (proxyRes, req, res) => {
+  log.debugFor('jupyter', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+  updateActivity();
+});
+
+jupyterProxy.on('open', () => {
+  updateActivity();
+  log.debugFor('jupyter', 'proxy socket opened');
+});
+
+jupyterProxy.on('close', () => {
+  log.debugFor('jupyter', 'proxy connection closed');
 });
 
 // Check if any session is running
@@ -344,6 +391,30 @@ app.use('/live', (req, res, next) => {
   liveServerProxy.web(req, res);
 });
 
+// JupyterLab proxy - serves at /jupyter/
+app.use('/jupyter', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+
+  // Main /jupyter/ page gets wrapper with floating menu
+  if (req.path === '/' || req.path === '') {
+    return res.sendFile(path.join(__dirname, 'public', 'jupyter-wrapper.html'));
+  }
+
+  // All other /jupyter/* paths proxy directly
+  jupyterProxy.web(req, res);
+});
+
+// Direct proxy to JupyterLab (used by wrapper iframe)
+app.use('/jupyter-direct', (req, res, next) => {
+  log.debugFor('jupyter', `direct ${req.method} ${req.path}`);
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  jupyterProxy.web(req, res);
+});
+
 // Global error handler - catches HpcError and returns structured JSON
 app.use((err, req, res, next) => {
   if (err instanceof HpcError) {
@@ -372,13 +443,18 @@ stateManager.load().then(() => {
     log.info(`Default HPC: ${config.defaultHpc}`);
   });
 
-  // Handle WebSocket upgrades for VS Code, RStudio, and Live Server
+  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, and Live Server
   server.on('upgrade', (req, socket, head) => {
     log.proxy(`WebSocket upgrade: ${req.url}`);
     if (hasRunningSession()) {
       // Live Server WebSocket (for hot reload)
       if (req.url.startsWith('/live')) {
         liveServerProxy.ws(req, socket, head);
+      }
+      // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
+      else if (req.url.startsWith('/jupyter')) {
+        log.debugFor('jupyter', `WebSocket upgrade: ${req.url}`);
+        jupyterProxy.ws(req, socket, head);
       }
       // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
       else if (req.url.startsWith('/rstudio')) {
@@ -403,6 +479,41 @@ stateManager.load().then(() => {
       socket.destroy();
     }
   });
+
+  // Idle session cleanup (disabled by default, enable with SESSION_IDLE_TIMEOUT env var)
+  // Checks every minute if session has been idle longer than timeout, cancels SLURM job
+  if (config.sessionIdleTimeout > 0) {
+    const timeoutMs = config.sessionIdleTimeout * 60 * 1000;
+    log.info(`Idle session cleanup enabled: ${config.sessionIdleTimeout} minutes`);
+
+    setInterval(async () => {
+      const activeHpc = state.activeHpc;
+      const session = activeHpc ? state.sessions[activeHpc] : null;
+
+      if (!session || session.status !== 'running') return;
+
+      const lastActivity = session.lastActivity || session.connectedAt || Date.now();
+      const idleMs = Date.now() - lastActivity;
+
+      if (idleMs > timeoutMs) {
+        const idleMins = Math.round(idleMs / 60000);
+        log.info(`Session idle for ${idleMins} minutes, cancelling job`, {
+          hpc: activeHpc,
+          jobId: session.jobId,
+          ide: session.ide,
+        });
+
+        try {
+          const hpcService = new HpcService(activeHpc);
+          await hpcService.cancelJob(session.jobId);
+          await stateManager.clearSession(activeHpc);
+          log.info('Idle session cancelled successfully');
+        } catch (err) {
+          log.error('Failed to cancel idle session', { error: err.message });
+        }
+      }
+    }, 60 * 1000); // Check every minute
+  }
 }).catch(err => {
   log.error('Failed to load state', { error: err.message });
   process.exit(1);

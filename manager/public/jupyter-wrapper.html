@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>JupyterLab</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #jupyter-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    /* Dynamic sizing: small when collapsed to avoid blocking clicks on IDE UI */
+    #hpc-menu-frame {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 50px;
+      height: 50px;
+      border: none;
+      z-index: 2147483647;
+      pointer-events: auto;
+      background: transparent;
+      transition: width 0.15s ease-out, height 0.15s ease-out;
+    }
+    #hpc-menu-frame.expanded {
+      width: 260px;
+      height: 400px;
+    }
+    #loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #111;
+      color: #f37626;
+      font-family: system-ui;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div>Loading JupyterLab...</div>
+  </div>
+  <iframe id="jupyter-frame" src="" style="display:none;"></iframe>
+  <iframe id="hpc-menu-frame" src="/hpc-menu-frame"></iframe>
+  <script src="/js/menu-handler.js"></script>
+  <script>
+    // JupyterLab wrapper - load the direct proxy
+    document.addEventListener('DOMContentLoaded', function() {
+      const frame = document.getElementById('jupyter-frame');
+      const loading = document.getElementById('loading');
+
+      // Load JupyterLab via direct proxy
+      frame.src = '/jupyter-direct/';
+
+      frame.onload = function() {
+        loading.style.display = 'none';
+        frame.style.display = 'block';
+      };
+
+      // Fallback: show frame after timeout even if onload doesn't fire
+      setTimeout(function() {
+        if (loading.style.display !== 'none') {
+          loading.style.display = 'none';
+          frame.style.display = 'block';
+        }
+      }, 5000);
+
+      // Initialize shared menu handler
+      initMenuHandler('hpc-menu-frame');
+    });
+  </script>
+</body>
+</html>

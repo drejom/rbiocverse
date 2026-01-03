@@ -106,7 +106,7 @@ describe('HpcService', () => {
       const result = await hpcService.submitJob('4', '40G', '12:00:00');
 
       expect(result.jobId).to.equal('12345');
-      expect(result.password).to.be.null;  // VS Code doesn't need password
+      expect(result).to.not.have.property('password');  // No password in response
       expect(sshExecStub).to.have.been.calledOnce;
     });
 
@@ -205,18 +205,18 @@ describe('HpcService', () => {
       sshExecStub.onFirstCall().resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
       sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
 
-      const node = await hpcService.waitForNode('12345');
+      const result = await hpcService.waitForNode('12345');
 
-      expect(node).to.equal('node01');
+      expect(result).to.deep.equal({ node: 'node01' });
       expect(sshExecStub).to.have.been.calledTwice;
     });
 
     it('should return immediately if job already running', async () => {
       sshExecStub.resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
 
-      const node = await hpcService.waitForNode('12345');
+      const result = await hpcService.waitForNode('12345');
 
-      expect(node).to.equal('node01');
+      expect(result).to.deep.equal({ node: 'node01' });
       expect(sshExecStub).to.have.been.calledOnce;
     });
 
@@ -237,7 +237,8 @@ describe('HpcService', () => {
       sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
 
       try {
-        await hpcService.waitForNode('12345', 'vscode', 2); // Only 2 attempts
+        // Pass options object with maxAttempts: 2
+        await hpcService.waitForNode('12345', 'vscode', { maxAttempts: 2 });
         expect.fail('Should have thrown error');
       } catch (error) {
         expect(error.message).to.include('Timeout waiting for node assignment');
@@ -250,9 +251,22 @@ describe('HpcService', () => {
       sshExecStub.onFirstCall().resolves('12345 RUNNING (null) 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
       sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
 
-      const node = await hpcService.waitForNode('12345');
+      const result = await hpcService.waitForNode('12345');
 
-      expect(node).to.equal('node01');
+      expect(result).to.deep.equal({ node: 'node01' });
+    });
+
+    it('should return pending status when returnPendingOnTimeout is true', async function() {
+      this.timeout(15000);
+
+      sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
+
+      const result = await hpcService.waitForNode('12345', 'vscode', {
+        maxAttempts: 1,
+        returnPendingOnTimeout: true,
+      });
+
+      expect(result).to.deep.equal({ pending: true, jobId: '12345' });
     });
   });
 
@@ -280,6 +294,89 @@ describe('HpcService', () => {
       const exists = await hpcService.checkJobExists('12345');
 
       expect(exists).to.be.false;
+    });
+  });
+
+  describe('getAllJobs', () => {
+    it('should return all job info for multiple IDEs', async () => {
+      sshExecStub.resolves(
+        '12345 hpc-vscode RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00\n' +
+        '12346 hpc-rstudio PENDING (null) INVALID 8:00:00 2 20000M N/A'
+      );
+
+      const jobs = await hpcService.getAllJobs();
+
+      expect(jobs.vscode).to.deep.equal({
+        jobId: '12345',
+        ide: 'vscode',
+        state: 'RUNNING',
+        node: 'node01',
+        timeLeft: '11:30:00',
+        timeLimit: '12:00:00',
+        cpus: '4',
+        memory: '40000M',
+        startTime: '2025-12-29T10:00:00',
+      });
+      expect(jobs.rstudio).to.deep.equal({
+        jobId: '12346',
+        ide: 'rstudio',
+        state: 'PENDING',
+        node: null,
+        timeLeft: null,
+        timeLimit: '8:00:00',
+        cpus: '2',
+        memory: '20000M',
+        startTime: null,
+      });
+    });
+
+    it('should return null for IDEs with no jobs', async () => {
+      sshExecStub.resolves('12345 hpc-vscode RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+
+      const jobs = await hpcService.getAllJobs();
+
+      expect(jobs.vscode).to.not.be.null;
+      expect(jobs.rstudio).to.be.null;
+    });
+
+    it('should return all nulls when no jobs running', async () => {
+      sshExecStub.resolves('');
+
+      const jobs = await hpcService.getAllJobs();
+
+      expect(jobs.vscode).to.be.null;
+      expect(jobs.rstudio).to.be.null;
+    });
+
+    it('should ignore unknown job names', async () => {
+      sshExecStub.resolves('12345 unknown-job RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+
+      const jobs = await hpcService.getAllJobs();
+
+      expect(jobs.vscode).to.be.null;
+      expect(jobs.rstudio).to.be.null;
+    });
+  });
+
+  describe('getJobInfo edge cases', () => {
+    it('should throw error for unknown IDE', async () => {
+      try {
+        await hpcService.getJobInfo('invalid');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Unknown IDE');
+      }
+    });
+  });
+
+  describe('submitJob edge cases', () => {
+    it('should throw error for unknown IDE', async () => {
+      try {
+        await hpcService.submitJob('4', '40G', '12:00:00', 'invalid');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Unknown IDE');
+      }
     });
   });
 });

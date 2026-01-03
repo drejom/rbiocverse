@@ -12,7 +12,7 @@ const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
-const { config, ides } = require('../config');
+const { config, ides, gpuConfig } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
 
@@ -473,10 +473,21 @@ function createApiRouter(stateManager) {
     const cpus = req.query.cpus || config.defaultCpus;
     const mem = req.query.mem || config.defaultMem;
     const time = req.query.time || config.defaultTime;
+    const gpu = req.query.gpu || 'none';
 
     // Validate IDE type
     if (!ides[ide]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
+    }
+
+    // Validate GPU type (Gemini only)
+    if (gpu !== 'none') {
+      if (hpc !== 'gemini') {
+        return res.status(400).json({ error: 'GPU only available on Gemini' });
+      }
+      if (!gpuConfig.gemini || !gpuConfig.gemini[gpu]) {
+        return res.status(400).json({ error: `Invalid GPU type: ${gpu}. Available: a100, v100` });
+      }
     }
 
     // Set up SSE response
@@ -589,10 +600,11 @@ function createApiRouter(stateManager) {
 
       if (!jobInfo) {
         // Step 2: Submitting
-        sendProgress('submitting', 'Submitting job...');
-        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
+        const gpuLabel = gpu !== 'none' ? ` (${gpu.toUpperCase()})` : '';
+        sendProgress('submitting', `Submitting job${gpuLabel}...`);
+        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu });
 
-        const result = await hpcService.submitJob(cpus, mem, time, ide);
+        const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu });
         session.jobId = result.jobId;
 
         // Step 3: Submitted (milestone)

@@ -4,7 +4,7 @@
  */
 
 const { exec } = require('child_process');
-const { config, clusters, ides, vscodeDefaults, rstudioDefaults } = require('../config');
+const { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
 
 class HpcService {
@@ -325,17 +325,76 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
   }
 
   /**
+   * Build sbatch wrap command for JupyterLab
+   * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
+   * @param {Object} options - Options including gpu type
+   * @returns {string} sbatch wrap command
+   */
+  buildJupyterWrap(options = {}) {
+    const { gpu = 'none' } = options;
+    const ideConfig = ides.jupyter;
+    const workdir = '\\$HOME/.jupyter-slurm';
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+
+    const setup = [
+      `mkdir -p ${workdir}`,
+    ].join(' && ');
+
+    // Add --nv flag for GPU passthrough if GPU requested
+    const nvFlag = gpu !== 'none' ? '--nv' : '';
+
+    const singularityCmd = [
+      `${this.cluster.singularityBin} exec ${nvFlag}`.trim(),
+      `--env TERM=xterm-256color`,
+      pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
+      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env JUPYTER_DATA_DIR=${workdir}`,
+      `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
+      `-B ${this.cluster.bindPaths}`,
+      this.cluster.singularityImage,
+      `jupyter lab`,
+      `--ip=0.0.0.0`,
+      `--port=${ideConfig.port}`,
+      `--no-browser`,
+      `--ServerApp.token=''`,
+      `--ServerApp.password=''`,
+      `--ServerApp.root_dir=\\$HOME`,
+      `--ServerApp.base_url=/jupyter-direct`,
+      `--ServerApp.allow_remote_access=True`,
+    ].filter(Boolean).join(' ');
+
+    return `${setup} && ${singularityCmd}`;
+  }
+
+  /**
    * Submit a new SLURM job for an IDE
    * @param {string} cpus - Number of CPUs
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
-   * @param {string} ide - IDE type ('vscode', 'rstudio')
+   * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
+   * @param {Object} options - Additional options
+   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100') - Gemini only
    * @returns {Promise<{jobId: string}>} Job ID
    */
-  async submitJob(cpus, mem, time, ide = 'vscode') {
+  async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
+    const { gpu = 'none' } = options;
     const ideConfig = ides[ide];
     if (!ideConfig) {
       throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    // GPU handling (Gemini only)
+    let partition = this.cluster.partition;
+    let gresArg = '';
+
+    if (gpu !== 'none') {
+      const clusterGpu = gpuConfig[this.clusterName];
+      if (!clusterGpu || !clusterGpu[gpu]) {
+        throw new Error(`GPU type '${gpu}' not available on ${this.clusterName}`);
+      }
+      const gpuOpts = clusterGpu[gpu];
+      partition = gpuOpts.partition;
+      gresArg = `--gres=${gpuOpts.gres}`;
     }
 
     // Logs written to /tmp on compute node - node name available in server logs
@@ -351,6 +410,9 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       case 'rstudio':
         wrapCmd = this.buildRstudioWrap(cpus);
         break;
+      case 'jupyter':
+        wrapCmd = this.buildJupyterWrap({ gpu });
+        break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
     }
@@ -361,12 +423,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       '--nodes=1',
       `--cpus-per-task=${cpus}`,
       `--mem=${mem}`,
-      `--partition=${this.cluster.partition}`,
+      `--partition=${partition}`,
+      gresArg,
       `--time=${time}`,
       `--output=${logDir}/${ideConfig.jobName}_%j.log`,
       `--error=${logDir}/${ideConfig.jobName}_%j.err`,
       `--wrap='${wrapCmd}'`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const output = await this.sshExec(submitCmd);
     const match = output.match(/Submitted batch job (\d+)/);
@@ -375,7 +438,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       throw new Error('Failed to parse job ID from: ' + output);
     }
 
-    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time });
+    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time, gpu });
     return { jobId: match[1] };
   }
 
