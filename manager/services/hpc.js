@@ -80,13 +80,50 @@ class HpcService {
 
   /**
    * Get job information for all IDEs on this cluster
+   * Single SSH call with comma-separated job names, then parse by Name field
    * @returns {Promise<Object>} Map of ide -> job info (or null)
    */
   async getAllJobs() {
+    // Build comma-separated list of job names
+    const jobNames = Object.values(ides).map(ide => ide.jobName).join(',');
+
+    // Single SSH call for all IDEs
+    const output = await this.sshExec(
+      `squeue --user=${config.hpcUser} --name=${jobNames} --states=R,PD -h -O JobID,Name,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null`
+    );
+
+    // Initialize results with null for all IDEs
     const results = {};
     for (const ide of Object.keys(ides)) {
-      results[ide] = await this.getJobInfo(ide);
+      results[ide] = null;
     }
+
+    if (!output) return results;
+
+    // Parse each line and match to IDE by job name
+    const lines = output.trim().split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      const parts = line.split(/\s+/);
+      const [jobId, jobName, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
+      const startTime = startTimeParts.join(' ');
+
+      // Find IDE by job name
+      const ide = Object.keys(ides).find(k => ides[k].jobName === jobName);
+      if (!ide) continue;
+
+      results[ide] = {
+        jobId,
+        ide,
+        state: jobState,
+        node: node === '(null)' ? null : node,
+        timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
+        timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
+        cpus: cpus || null,
+        memory: memory || null,
+        startTime: startTime === 'N/A' ? null : startTime,
+      };
+    }
+
     return results;
   }
 
