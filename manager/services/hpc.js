@@ -115,21 +115,35 @@ class HpcService {
   /**
    * Build sbatch wrap command for RStudio
    * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
-   * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required
+   * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required.
+   * Requires --env USER for user-id cookie when using --cleanenv.
    * @param {number} cpus - Number of CPUs
    * @returns {string} sbatch wrap command
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
-    // Use ${dollar} pattern to inject shell $ into base64-encoded scripts
-    // JS template literals interpret ${...} as substitution, so we use ${dollar}
-    // to inject a literal $ character. The dollar variable is set to '$' below.
+
+    // ESCAPING: Two different contexts require different escaping strategies
     // See docs/ESCAPING.md for full explanation.
+    //
+    // 1. INLINE SHELL COMMANDS (setup array, singularity binds):
+    //    These go through: JS -> SSH double-quotes -> shell on compute node
+    //    Use \\$HOME which becomes \$HOME after JS, then $HOME on compute node
+    //
+    // 2. BASE64-ENCODED SCRIPTS (rsessionScript, config files):
+    //    These are base64-encoded in JS, decoded on compute node, then executed
+    //    Use ${dollar} pattern: JS interprets ${dollar} as '$', base64 preserves it
+    //
+    // WARNING: Do NOT use ${dollar} for inline commands - it produces bare $
+    // which expands on the LOCAL machine (Dokploy container), not the compute node!
+
+    // workdir is used in INLINE commands - needs \\$ escaping for SSH context
+    const workdir = '\\$HOME/.rstudio-slurm/workdir';
+
+    // dollar is used in BASE64-ENCODED scripts only - see warning above
     const dollar = '$';
-    const workdir = `${dollar}HOME/.rstudio-slurm/workdir`;
 
     // Use base64 encoding for ALL config files to avoid escaping issues
-    // See docs/ESCAPING.md for rationale
 
     const dbConf = `provider=sqlite
 directory=/var/lib/rstudio-server
@@ -139,9 +153,22 @@ directory=/var/lib/rstudio-server
     const rserverConf = `rsession-which-r=/usr/local/bin/R
 auth-cookies-force-secure=0
 www-root-path=/rstudio-direct
-session-save-action-default=no
 `;
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
+
+    // rstudio-prefs.json - sensible defaults for HPC environment
+    // Prevents large .RData files from clogging home directories
+    // See: https://github.com/rstudio/rstudio/issues/12028
+    const rstudioPrefs = JSON.stringify({
+      save_workspace: 'never',
+      load_workspace: false,
+      restore_source_documents: false,
+      always_save_history: true,
+      restore_last_project: false,
+      insert_native_pipe_operator: true,
+      rainbow_parentheses: true,
+    });
+    const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
     const rsessionScript = `#!/bin/sh
 exec 2>>${dollar}HOME/.rstudio-slurm/rsession.log
@@ -157,11 +184,15 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
+    // IMPORTANT: Do NOT use quotes around base64 strings!
+    // The sbatch --wrap='...' uses single quotes, so any single quotes inside
+    // would break shell parsing. Base64 is alphanumeric + /+= so no quotes needed.
     const setup = [
       `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `echo '${dbConfBase64}' | base64 -d > ${workdir}/database.conf`,
-      `echo '${rserverConfBase64}' | base64 -d > ${workdir}/rserver.conf`,
-      `echo '${rsessionBase64}' | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`,
+      `echo ${dbConfBase64} | base64 -d > ${workdir}/database.conf`,
+      `echo ${rserverConfBase64} | base64 -d > ${workdir}/rserver.conf`,
+      `echo ${rstudioPrefsBase64} | base64 -d > ${workdir}/rstudio-prefs.json`,
+      `echo ${rsessionBase64} | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`,
     ].join(' && ');
 
     // Build singularity bind paths for RStudio
@@ -170,6 +201,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `${workdir}/tmp:/tmp`,
       `${workdir}/database.conf:/etc/rstudio/database.conf`,
       `${workdir}/rserver.conf:/etc/rstudio/rserver.conf`,
+      `${workdir}/rstudio-prefs.json:/etc/rstudio/rstudio-prefs.json`,
       `${workdir}/rsession.sh:/etc/rstudio/rsession.sh`,
       `${workdir}/var/lib/rstudio-server:/var/lib/rstudio-server`,
       this.cluster.bindPaths,
@@ -188,12 +220,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     const singularityCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      '--env USER=\\$(whoami)',  // Required for auth-none - user-id cookie needs username
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
       '--www-address=0.0.0.0',
       `--www-port=${ideConfig.port}`,
-      `--server-user=$(whoami)`,
+      `--server-user=\\$(whoami)`,
       '--auth-none=1',
       '--www-frame-origin=same',
       '--www-verify-user-agent=0',

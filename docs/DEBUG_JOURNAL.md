@@ -939,3 +939,101 @@ Then reconnect to rebuild tunnel with correct node.
 1. **Body parsers + http-proxy don't mix** - body parsers consume streams
 2. **Overlay iframes need dynamic sizing** - or they block underlying UI
 3. **SSH tunnels can become stale** - node info can change without tunnel update
+
+---
+
+## 2026-01-02 (cont): Post-PR#8 Merge Regression Fixes
+
+### Context
+After PR#8 merge, both VS Code and RStudio had regressions. PR#7 (46f0825) was working reference.
+
+### Issue 1: VS Code Floating Menu Not Draggable/Expandable
+
+**Symptom**: Menu button visible but couldn't drag or expand it.
+
+**Root Cause**: `vscode-wrapper.html` was missing `pointer-events: auto` on the iframe.
+The `rstudio-wrapper.html` had it, but it was never added to the VS Code wrapper.
+
+**Fix**: Added `pointer-events: auto` to `#hpc-menu-frame` CSS in vscode-wrapper.html.
+
+### Issue 2: RStudio Jobs Immediately Fail ("Job disappeared from queue")
+
+**Symptom**: Jobs submitted but exit code 1 within seconds, empty .log/.err files.
+
+**Investigation Path**:
+1. `sacct` showed jobs FAILED with exit code 1:0
+2. Empty log files meant job failed before any output
+3. Traced through escaping patterns in hpc.js
+
+**Root Cause 1**: Workdir escaping regression in PR#8 commit 2c6156d.
+Changed from `'\\$HOME/...'` to `` `${dollar}HOME/...` `` which caused `$HOME` to expand
+on the Dokploy container (`/home/apps`) instead of compute node.
+
+**Fix 1**: Restored `'\\$HOME/...'` pattern for INLINE commands.
+
+**Root Cause 2**: Invalid rserver.conf option.
+`session-save-action-default=no` was added to rserver.conf but this is an rsession.conf
+option, not rserver.conf. RStudio 2024.04 rejected it with "unrecognised option" error.
+
+**Fix 2**: Removed invalid option, added proper `rstudio-prefs.json` instead per
+https://github.com/rstudio/rstudio/issues/12028
+
+**Root Cause 3**: Base64 echo commands used single quotes inside --wrap single quotes.
+`echo '${base64}' | base64 -d` inside `--wrap='...'` created nested single quotes
+that broke shell parsing. Jobs failed before any command executed.
+
+**Fix 3**: Removed quotes from base64 echo: `echo ${base64} | base64 -d`
+Base64 strings are alphanumeric + `/+=` so no quoting needed.
+
+**Root Cause 4**: `$(whoami)` expanding on wrong machine.
+`--server-user=$(whoami)` in the singularity command was missing escape, so it
+expanded on the Dokploy container (returning `apps`) instead of compute node.
+
+**Fix 4**: Changed to `--server-user=\\$(whoami)` using same INLINE escaping pattern.
+
+### Two Escaping Contexts (Critical Lesson)
+
+Updated docs/ESCAPING.md to document both contexts:
+
+**Context 1: INLINE Commands** (setup array, singularity args)
+- Goes through: `ssh host "sbatch --wrap='...'"`
+- SSH double-quotes consume one backslash level
+- Pattern: `'\\$HOME'` or `` `\\$HOME` `` → produces `\$HOME` → SSH sends `$HOME`
+
+**Context 2: BASE64-Encoded Scripts** (rsessionScript, config files)
+- Goes through: base64 encode → decode on compute node
+- No shell escaping needed, backslashes preserved literally
+- Pattern: `const dollar = '$'; ${dollar}HOME` → produces `$HOME`
+
+**WARNING**: Using wrong pattern causes failures:
+- `${dollar}HOME` in INLINE context → expands locally on Dokploy container!
+- `\\$HOME` in BASE64 context → backslash preserved, breaks shell script!
+
+### Empirical Testing Protocol
+
+Always test escaping changes before deploying:
+```bash
+# Test INLINE escaping through SSH
+ssh gemini "sbatch --wrap='echo USER=\$(whoami) > \$HOME/test.txt' ..."
+# Check result: should show compute node user and path
+
+# For BASE64, verify decoded content
+echo ${base64string} | base64 -d
+# Should show clean $ variables without backslashes
+```
+
+### Commits on fix/floating-menu-drag-expand Branch
+
+1. `af37a49` - VSCode pointer-events fix
+2. `13a2eec` - Restore workdir escaping
+3. `671fdf4` - Use rstudio-prefs.json instead of invalid rserver.conf option
+4. `6511a24` - Remove quotes from base64 echo commands
+5. `4b3debe` - Escape $(whoami) + document both escaping contexts
+
+### Key Lesson
+
+**Don't merge messy PRs.** PR#8 consolidated too many changes, introduced regressions
+that required tracing through commit history to find. Each fix should be:
+1. Isolated and testable
+2. Empirically verified before deploy
+3. Documented with the escaping context used

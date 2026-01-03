@@ -102,3 +102,62 @@ const script = `LOG=${dollar}HOME/test`;  // JS string: "LOG=$HOME/test"
 
 ### Also: Use $HOME not ~
 Inside singularity containers, `~` may not expand correctly. Use `$HOME` which is an environment variable that resolves reliably.
+
+---
+
+## Two Escaping Contexts (2026-01-02)
+
+There are TWO different escaping contexts in hpc.js. Using the wrong pattern causes failures!
+
+### Context 1: INLINE Commands (setup array, singularity args)
+
+These go through: `ssh host "sbatch --wrap='...'"`
+
+The SSH double-quotes consume one level of backslash escaping:
+- JS `'\\$HOME'` → string `\$HOME` → SSH sends `$HOME` → compute node expands ✓
+- JS `'\\$(whoami)'` → string `\$(whoami)` → SSH sends `$(whoami)` → compute node expands ✓
+
+**Pattern:** Use `'\\$'` or `` `\\$` `` (both work identically)
+
+```javascript
+// INLINE context - use \\$ escaping
+const workdir = '\\$HOME/.rstudio-slurm/workdir';
+const serverUser = `--server-user=\\$(whoami)`;
+```
+
+Tested 2026-01-02:
+```bash
+ssh gemini "sbatch --wrap='echo USER=\$(whoami) > \$HOME/test.txt' ..."
+# Result: USER=domeally ✓
+```
+
+### Context 2: BASE64-Encoded Scripts (rsessionScript, config files)
+
+These are base64-encoded in JS, decoded on compute node:
+- JS `${dollar}HOME` → string `$HOME` → base64 preserves → decode gives `$HOME` ✓
+
+**Pattern:** Use `const dollar = '$';` then `${dollar}HOME`
+
+```javascript
+// BASE64 context - use ${dollar} pattern
+const dollar = '$';
+const rsessionScript = `#!/bin/sh
+export R_LIBS_USER=${dollar}HOME/R/bioc-3.19
+exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
+`;
+const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
+```
+
+### WARNING: Don't Mix Them Up!
+
+| Context | Wrong | Right |
+|---------|-------|-------|
+| INLINE | `${dollar}HOME` (expands locally!) | `'\\$HOME'` |
+| BASE64 | `'\\$HOME'` (backslash preserved!) | `${dollar}HOME` |
+
+### Quick Reference
+
+| Context | JS Pattern | String Value | After SSH/Decode |
+|---------|-----------|--------------|------------------|
+| INLINE | `'\\$HOME'` | `\$HOME` | `$HOME` |
+| BASE64 | `${dollar}HOME` | `$HOME` | `$HOME` |
