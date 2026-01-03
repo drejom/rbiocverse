@@ -26,7 +26,7 @@ services:
       - ENABLE_STATE_PERSISTENCE=${ENABLE_STATE_PERSISTENCE:-false}
       # Logging level and component debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      # DEBUG_COMPONENTS: comma-separated list (vscode,ssh,cache,tunnel,state,ui,rstudio) or 'all'
+      # DEBUG_COMPONENTS: comma-separated list (vscode,ssh,cache,tunnel,state,ui,rstudio,liveserver) or 'all'
       # Dev: vscode,ssh,cache,tunnel,state,ui (all except rstudio)
       # Prod: empty (all off)
       - DEBUG_COMPONENTS=${DEBUG_COMPONENTS:-}

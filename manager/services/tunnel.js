@@ -101,10 +101,18 @@ class TunnelService {
       `${config.hpcUser}@${cluster.host}`
     ]);
 
-    // Log SSH errors
+    // Log SSH tunnel messages
+    // "Connection refused" on additional ports (Live Server, etc.) is expected when not running
     tunnel.stderr.on('data', (data) => {
       const line = data.toString().trim();
-      if (line) log.ssh(line, { hpc: hpcName, ide });
+      if (!line) return;
+
+      // Expected message when dev server isn't running - use separate component
+      if (line.includes('Connection refused') || line.includes('open failed')) {
+        log.debugFor('liveserver', line, { hpc: hpcName, ide });
+      } else {
+        log.ssh(line, { hpc: hpcName, ide });
+      }
     });
 
     tunnel.on('error', (err) => {

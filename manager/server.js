@@ -235,7 +235,8 @@ const liveServerProxy = httpProxy.createProxyServer({
 });
 
 liveServerProxy.on('error', (err, req, res) => {
-  log.proxyError('Live Server proxy error', { error: err.message });
+  // Expected when Live Server isn't running - use liveserver component
+  log.debugFor('liveserver', 'proxy error', { error: err.message });
   if (res && res.writeHead && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
@@ -336,10 +337,10 @@ app.use('/rstudio-direct', (req, res, next) => {
 // Proxy to Live Server (port 5500) - access at /live/
 app.use('/live', (req, res, next) => {
   if (!hasRunningSession()) {
-    log.proxy('Live Server rejected - no running session');
+    log.debugFor('liveserver', 'rejected - no running session');
     return res.redirect('/');
   }
-  log.proxy(`Live Server: ${req.method} ${req.path}`);
+  log.debugFor('liveserver', `${req.method} ${req.path}`);
   liveServerProxy.web(req, res);
 });
 
