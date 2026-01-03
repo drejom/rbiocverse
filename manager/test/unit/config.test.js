@@ -131,13 +131,13 @@ describe('Configuration', () => {
       expect(config.sessionIdleTimeout).to.equal(120);
     });
 
-    it('should handle non-numeric values as NaN', () => {
+    it('should default to 0 for non-numeric values', () => {
       process.env.SESSION_IDLE_TIMEOUT = 'invalid';
 
       delete require.cache[require.resolve('../../config')];
       const { config } = require('../../config');
 
-      expect(config.sessionIdleTimeout).to.be.NaN;
+      expect(config.sessionIdleTimeout).to.equal(0);
     });
   });
 

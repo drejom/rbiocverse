@@ -337,6 +337,7 @@ describe('HpcService', () => {
 
       expect(jobs.vscode).to.not.be.null;
       expect(jobs.rstudio).to.be.null;
+      expect(jobs.jupyter).to.be.null;
     });
 
     it('should return all nulls when no jobs running', async () => {
@@ -346,6 +347,7 @@ describe('HpcService', () => {
 
       expect(jobs.vscode).to.be.null;
       expect(jobs.rstudio).to.be.null;
+      expect(jobs.jupyter).to.be.null;
     });
 
     it('should ignore unknown job names', async () => {
@@ -355,6 +357,7 @@ describe('HpcService', () => {
 
       expect(jobs.vscode).to.be.null;
       expect(jobs.rstudio).to.be.null;
+      expect(jobs.jupyter).to.be.null;
     });
   });
 

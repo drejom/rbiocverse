@@ -12,7 +12,7 @@ const http = require('http');
 const path = require('path');
 const httpProxy = require('http-proxy');
 const StateManager = require('./lib/state');
-const { config, ides, clusters } = require('./config');
+const { config, ides } = require('./config');
 const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
@@ -41,8 +41,9 @@ const state = stateManager.state;
 // Activity tracking for idle session cleanup
 // Updates lastActivity timestamp on proxy traffic (like JupyterHub's CHP)
 function updateActivity() {
-  if (state.activeSession) {
-    state.activeSession.lastActivity = Date.now();
+  const activeHpc = state.activeHpc;
+  if (activeHpc && state.sessions[activeHpc]) {
+    state.sessions[activeHpc].lastActivity = Date.now();
   }
 }
 
@@ -481,35 +482,38 @@ stateManager.load().then(() => {
   });
 
   // Idle session cleanup (disabled by default, enable with SESSION_IDLE_TIMEOUT env var)
-  // Checks every minute if session has been idle longer than timeout, cancels SLURM job
+  // Checks every minute if any session has been idle longer than timeout, cancels SLURM job
   if (config.sessionIdleTimeout > 0) {
     const timeoutMs = config.sessionIdleTimeout * 60 * 1000;
     log.info(`Idle session cleanup enabled: ${config.sessionIdleTimeout} minutes`);
 
     setInterval(async () => {
-      const activeHpc = state.activeHpc;
-      const session = activeHpc ? state.sessions[activeHpc] : null;
+      for (const hpc of Object.keys(state.sessions)) {
+        const session = state.sessions[hpc];
 
-      if (!session || session.status !== 'running') return;
+        if (!session || session.status !== 'running' || !session.jobId) continue;
 
-      const lastActivity = session.lastActivity || session.connectedAt || Date.now();
-      const idleMs = Date.now() - lastActivity;
+        const lastActivity = session.lastActivity || (session.startedAt ? Date.parse(session.startedAt) : 0);
+        if (!lastActivity) continue;
 
-      if (idleMs > timeoutMs) {
-        const idleMins = Math.round(idleMs / 60000);
-        log.info(`Session idle for ${idleMins} minutes, cancelling job`, {
-          hpc: activeHpc,
-          jobId: session.jobId,
-          ide: session.ide,
-        });
+        const idleMs = Date.now() - lastActivity;
 
-        try {
-          const hpcService = new HpcService(activeHpc);
-          await hpcService.cancelJob(session.jobId);
-          await stateManager.clearSession(activeHpc);
-          log.info('Idle session cancelled successfully');
-        } catch (err) {
-          log.error('Failed to cancel idle session', { error: err.message });
+        if (idleMs > timeoutMs) {
+          const idleMins = Math.round(idleMs / 60000);
+          log.info(`Session on ${hpc} idle for ${idleMins} minutes, cancelling job`, {
+            hpc,
+            jobId: session.jobId,
+            ide: session.ide,
+          });
+
+          try {
+            const hpcService = new HpcService(hpc);
+            await hpcService.cancelJob(session.jobId);
+            await stateManager.clearSession(hpc);
+            log.info(`Idle session on ${hpc} cancelled successfully`);
+          } catch (err) {
+            log.error(`Failed to cancel idle session on ${hpc}`, { error: err.message });
+          }
         }
       }
     }, 60 * 1000); // Check every minute

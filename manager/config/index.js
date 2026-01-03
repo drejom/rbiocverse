@@ -29,7 +29,7 @@ const config = {
   additionalPorts: parseAdditionalPorts(process.env.ADDITIONAL_PORTS),
   // Session idle timeout in minutes (0 = disabled). Cancels SLURM job after inactivity.
   // Activity is tracked via proxy data events (HTTP requests, WebSocket messages).
-  sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10),
+  sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10) || 0,
 };
 
 // VS Code global defaults - written to Machine settings, user settings override

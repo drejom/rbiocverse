@@ -480,13 +480,15 @@ function createApiRouter(stateManager) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
-    // Validate GPU type (Gemini only)
+    // Validate GPU type
     if (gpu !== 'none') {
-      if (hpc !== 'gemini') {
-        return res.status(400).json({ error: 'GPU only available on Gemini' });
+      const clusterGpuConfig = gpuConfig[hpc];
+      if (!clusterGpuConfig) {
+        return res.status(400).json({ error: `GPU support is not available on the ${hpc} cluster` });
       }
-      if (!gpuConfig.gemini || !gpuConfig.gemini[gpu]) {
-        return res.status(400).json({ error: `Invalid GPU type: ${gpu}. Available: a100, v100` });
+      if (!clusterGpuConfig[gpu]) {
+        const availableGpus = Object.keys(clusterGpuConfig).join(', ');
+        return res.status(400).json({ error: `Invalid GPU type: ${gpu}. Available on ${hpc}: ${availableGpus}` });
       }
     }
 
