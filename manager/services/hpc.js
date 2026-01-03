@@ -154,7 +154,8 @@ class HpcService {
       `mkdir -p ${machineSettingsDir} ${extensionsDir}`,
       `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
       // Bootstrap extensions only if builtin dir exists in image (backward compatible)
-      `[ -d ${builtinExtDir} ] && for ext in ${builtinExtDir}/*; do [ -d "${extensionsDir}/\\$(basename \\$ext)" ] || cp -r "\\$ext" ${extensionsDir}/; done || true`,
+      // Note: \\$ escapes through SSH double-quotes, arrives as $VAR on compute node
+      `[ -d ${builtinExtDir} ] && for ext in ${builtinExtDir}/*; do name=\\${ext##*/}; [ -d "${extensionsDir}/\\$name" ] || cp -r "\\$ext" ${extensionsDir}/; done || true`,
     ].join(' && ');
 
     // Singularity command
