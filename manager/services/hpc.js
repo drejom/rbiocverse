@@ -150,12 +150,23 @@ class HpcService {
     // Extension bootstrap: copy from image's builtin dir to user dir if not present
     // Conditional: older images (3.19) don't have builtin extensions - gracefully skip
     // See: https://github.com/drejom/vscode-rbioc/issues/14
+
+    // Bootstrap script - base64 encoded to avoid escaping hell (see docs/ESCAPING.md)
+    const dollar = '$';
+    const bootstrapScript = `#!/bin/sh
+[ -d ${builtinExtDir} ] || exit 0
+for ext in ${builtinExtDir}/*; do
+  name=${dollar}{ext##*/}
+  [ -d "${dollar}HOME/.vscode-slurm/.vscode-server/extensions/${dollar}name" ] || cp -r "${dollar}ext" "${dollar}HOME/.vscode-slurm/.vscode-server/extensions/"
+done
+`;
+    const bootstrapBase64 = Buffer.from(bootstrapScript).toString('base64');
+
     const setup = [
       `mkdir -p ${machineSettingsDir} ${extensionsDir}`,
       `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
-      // Bootstrap extensions only if builtin dir exists in image (backward compatible)
-      // Note: \\$ escapes through SSH double-quotes, arrives as $VAR on compute node
-      `[ -d ${builtinExtDir} ] && for ext in ${builtinExtDir}/*; do name=\\${ext##*/}; [ -d "${extensionsDir}/\\$name" ] || cp -r "\\$ext" ${extensionsDir}/; done || true`,
+      // Run bootstrap script (exits early if builtin dir doesn't exist)
+      `echo ${bootstrapBase64} | base64 -d | sh`,
     ].join(' && ');
 
     // Singularity command
