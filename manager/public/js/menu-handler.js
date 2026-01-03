@@ -7,6 +7,12 @@ function initMenuHandler(menuFrameId) {
   const menuFrame = document.getElementById(menuFrameId || 'hpc-menu-frame');
   if (!menuFrame) return;
 
+  // Track position in JS to avoid getBoundingClientRect() on every drag (causes lag)
+  // Read initial position from computed styles to avoid coupling with CSS
+  const computedStyle = window.getComputedStyle(menuFrame);
+  let posTop = parseFloat(computedStyle.top);
+  let posRight = parseFloat(computedStyle.right);
+
   window.addEventListener('message', function(e) {
     // Security: validate message origin
     if (e.origin !== window.location.origin) return;
@@ -18,15 +24,15 @@ function initMenuHandler(menuFrameId) {
     }
 
     // Handle drag events (uses dx/dy deltas)
+    // Avoid getBoundingClientRect() - it forces reflow and causes lag
     if (e.data.type === 'hpc-menu-drag') {
-      const rect = menuFrame.getBoundingClientRect();
-      let newTop = rect.top + e.data.dy;
-      let newRight = (window.innerWidth - rect.right) - e.data.dx;
+      posTop += e.data.dy;
+      posRight -= e.data.dx;
       // Clamp to viewport bounds
-      newTop = Math.max(0, Math.min(window.innerHeight - 60, newTop));
-      newRight = Math.max(0, Math.min(window.innerWidth - 60, newRight));
-      menuFrame.style.top = newTop + 'px';
-      menuFrame.style.right = newRight + 'px';
+      posTop = Math.max(0, Math.min(window.innerHeight - 60, posTop));
+      posRight = Math.max(0, Math.min(window.innerWidth - 60, posRight));
+      menuFrame.style.top = posTop + 'px';
+      menuFrame.style.right = posRight + 'px';
     }
 
     // Handle expand/collapse for dynamic sizing
