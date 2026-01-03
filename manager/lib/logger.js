@@ -66,9 +66,9 @@ const log = {
 
   // Component-specific debug logging
   // Only logs if DEBUG_COMPONENTS includes this component or 'all'
-  // Components: vscode, rstudio, ssh, cache, proxy, ui, state, tunnel
+  // Components: vscode, rstudio, ssh, cache, ui, state, tunnel
   debugFor: (component, msg, meta = {}) => {
-    if (isDebugEnabled(component)) {
+    if (logger.isLevelEnabled('debug') && isDebugEnabled(component)) {
       logger.debug(`[${component}] ${msg}`, meta);
     }
   },
