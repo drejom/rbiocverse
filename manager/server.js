@@ -525,14 +525,17 @@ stateManager.load().then(() => {
 
         if (!session || session.status !== 'running' || !session.jobId) continue;
 
-        const lastActivity = session.lastActivity || (session.startedAt ? Date.parse(session.startedAt) : 0);
+        // Calculate last activity, handling NaN from invalid date strings
+        const startedAtTs = session.startedAt ? Date.parse(session.startedAt) : 0;
+        const safeStartedAtTs = Number.isNaN(startedAtTs) ? 0 : startedAtTs;
+        const lastActivity = session.lastActivity || safeStartedAtTs;
         if (!lastActivity) continue;
 
         const idleMs = Date.now() - lastActivity;
 
         if (idleMs > timeoutMs) {
-          // Parse hpc from composite key (e.g., 'gemini-vscode' -> 'gemini')
-          const [hpc] = sessionKey.split('-');
+          // Parse hpc and ide from composite key (e.g., 'gemini-vscode' -> ['gemini', 'vscode'])
+          const [hpc, ide] = sessionKey.split('-');
           const idleMins = Math.round(idleMs / 60000);
           log.info(`Session ${sessionKey} idle for ${idleMins} minutes, cancelling job`, {
             sessionKey,
@@ -544,8 +547,21 @@ stateManager.load().then(() => {
           try {
             const hpcService = new HpcService(hpc);
             await hpcService.cancelJob(session.jobId);
-            // Clear the session directly (composite key)
-            state.sessions[sessionKey] = null;
+            // Reset session to idle state (consistent with api.js pattern)
+            state.sessions[sessionKey] = {
+              status: 'idle',
+              ide: ide,
+              jobId: null,
+              node: null,
+              tunnelProcess: null,
+              startedAt: null,
+              cpus: null,
+              memory: null,
+              walltime: null,
+              error: null,
+              lastActivity: null,
+              token: null,
+            };
             if (state.activeSession?.hpc === hpc && state.activeSession?.ide === session.ide) {
               state.activeSession = null;
             }

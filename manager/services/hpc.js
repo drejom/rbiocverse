@@ -355,15 +355,23 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `mkdir -p ${workdir}/runtime`,
     ].join(' && ');
 
-    // Add --nv flag for GPU passthrough if GPU requested
-    const nvFlag = gpu !== 'none' ? '--nv' : '';
+    // GPU passthrough flag (--nv enables NVIDIA GPU access in container)
+    const nvFlag = gpu !== 'none' ? '--nv' : null;
 
-    // Token passed via JUPYTER_TOKEN env var (cleaner than CLI arg)
+    // Token env var for authentication (null if no token = disable auth)
+    const tokenEnv = token ? `--env JUPYTER_TOKEN=${token}` : null;
+    const tokenArg = token ? null : `--ServerApp.token=''`;
+
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
     const singularityCmd = [
-      `${this.cluster.singularityBin} exec ${nvFlag}`.trim(),
+      this.cluster.singularityBin,
+      'exec',
+      nvFlag,
       `--env TERM=xterm-256color`,
-      token ? `--env JUPYTER_TOKEN=${token}` : '',
-      pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
+      tokenEnv,
+      pythonEnvArg,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
@@ -373,8 +381,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `--ip=0.0.0.0`,
       `--port=${ideConfig.port}`,
       `--no-browser`,
-      // If no token provided, disable auth (backwards compat)
-      token ? '' : `--ServerApp.token=''`,
+      tokenArg,
       `--ServerApp.password=''`,
       `--ServerApp.root_dir=\\$HOME`,
       `--ServerApp.base_url=/jupyter-direct`,
@@ -406,7 +413,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 
     // GPU handling (Gemini only)
     let partition = this.cluster.partition;
-    let gresArg = '';
+    let gresArg = null;
 
     if (gpu !== 'none') {
       const clusterGpu = gpuConfig[this.clusterName];
