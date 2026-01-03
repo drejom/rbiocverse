@@ -64,6 +64,7 @@ const vscodeDefaults = {
 };
 
 // RStudio global defaults - written to rstudio-prefs.json
+// Note: No font settings - let RStudio use defaults, browser renders fonts
 const rstudioDefaults = {
   // Workspace behavior (HPC-friendly - no large .RData files)
   save_workspace: 'never',
@@ -79,14 +80,9 @@ const rstudioDefaults = {
   auto_append_newline: true,
   strip_trailing_whitespace: true,
 
-  // Terminal (starship works via ~/.bashrc mount)
+  // Terminal (starship works via ~/.bashrc mount if user has nerdfonts)
   terminal_shell: 'bash',
   terminal_initial_directory: 'home',
-
-  // Font (browser renders - needs local nerdfonts for glyphs)
-  server_editor_font_enabled: true,
-  server_editor_font: 'JetBrains Mono',
-  font_size_points: 12,
 };
 
 // IDE definitions - extensible for future Jupyter support
