@@ -72,6 +72,8 @@ class TunnelService {
         timeout,
       }, (res) => {
         // Any HTTP response means the IDE is ready (even redirects/errors)
+        // Consume response to prevent resource leak
+        res.resume();
         resolve(true);
       });
 

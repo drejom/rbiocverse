@@ -582,6 +582,32 @@ function createApiRouter(stateManager) {
       // Check for existing job for this IDE
       let jobInfo = await hpcService.getJobInfo(ide);
 
+      // Helper to wait for node assignment (avoids duplication)
+      const handleWaitForNode = async () => {
+        const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+          maxAttempts: 6,
+          returnPendingOnTimeout: true,
+        });
+
+        if (waitResult.pending) {
+          session.status = 'pending';
+          await stateManager.save();
+          stateManager.releaseLock(lockName);
+
+          res.write(`data: ${JSON.stringify({
+            type: 'pending-timeout',
+            jobId: session.jobId,
+            message: 'Job queued, check back soon',
+          })}\n\n`);
+          res.end();
+          return false; // Response ended
+        }
+
+        session.node = waitResult.node;
+        sendProgress('starting', `Running on ${session.node}`, { node: session.node });
+        return true; // Success
+      };
+
       if (!jobInfo) {
         // Fresh launch - submit new job
         sendProgress('submitting', 'Requesting resources...');
@@ -597,27 +623,9 @@ function createApiRouter(stateManager) {
         sendProgress('waiting', 'Waiting for resources...');
         log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
 
-        const waitResult = await hpcService.waitForNode(session.jobId, ide, {
-          maxAttempts: 6,
-          returnPendingOnTimeout: true,
-        });
-
-        if (waitResult.pending) {
-          // Job still pending after 30s - return to launcher with pending state
-          session.status = 'pending';
-          await stateManager.save();
-          stateManager.releaseLock(lockName);
-
-          res.write(`data: ${JSON.stringify({
-            type: 'pending-timeout',
-            jobId: session.jobId,
-            message: 'Job queued, check back soon',
-          })}\n\n`);
-          return res.end();
+        if (!(await handleWaitForNode())) {
+          return;
         }
-
-        session.node = waitResult.node;
-        sendProgress('starting', `Running on ${session.node}`, { node: session.node });
       } else {
         // Found existing job - connect to it
         session.jobId = jobInfo.jobId;
@@ -633,26 +641,9 @@ function createApiRouter(stateManager) {
           sendProgress('waiting', 'Waiting for resources...');
           log.job(`Found pending job`, { hpc, ide, jobId: session.jobId });
 
-          const waitResult = await hpcService.waitForNode(session.jobId, ide, {
-            maxAttempts: 6,
-            returnPendingOnTimeout: true,
-          });
-
-          if (waitResult.pending) {
-            session.status = 'pending';
-            await stateManager.save();
-            stateManager.releaseLock(lockName);
-
-            res.write(`data: ${JSON.stringify({
-              type: 'pending-timeout',
-              jobId: session.jobId,
-              message: 'Job queued, check back soon',
-            })}\n\n`);
-            return res.end();
+          if (!(await handleWaitForNode())) {
+            return;
           }
-
-          session.node = waitResult.node;
-          sendProgress('starting', `Running on ${session.node}`, { node: session.node });
         }
       }
       log.job(`Running on node`, { hpc, ide, node: session.node });
