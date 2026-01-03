@@ -134,6 +134,7 @@ main() {
 #SBATCH --job-name=python-install
 #SBATCH --output=slurm_install/python_install_%j.log
 #SBATCH --error=slurm_install/python_install_%j.log
+#SBATCH --chdir=$repo_root
 #SBATCH --time=2:00:00
 #SBATCH --cpus-per-task=20
 #SBATCH --mem=32G
