@@ -76,6 +76,10 @@ class TunnelService {
     const sessionKey = this.getSessionKey(hpcName, ide);
     const port = ideConfig.port;
 
+    // Stop any existing tunnel using this port (same IDE type, any cluster)
+    // This prevents "Address in use" errors when switching between clusters
+    this.stopByIde(ide);
+
     // Build port forwarding arguments
     const portForwards = [`-L`, `${port}:${node}:${port}`];
 
@@ -173,6 +177,21 @@ class TunnelService {
           tunnel.kill();
           this.tunnels.delete(key);
         }
+      }
+    }
+  }
+
+  /**
+   * Stop all tunnels for a specific IDE type (across all clusters)
+   * Used to free the local port before starting a new tunnel
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
+   */
+  stopByIde(ide) {
+    for (const [key, tunnel] of this.tunnels.entries()) {
+      if (key.endsWith(`-${ide}`)) {
+        log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
+        tunnel.kill();
+        this.tunnels.delete(key);
       }
     }
   }
