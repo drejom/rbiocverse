@@ -135,7 +135,7 @@ main() {
 #SBATCH --output=slurm_install/python_install_%j.log
 #SBATCH --error=slurm_install/python_install_%j.log
 #SBATCH --time=2:00:00
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=20
 #SBATCH --mem=32G
 #SBATCH --partition=$(get_slurm_partition "$cluster")
 

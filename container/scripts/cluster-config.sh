@@ -197,7 +197,7 @@ load_singularity() {
 get_slurm_partition() {
     local cluster="$1"
     case "$cluster" in
-        gemini) echo "all" ;;
+        gemini) echo "compute" ;;
         apollo) echo "all" ;;
         *) echo "all" ;;
     esac
