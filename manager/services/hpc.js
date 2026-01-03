@@ -4,8 +4,17 @@
  */
 
 const { exec } = require('child_process');
+const crypto = require('crypto');
 const { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
+
+/**
+ * Generate a secure random token for IDE authentication
+ * @returns {string} 32-character hex token
+ */
+function generateToken() {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 class HpcService {
   constructor(clusterName) {
@@ -131,8 +140,11 @@ class HpcService {
   /**
    * Build sbatch wrap command for VS Code
    * Writes Machine settings and bootstraps extensions before starting server
+   * @param {Object} options - Build options
+   * @param {string} options.token - Connection token for authentication
    */
-  buildVscodeWrap() {
+  buildVscodeWrap(options = {}) {
+    const { token } = options;
     const ideConfig = ides.vscode;
 
     // Paths (using \\$ for SSH escaping)
@@ -194,7 +206,7 @@ fi
       `code serve-web`,
       `--host 0.0.0.0`,
       `--port ${ideConfig.port}`,
-      `--without-connection-token`,
+      token ? `--connection-token=${token}` : '--without-connection-token',
       `--accept-server-license-terms`,
       `--disable-telemetry`,
       `--server-base-path /vscode-direct`,
@@ -327,25 +339,30 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
   /**
    * Build sbatch wrap command for JupyterLab
    * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
-   * @param {Object} options - Options including gpu type
+   * @param {Object} options - Options including gpu type and token
+   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
+   * @param {string} options.token - Authentication token
    * @returns {string} sbatch wrap command
    */
   buildJupyterWrap(options = {}) {
-    const { gpu = 'none' } = options;
+    const { gpu = 'none', token } = options;
     const ideConfig = ides.jupyter;
     const workdir = '\\$HOME/.jupyter-slurm';
     const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
     const setup = [
       `mkdir -p ${workdir}`,
+      `mkdir -p ${workdir}/runtime`,
     ].join(' && ');
 
     // Add --nv flag for GPU passthrough if GPU requested
     const nvFlag = gpu !== 'none' ? '--nv' : '';
 
+    // Token passed via JUPYTER_TOKEN env var (cleaner than CLI arg)
     const singularityCmd = [
       `${this.cluster.singularityBin} exec ${nvFlag}`.trim(),
       `--env TERM=xterm-256color`,
+      token ? `--env JUPYTER_TOKEN=${token}` : '',
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
@@ -356,7 +373,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `--ip=0.0.0.0`,
       `--port=${ideConfig.port}`,
       `--no-browser`,
-      `--ServerApp.token=''`,
+      // If no token provided, disable auth (backwards compat)
+      token ? '' : `--ServerApp.token=''`,
       `--ServerApp.password=''`,
       `--ServerApp.root_dir=\\$HOME`,
       `--ServerApp.base_url=/jupyter-direct`,
@@ -374,7 +392,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
    * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
    * @param {Object} options - Additional options
    * @param {string} options.gpu - GPU type ('none', 'a100', 'v100') - Gemini only
-   * @returns {Promise<{jobId: string}>} Job ID
+   * @returns {Promise<{jobId: string, token: string}>} Job ID and auth token
    */
   async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
     const { gpu = 'none' } = options;
@@ -382,6 +400,9 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     if (!ideConfig) {
       throw new Error(`Unknown IDE: ${ide}`);
     }
+
+    // Generate auth token for VS Code and JupyterLab (RStudio uses auth-none)
+    const token = (ide === 'vscode' || ide === 'jupyter') ? generateToken() : null;
 
     // GPU handling (Gemini only)
     let partition = this.cluster.partition;
@@ -405,13 +426,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     let wrapCmd;
     switch (ide) {
       case 'vscode':
-        wrapCmd = this.buildVscodeWrap();
+        wrapCmd = this.buildVscodeWrap({ token });
         break;
       case 'rstudio':
         wrapCmd = this.buildRstudioWrap(cpus);
         break;
       case 'jupyter':
-        wrapCmd = this.buildJupyterWrap({ gpu });
+        wrapCmd = this.buildJupyterWrap({ gpu, token });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
@@ -438,8 +459,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       throw new Error('Failed to parse job ID from: ' + output);
     }
 
-    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time, gpu });
-    return { jobId: match[1] };
+    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time, gpu, hasToken: !!token });
+    return { jobId: match[1], token };
   }
 
   /**

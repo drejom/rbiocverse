@@ -382,4 +382,63 @@ describe('HpcService', () => {
       }
     });
   });
+
+  describe('Token Generation', () => {
+    it('should generate token for VS Code', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      const result = await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
+
+      expect(result.token).to.be.a('string');
+      expect(result.token).to.have.lengthOf(32);  // 16 bytes = 32 hex chars
+    });
+
+    it('should generate token for JupyterLab', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      const result = await hpcService.submitJob('4', '40G', '12:00:00', 'jupyter');
+
+      expect(result.token).to.be.a('string');
+      expect(result.token).to.have.lengthOf(32);
+    });
+
+    it('should NOT generate token for RStudio', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      const result = await hpcService.submitJob('4', '40G', '12:00:00', 'rstudio');
+
+      expect(result.token).to.be.null;  // RStudio uses auth-none
+    });
+
+    it('should include connection token in VS Code command', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('--connection-token=');
+      expect(sshCommand).to.not.include('--without-connection-token');
+    });
+
+    it('should include token env var in JupyterLab command', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'jupyter');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      expect(sshCommand).to.include('--env JUPYTER_TOKEN=');
+      expect(sshCommand).to.not.include("--ServerApp.token=''");
+    });
+
+    it('should generate unique tokens for each job', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      const result1 = await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
+
+      sshExecStub.resolves('Submitted batch job 12346');
+      const result2 = await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
+
+      expect(result1.token).to.not.equal(result2.token);
+    });
+  });
 });

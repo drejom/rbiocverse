@@ -395,6 +395,7 @@ function createApiRouter(stateManager) {
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         session.jobId = result.jobId;
+        session.token = result.token;  // Auth token for VS Code/Jupyter
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
       } else {
         session.jobId = jobInfo.jobId;
@@ -608,6 +609,7 @@ function createApiRouter(stateManager) {
 
         const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu });
         session.jobId = result.jobId;
+        session.token = result.token;  // Auth token for VS Code/Jupyter
 
         // Step 3: Submitted (milestone)
         sendProgress('submitted', `Job submitted (ID: ${session.jobId})`, { jobId: session.jobId });

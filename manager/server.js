@@ -50,6 +50,15 @@ function updateActivity() {
   }
 }
 
+// Get token for active session's IDE
+// Used by proxies to inject authentication tokens into requests
+function getSessionToken(ide) {
+  const { activeSession } = state;
+  if (!activeSession) return null;
+  const sessionKey = `${activeSession.hpc}-${ide}`;
+  return state.sessions[sessionKey]?.token || null;
+}
+
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
 
@@ -72,8 +81,18 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
+// Inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url });
+
+  // VS Code uses query param ?tkn=TOKEN for authentication
+  // Inject token if we have one and it's not already in the URL
+  const token = getSessionToken('vscode');
+  if (token && !req.url.includes('tkn=')) {
+    const separator = proxyReq.path.includes('?') ? '&' : '?';
+    proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
+    log.debugFor('vscode', 'injected token into request', { path: proxyReq.path });
+  }
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
@@ -276,8 +295,18 @@ jupyterProxy.on('error', (err, req, res) => {
 });
 
 // Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
+// Inject authentication token for JupyterLab
 jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
   log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url });
+
+  // JupyterLab uses query param ?token=TOKEN for authentication
+  // Inject token if we have one and it's not already in the URL
+  const token = getSessionToken('jupyter');
+  if (token && !req.url.includes('token=')) {
+    const separator = proxyReq.path.includes('?') ? '&' : '?';
+    proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
+    log.debugFor('jupyter', 'injected token into request', { path: proxyReq.path });
+  }
 });
 
 jupyterProxy.on('proxyRes', (proxyRes, req, res) => {
