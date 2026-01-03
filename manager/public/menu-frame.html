@@ -392,7 +392,12 @@
       if (isKilling) return;  // Don't update UI during kill
       const content = document.getElementById('content');
       if (!activeSession) {
-        content.innerHTML = '<div style="color:rgba(255,255,255,0.5)">No active session</div>';
+        content.innerHTML =
+          '<div style="color:rgba(255,255,255,0.5);margin-bottom:12px;">No active session</div>' +
+          '<div class="actions">' +
+          '<button onclick="goToMenu()"><i data-lucide="home" class="lucide"></i> Main Menu</button>' +
+          '</div>';
+        lucide.createIcons();
         return;
       }
 
