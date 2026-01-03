@@ -41,9 +41,12 @@ const state = stateManager.state;
 // Activity tracking for idle session cleanup
 // Updates lastActivity timestamp on proxy traffic (like JupyterHub's CHP)
 function updateActivity() {
-  const activeHpc = state.activeHpc;
-  if (activeHpc && state.sessions[activeHpc]) {
-    state.sessions[activeHpc].lastActivity = Date.now();
+  const { activeSession } = state;
+  if (activeSession) {
+    const sessionKey = `${activeSession.hpc}-${activeSession.ide}`;
+    if (state.sessions[sessionKey]) {
+      state.sessions[sessionKey].lastActivity = Date.now();
+    }
   }
 }
 
@@ -488,8 +491,8 @@ stateManager.load().then(() => {
     log.info(`Idle session cleanup enabled: ${config.sessionIdleTimeout} minutes`);
 
     setInterval(async () => {
-      for (const hpc of Object.keys(state.sessions)) {
-        const session = state.sessions[hpc];
+      for (const sessionKey of Object.keys(state.sessions)) {
+        const session = state.sessions[sessionKey];
 
         if (!session || session.status !== 'running' || !session.jobId) continue;
 
@@ -499,8 +502,11 @@ stateManager.load().then(() => {
         const idleMs = Date.now() - lastActivity;
 
         if (idleMs > timeoutMs) {
+          // Parse hpc from composite key (e.g., 'gemini-vscode' -> 'gemini')
+          const [hpc] = sessionKey.split('-');
           const idleMins = Math.round(idleMs / 60000);
-          log.info(`Session on ${hpc} idle for ${idleMins} minutes, cancelling job`, {
+          log.info(`Session ${sessionKey} idle for ${idleMins} minutes, cancelling job`, {
+            sessionKey,
             hpc,
             jobId: session.jobId,
             ide: session.ide,
@@ -509,10 +515,14 @@ stateManager.load().then(() => {
           try {
             const hpcService = new HpcService(hpc);
             await hpcService.cancelJob(session.jobId);
-            await stateManager.clearSession(hpc);
-            log.info(`Idle session on ${hpc} cancelled successfully`);
+            // Clear the session directly (composite key)
+            state.sessions[sessionKey] = null;
+            if (state.activeSession?.hpc === hpc && state.activeSession?.ide === session.ide) {
+              state.activeSession = null;
+            }
+            log.info(`Idle session ${sessionKey} cancelled successfully`);
           } catch (err) {
-            log.error(`Failed to cancel idle session on ${hpc}`, { error: err.message });
+            log.error(`Failed to cancel idle session ${sessionKey}`, { error: err.message });
           }
         }
       }

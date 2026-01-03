@@ -315,12 +315,12 @@ SESSION_IDLE_TIMEOUT=120 npm start
 
 ### State
 
-Activity timestamp stored in session state:
+Activity timestamp stored in session state (keyed by `${hpc}-${ide}`):
 ```javascript
-state.sessions.gemini = {
+state.sessions['gemini-vscode'] = {
   status: 'running',
   jobId: '12345',
   lastActivity: 1704268800000,  // Unix timestamp (ms)
   // ...
-}
+};
 ```
