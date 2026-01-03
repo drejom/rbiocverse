@@ -518,9 +518,9 @@ function createApiRouter(stateManager) {
 
       const session = state.sessions[sessionKey];
 
-      // If already running, just switch to this session (reconnect)
+      // If already running, just switch to this session (reconnect tunnel)
       if (session.status === 'running') {
-        sendProgress('connecting', 'Reconnecting...');
+        sendProgress('connecting', 'Reconnecting tunnel...');
 
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
@@ -583,52 +583,78 @@ function createApiRouter(stateManager) {
       let jobInfo = await hpcService.getJobInfo(ide);
 
       if (!jobInfo) {
-        // Step 2: Submitting
+        // Fresh launch - submit new job
         sendProgress('submitting', 'Requesting resources...');
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
 
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         session.jobId = result.jobId;
 
-        // Step 3: Submitted (milestone)
         sendProgress('submitted', `Job ${session.jobId} submitted`, { jobId: session.jobId });
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
+
+        // Wait for node assignment
+        sendProgress('waiting', 'Waiting for resources...');
+        log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
+
+        const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+          maxAttempts: 6,
+          returnPendingOnTimeout: true,
+        });
+
+        if (waitResult.pending) {
+          // Job still pending after 30s - return to launcher with pending state
+          session.status = 'pending';
+          await stateManager.save();
+          stateManager.releaseLock(lockName);
+
+          res.write(`data: ${JSON.stringify({
+            type: 'pending-timeout',
+            jobId: session.jobId,
+            message: 'Job queued, check back soon',
+          })}\n\n`);
+          return res.end();
+        }
+
+        session.node = waitResult.node;
+        sendProgress('starting', `Running on ${session.node}`, { node: session.node });
       } else {
+        // Found existing job - connect to it
         session.jobId = jobInfo.jobId;
         session.node = jobInfo.node;
-        sendProgress('submitted', `Found job ${session.jobId}`, { jobId: session.jobId });
-        log.job(`Found existing job`, { hpc, ide, jobId: session.jobId });
+
+        if (jobInfo.node) {
+          // Job is running - skip straight to connecting
+          sendProgress('starting', `Connecting to running job on ${session.node}`, { jobId: session.jobId, node: session.node });
+          log.job(`Found running job`, { hpc, ide, jobId: session.jobId, node: session.node });
+        } else {
+          // Job is pending - wait for node
+          sendProgress('submitted', `Found job ${session.jobId}`, { jobId: session.jobId });
+          sendProgress('waiting', 'Waiting for resources...');
+          log.job(`Found pending job`, { hpc, ide, jobId: session.jobId });
+
+          const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+            maxAttempts: 6,
+            returnPendingOnTimeout: true,
+          });
+
+          if (waitResult.pending) {
+            session.status = 'pending';
+            await stateManager.save();
+            stateManager.releaseLock(lockName);
+
+            res.write(`data: ${JSON.stringify({
+              type: 'pending-timeout',
+              jobId: session.jobId,
+              message: 'Job queued, check back soon',
+            })}\n\n`);
+            return res.end();
+          }
+
+          session.node = waitResult.node;
+          sendProgress('starting', `Running on ${session.node}`, { node: session.node });
+        }
       }
-
-      // Step 4: Waiting for node
-      sendProgress('waiting', 'Waiting for resources...');
-      log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
-
-      // Wait for job to get a node (30s timeout for pending handling)
-      // 6 attempts * 5s = 30s, return pending instead of throwing on timeout
-      const waitResult = await hpcService.waitForNode(session.jobId, ide, {
-        maxAttempts: 6,
-        returnPendingOnTimeout: true,
-      });
-
-      if (waitResult.pending) {
-        // Job still pending after 30s - return to launcher with pending state
-        session.status = 'pending';
-        await stateManager.save();
-        stateManager.releaseLock(lockName);
-
-        res.write(`data: ${JSON.stringify({
-          type: 'pending-timeout',
-          jobId: session.jobId,
-          message: 'Job queued, check back soon',
-        })}\n\n`);
-        return res.end();
-      }
-
-      session.node = waitResult.node;
-
-      // Step 5: Running on node (milestone)
-      sendProgress('starting', `Running on ${session.node}`, { node: session.node });
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
       // Step 6: Establishing tunnel and waiting for IDE
