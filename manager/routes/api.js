@@ -605,8 +605,8 @@ function createApiRouter(stateManager) {
         log.job(`Found existing job`, { hpc, ide, jobId: session.jobId });
       }
 
-      // Step 4: Waiting for node
-      sendProgress('waiting', 'Waiting for node...');
+      // Step 4: Waiting for node (include job ID for reconnect visibility)
+      sendProgress('waiting', `Waiting for node... (Job ${session.jobId})`);
       log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
 
       // Wait for job to get a node (30s timeout for pending handling)
