@@ -742,7 +742,7 @@ async function launch(hpc) {
   resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, 'Connecting...', 'connecting', { header: `Starting ${ideName}` });
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Starting ${ideName}...` });
 
   // Get form values
   const cpus = document.getElementById(hpc + '-cpus').value;
@@ -785,7 +785,7 @@ async function cancelLaunch() {
   const cancelBtn = document.getElementById('cancel-launch-btn');
 
   // Show cancelling progress with indeterminate bar
-  updateProgress(0, 'Stopping...', 'cancelling', { header: `Stopping ${ideName}` });
+  updateProgress(0, 'Stopping...', 'cancelling', { header: `Stopping ${ideName}...` });
   const fill = document.getElementById('progress-fill');
   fill.classList.add('indeterminate');
   cancelBtn.disabled = true;
@@ -842,7 +842,7 @@ async function connect(hpc, ide) {
   resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, 'Connecting...', 'connecting', { header: `Connecting to ${ideName}` });
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Connecting to ${ideName}...` });
 
   // Use SSE stream for progress feedback (same endpoint as launch)
   // Server detects existing job and just establishes tunnel
