@@ -150,9 +150,11 @@ echo "Host: \$(hostname)"
 echo "Cluster: $cluster"
 echo ""
 
-# Load singularity
-source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null || true
-module load $module
+# Load singularity (if module specified)
+if [[ -n "$module" ]]; then
+    source /etc/profile.d/modules.sh 2>/dev/null || source /usr/share/Modules/init/bash 2>/dev/null || true
+    module load $module
+fi
 
 # Set up paths
 CONTAINER="$container"

@@ -134,7 +134,8 @@ get_singularity_module() {
             echo "singularity/3.11.5"
             ;;
         apollo)
-            echo "singularity/4.1.3"
+            # Singularity is in PATH on Apollo, no module needed
+            echo ""
             ;;
         *)
             echo "singularity"
