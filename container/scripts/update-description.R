@@ -779,6 +779,211 @@ check_packages <- function(fix = FALSE, path = DESCRIPTION_PATH, bioc_version = 
   ))
 }
 
+#' Generate changelog between Bioconductor versions
+#' Compares .from and .to files to show what changed per cluster
+#' @param from_version Source Bioconductor version (e.g., "3.19")
+#' @param to_version Target Bioconductor version (e.g., "3.22")
+#' @param path Directory containing DESCRIPTION files
+#' @export
+generate_changelog <- function(from_version, to_version, path = dirname(DESCRIPTION_PATH)) {
+  # Find all changelog files
+  from_pattern <- sprintf("DESCRIPTION\\..*\\.%s\\.from$", from_version)
+  to_pattern <- sprintf("DESCRIPTION\\..*\\.%s\\.to$", to_version)
+
+  from_files <- list.files(path, pattern = from_pattern, full.names = TRUE)
+  to_files <- list.files(path, pattern = to_pattern, full.names = TRUE)
+
+  if (length(from_files) == 0) {
+    stop("No .from files found for version ", from_version, call. = FALSE)
+  }
+  if (length(to_files) == 0) {
+    stop("No .to files found for version ", to_version, call. = FALSE)
+  }
+
+  # Extract cluster names
+  extract_cluster <- function(f, version, suffix) {
+    basename(f) |>
+      sub("^DESCRIPTION\\.", "", x = _) |>
+      sub(sprintf("\\.%s\\.%s$", version, suffix), "", x = _)
+  }
+
+  from_clusters <- sapply(from_files, extract_cluster, from_version, "from")
+  to_clusters <- sapply(to_files, extract_cluster, to_version, "to")
+
+  # Read imports from each file
+  read_imports <- function(file) {
+    desc <- read_description(file)
+    sort(parse_imports(desc$Imports))
+  }
+
+  read_remotes_list <- function(file) {
+    desc <- read_description(file)
+    if (is.null(desc$Remotes) || is.na(desc$Remotes)) return(character(0))
+    remotes <- strsplit(desc$Remotes, ",\\s*")[[1]]
+    sort(trimws(remotes[trimws(remotes) != ""]))
+  }
+
+  # Collect data from all clusters
+  from_data <- lapply(setNames(from_files, from_clusters), function(f) {
+    list(imports = read_imports(f), remotes = read_remotes_list(f))
+  })
+
+  to_data <- lapply(setNames(to_files, to_clusters), function(f) {
+    list(imports = read_imports(f), remotes = read_remotes_list(f))
+  })
+
+  # Get final DESCRIPTION
+  final_desc <- file.path(path, "DESCRIPTION")
+  final_imports <- if (file.exists(final_desc)) read_imports(final_desc) else character(0)
+  final_remotes <- if (file.exists(final_desc)) read_remotes_list(final_desc) else character(0)
+
+  # Calculate union of all .from imports (what we started with across clusters)
+  all_from_imports <- unique(unlist(lapply(from_data, `[[`, "imports")))
+  all_from_remotes <- unique(unlist(lapply(from_data, `[[`, "remotes")))
+
+  # Print report
+  message("")
+  message(paste(rep("=", 70), collapse = ""))
+  message(sprintf("CHANGELOG: Bioconductor %s -> %s", from_version, to_version))
+  message(paste(rep("=", 70), collapse = ""))
+  message("")
+
+  # Package counts per cluster
+  message("## Source Environments (", from_version, ")")
+  message("")
+  for (cluster in names(from_data)) {
+    message(sprintf("   %-10s: %d packages, %d remotes",
+                    cluster,
+                    length(from_data[[cluster]]$imports),
+                    length(from_data[[cluster]]$remotes)))
+  }
+  message(sprintf("   %-10s: %d packages (union)", "Combined", length(all_from_imports)))
+  message("")
+
+  # Target counts
+  message("## Target Environment (", to_version, ")")
+  message("")
+  message(sprintf("   Final:      %d packages, %d remotes",
+                  length(final_imports), length(final_remotes)))
+  message("")
+
+  # Packages added (in final but not in any .from)
+  added <- setdiff(final_imports, all_from_imports)
+  if (length(added) > 0) {
+    message("## Packages Added (", length(added), ")")
+    message("")
+    # Show which cluster(s) each came from in .to files
+    for (pkg in sort(added)) {
+      sources <- character(0)
+      for (cluster in names(to_data)) {
+        if (pkg %in% to_data[[cluster]]$imports) {
+          sources <- c(sources, cluster)
+        }
+      }
+      source_str <- if (length(sources) > 0) paste(sources, collapse = ", ") else "manual"
+      message(sprintf("   + %-30s [%s]", pkg, source_str))
+    }
+    message("")
+  }
+
+  # Packages removed (in .from but not in final)
+  removed <- setdiff(all_from_imports, final_imports)
+  if (length(removed) > 0) {
+    message("## Packages Removed (", length(removed), ")")
+    message("")
+    # Show which cluster(s) had the package
+    for (pkg in sort(removed)) {
+      sources <- character(0)
+      for (cluster in names(from_data)) {
+        if (pkg %in% from_data[[cluster]]$imports) {
+          sources <- c(sources, cluster)
+        }
+      }
+      source_str <- paste(sources, collapse = ", ")
+      message(sprintf("   - %-30s [was in: %s]", pkg, source_str))
+    }
+    message("")
+  }
+
+  # Cluster discrepancies (packages only on one cluster in .from)
+  if (length(from_data) > 1) {
+    message("## Cluster Discrepancies in Source (", from_version, ")")
+    message("")
+    clusters <- names(from_data)
+    discrepancies <- list()
+
+    for (i in seq_along(clusters)) {
+      for (j in seq_along(clusters)) {
+        if (i < j) {
+          c1 <- clusters[i]
+          c2 <- clusters[j]
+          only_c1 <- setdiff(from_data[[c1]]$imports, from_data[[c2]]$imports)
+          only_c2 <- setdiff(from_data[[c2]]$imports, from_data[[c1]]$imports)
+
+          if (length(only_c1) > 0 || length(only_c2) > 0) {
+            message(sprintf("   %s vs %s:", c1, c2))
+            if (length(only_c1) > 0) {
+              pkg_list <- paste(head(sort(only_c1), 10), collapse = ", ")
+              if (length(only_c1) > 10) pkg_list <- paste0(pkg_list, ", ...")
+              message(sprintf("     Only in %s (%d): %s", c1, length(only_c1), pkg_list))
+            }
+            if (length(only_c2) > 0) {
+              pkg_list <- paste(head(sort(only_c2), 10), collapse = ", ")
+              if (length(only_c2) > 10) pkg_list <- paste0(pkg_list, ", ...")
+              message(sprintf("     Only in %s (%d): %s", c2, length(only_c2), pkg_list))
+            }
+            message("")
+          }
+        }
+      }
+    }
+  }
+
+  # Remotes added
+  added_remotes <- setdiff(final_remotes, all_from_remotes)
+  if (length(added_remotes) > 0) {
+    message("## Remotes Added (", length(added_remotes), ")")
+    message("")
+    for (r in sort(added_remotes)) {
+      # Shorten URL remotes for display
+      display <- if (grepl("^url::", r)) {
+        sub(".*Archive/", "url::Archive/", r)
+      } else {
+        r
+      }
+      message(sprintf("   + %s", display))
+    }
+    message("")
+  }
+
+  # Remotes removed
+  removed_remotes <- setdiff(all_from_remotes, final_remotes)
+  if (length(removed_remotes) > 0) {
+    message("## Remotes Removed (", length(removed_remotes), ")")
+    message("")
+    for (r in sort(removed_remotes)) {
+      display <- if (grepl("^url::", r)) {
+        sub(".*Archive/", "url::Archive/", r)
+      } else {
+        r
+      }
+      message(sprintf("   - %s", display))
+    }
+    message("")
+  }
+
+  message(paste(rep("=", 70), collapse = ""))
+
+  invisible(list(
+    added = added,
+    removed = removed,
+    added_remotes = added_remotes,
+    removed_remotes = removed_remotes,
+    from_data = from_data,
+    to_data = to_data
+  ))
+}
+
 #' Update GitHub remote pins to latest
 #' @param dry_run If TRUE, just show what would change
 #' @export
@@ -1111,6 +1316,8 @@ if (!interactive()) {
     message("  suggest            Show installed packages not in DESCRIPTION")
     message("  bump [type]        Bump version (patch|minor|major|bioc)")
     message("  update [--apply]   Full update (check + validate + remotes + bump)")
+    message("  changelog --from VERSION --to VERSION")
+    message("                     Generate changelog from .from/.to files")
     message("")
     message("Multi-cluster sync workflow:")
     message("  1. Sync from Cluster A (merge mode, adds packages):")
@@ -1134,12 +1341,16 @@ if (!interactive()) {
   replace_flag <- "--replace" %in% args
   merge_mode <- !replace_flag  # merge is default
 
-  # Parse --cluster and --to arguments
+  # Parse --cluster, --from, and --to arguments
   cluster_arg <- NULL
+  from_version <- NULL
   to_version <- "3.22"  # default
   for (i in seq_along(args)) {
     if (args[i] == "--cluster" && i < length(args)) {
       cluster_arg <- args[i + 1]
+    }
+    if (args[i] == "--from" && i < length(args)) {
+      from_version <- args[i + 1]
     }
     if (args[i] == "--to" && i < length(args)) {
       to_version <- args[i + 1]
@@ -1162,6 +1373,11 @@ if (!interactive()) {
   } else if (cmd == "update") {
     bump_type <- if (length(args) > 1 && !startsWith(args[2], "-")) args[2] else "patch"
     full_update(bump_type = bump_type, dry_run = !apply_flag)
+  } else if (cmd == "changelog") {
+    if (is.null(from_version)) {
+      stop("changelog requires --from VERSION", call. = FALSE)
+    }
+    generate_changelog(from_version = from_version, to_version = to_version)
   } else {
     stop("Unknown command: ", cmd, call. = FALSE)
   }
