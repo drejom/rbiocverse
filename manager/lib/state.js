@@ -118,6 +118,7 @@ class StateManager {
    */
   async save() {
     if (!this.enablePersistence) return;
+    log.debugFor('state', 'saving to disk', { file: this.stateFile });
 
     try {
       const dir = path.dirname(this.stateFile);

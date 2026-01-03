@@ -62,7 +62,7 @@ function createClusterCache(ttl = DEFAULT_CACHE_TTL, clusters = DEFAULT_CLUSTERS
     invalidate(cluster = null) {
       if (cluster && cache[cluster]) {
         cache[cluster].timestamp = 0;
-        log.debug(`Status cache invalidated for ${cluster}`);
+        log.debugFor('cache', `invalidated for ${cluster}`);
       } else if (cluster) {
         log.warn(`Attempted to invalidate cache for unknown cluster: ${cluster}`);
       } else {
@@ -70,7 +70,7 @@ function createClusterCache(ttl = DEFAULT_CACHE_TTL, clusters = DEFAULT_CLUSTERS
         Object.keys(cache).forEach(clusterName => {
           cache[clusterName].timestamp = 0;
         });
-        log.debug('Status cache invalidated for all clusters');
+        log.debugFor('cache', 'invalidated for all clusters');
       }
     },
 

@@ -58,6 +58,23 @@ vscodeProxy.on('error', (err, req, res) => {
   }
 });
 
+// Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
+vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
+  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url });
+});
+
+vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
+  log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+});
+
+vscodeProxy.on('open', () => {
+  log.debugFor('vscode', 'proxy socket opened');
+});
+
+vscodeProxy.on('close', () => {
+  log.debugFor('vscode', 'proxy connection closed');
+});
+
 // Proxy for forwarding to RStudio when tunnel is active
 // proxyTimeout: 5 minutes for long-polling (RStudio uses HTTP long-poll for updates)
 // timeout: 5 minutes for connection timeout
@@ -80,28 +97,28 @@ rstudioProxy.on('error', (err, req, res) => {
   }
 });
 
-// Log all proxy events for debugging
+// Log all proxy events for debugging (enable with DEBUG_COMPONENTS=rstudio)
 rstudioProxy.on('start', (req, res, target) => {
-  log.debug('RStudio proxy start', { url: req.url, target: target.href });
+  log.debugFor('rstudio', 'proxy start', { url: req.url, target: target.href });
 });
 
 rstudioProxy.on('end', (req, res, proxyRes) => {
-  log.debug('RStudio proxy end', { url: req.url, status: proxyRes?.statusCode });
+  log.debugFor('rstudio', 'proxy end', { url: req.url, status: proxyRes?.statusCode });
 });
 
 // Log when proxy successfully connects to target
 rstudioProxy.on('open', (proxySocket) => {
-  log.debug('RStudio proxy socket opened');
+  log.debugFor('rstudio', 'proxy socket opened');
 });
 
 rstudioProxy.on('close', (res, socket, head) => {
-  log.debug('RStudio proxy connection closed');
+  log.debugFor('rstudio', 'proxy connection closed');
 });
 
 // Log proxy requests for debugging
 rstudioProxy.on('proxyReq', (proxyReq, req, res) => {
   proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
-  log.debug(`RStudio proxyReq`, {
+  log.debugFor('rstudio', 'proxyReq', {
     method: req.method,
     url: req.url,
     cookies: req.headers.cookie || 'none',
@@ -121,7 +138,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
 
   // Debug: log ALL responses to diagnose proxy issues
   const isRpc = req.url.includes('/rpc/');
-  log.debug(`RStudio proxyRes`, {
+  log.debugFor('rstudio', 'proxyRes', {
     status,
     url: req.url,
     location: location || 'none',
@@ -135,11 +152,11 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
     proxyRes.on('data', (chunk) => {
       dataSize += chunk.length;
       if (dataSize <= chunk.length) { // First chunk
-        log.debug(`RStudio RPC data start`, { url: req.url, firstChunkSize: chunk.length });
+        log.debugFor('rstudio', 'RPC data start', { url: req.url, firstChunkSize: chunk.length });
       }
     });
     proxyRes.on('end', () => {
-      log.debug(`RStudio RPC data end`, { url: req.url, totalSize: dataSize });
+      log.debugFor('rstudio', 'RPC data end', { url: req.url, totalSize: dataSize });
     });
     proxyRes.on('error', (err) => {
       log.error(`RStudio RPC stream error`, { url: req.url, error: err.message });
@@ -175,7 +192,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       modified = modified + '; SameSite=None';
 
       if (modified !== cookie) {
-        log.debug(`Cookie rewritten: ${cookie} -> ${modified}`);
+        log.debugFor('rstudio', `Cookie rewritten: ${cookie} -> ${modified}`);
       }
       return modified;
     });
@@ -205,7 +222,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
 
     if (rewritten !== location) {
       proxyRes.headers['location'] = rewritten;
-      log.debug(`RStudio redirect rewritten: ${location} -> ${rewritten}`);
+      log.debugFor('rstudio', `redirect rewritten: ${location} -> ${rewritten}`);
     }
   }
 });
@@ -236,6 +253,7 @@ app.get('/', (req, res) => {
   if (req.query.menu) {
     log.ui('Main menu opened via ?menu=1');
   }
+  log.debugFor('ui', 'root request', { menu: req.query.menu, hasSession: hasRunningSession() });
   if (!req.query.menu && hasRunningSession()) {
     // Redirect to the active IDE's proxy path
     const activeIde = state.activeSession?.ide || 'vscode';
@@ -304,12 +322,12 @@ app.use('/rstudio', (req, res, next) => {
 // Direct proxy to RStudio (used by wrapper iframe)
 // Proxy auth handles authentication via X-RStudio-Username header
 app.use('/rstudio-direct', (req, res, next) => {
-  log.debug(`[RStudio-Direct] ${req.method} ${req.path}`, {
+  log.debugFor('rstudio', `direct ${req.method} ${req.path}`, {
     hasSession: hasRunningSession(),
     cookies: req.headers.cookie || 'none',
   });
   if (!hasRunningSession()) {
-    log.debug('[RStudio-Direct] No session, redirecting to /');
+    log.debugFor('rstudio', 'No session, redirecting to /');
     return res.redirect('/');
   }
   rstudioProxy.web(req, res);
@@ -363,7 +381,7 @@ stateManager.load().then(() => {
       }
       // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
       else if (req.url.startsWith('/rstudio')) {
-        log.debug(`[WebSocket] RStudio upgrade: ${req.url}`);
+        log.debugFor('rstudio', `WebSocket upgrade: ${req.url}`);
         rstudioProxy.ws(req, socket, head);
       }
       // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
