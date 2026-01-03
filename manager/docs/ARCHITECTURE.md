@@ -202,6 +202,15 @@ validateHpcName('invalid'); // Throws
 | `STATUS_CACHE_TTL` | `120000` | Cluster status cache TTL (ms) |
 | `LOG_LEVEL` | `info` | Winston log level |
 
+### IDE Global Defaults (`config/index.js`)
+
+VS Code and RStudio global settings are defined in `vscodeDefaults` and `rstudioDefaults`:
+
+- **VS Code**: Machine settings (radian terminal, nerdfont fallback, R httpgd) + extension pre-install
+- **RStudio**: rstudio-prefs.json (JetBrains Mono font, bash terminal, HPC-friendly workspace)
+
+User settings override Machine settings. See `config/index.js` for full settings.
+
 ### Cluster Configuration (`config/index.js`)
 
 ```javascript

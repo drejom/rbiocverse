@@ -29,6 +29,66 @@ const config = {
   additionalPorts: parseAdditionalPorts(process.env.ADDITIONAL_PORTS),
 };
 
+// VS Code global defaults - written to Machine settings, user settings override
+const vscodeDefaults = {
+  // Machine settings (lowest priority - user/workspace settings override)
+  settings: {
+    // R + radian terminal
+    'r.rterm.linux': '/usr/local/bin/radian',
+    'r.bracketedPaste': true,
+    'r.plot.useHttpgd': true,
+    'r.session.levelOfObjectDetail': 'Detailed',
+
+    // Terminal with nerdfont fallback chain
+    'terminal.integrated.fontFamily': "'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'DejaVu Sans Mono', monospace",
+    'terminal.integrated.fontSize': 14,
+    'terminal.integrated.suggest.enabled': true,
+
+    // Editor fonts
+    'editor.fontFamily': "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace",
+    'editor.fontLigatures': true,
+    'editor.fontSize': 14,
+
+    // General HPC-friendly settings
+    'files.autoSave': 'afterDelay',
+    'files.autoSaveDelay': 1000,
+    'python.defaultInterpreterPath': '/usr/local/bin/python3',
+  },
+
+  // Extensions to pre-install (idempotent - skips if already installed)
+  extensions: [
+    'reditorsupport.r',
+    'rdebugger.r-debugger',
+    'ms-python.python',
+  ],
+};
+
+// RStudio global defaults - written to rstudio-prefs.json
+const rstudioDefaults = {
+  // Workspace behavior (HPC-friendly - no large .RData files)
+  save_workspace: 'never',
+  load_workspace: false,
+  restore_source_documents: false,
+  always_save_history: true,
+  restore_last_project: false,
+
+  // Editor preferences
+  insert_native_pipe_operator: true,
+  rainbow_parentheses: true,
+  highlight_r_function_calls: true,
+  auto_append_newline: true,
+  strip_trailing_whitespace: true,
+
+  // Terminal (starship works via ~/.bashrc mount)
+  terminal_shell: 'bash',
+  terminal_initial_directory: 'home',
+
+  // Font (browser renders - needs local nerdfonts for glyphs)
+  server_editor_font_enabled: true,
+  server_editor_font: 'JetBrains Mono',
+  font_size_points: 12,
+};
+
 // IDE definitions - extensible for future Jupyter support
 // Icons from Lucide: https://lucide.dev/icons/
 const ides = {
@@ -77,4 +137,4 @@ const clusters = {
   },
 };
 
-module.exports = { config, clusters, ides };
+module.exports = { config, clusters, ides, vscodeDefaults, rstudioDefaults };

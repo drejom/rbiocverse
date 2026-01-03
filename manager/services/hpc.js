@@ -4,7 +4,7 @@
  */
 
 const { exec } = require('child_process');
-const { config, clusters, ides } = require('../config');
+const { config, clusters, ides, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
 
 class HpcService {
@@ -92,24 +92,53 @@ class HpcService {
 
   /**
    * Build sbatch wrap command for VS Code
+   * Writes Machine settings and pre-installs extensions before starting server
    */
   buildVscodeWrap() {
     const ideConfig = ides.vscode;
-    return `${this.cluster.singularityBin} exec ` +
-      `--env TERM=xterm-256color ` +
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite} ` +
-      `-B ${this.cluster.bindPaths} ` +
-      `${this.cluster.singularityImage} ` +
-      `code serve-web ` +
-      `--host 0.0.0.0 ` +
-      `--port ${ideConfig.port} ` +
-      `--without-connection-token ` +
-      `--accept-server-license-terms ` +
-      `--disable-telemetry ` +
-      `--server-base-path /vscode-direct ` +
-      `--server-data-dir ~/.vscode-slurm/.vscode-server ` +
-      `--extensions-dir ~/.vscode-slurm/.vscode-server/extensions ` +
-      `--user-data-dir ~/.vscode-slurm/user-data`;
+
+    // Paths (using \\$ for SSH escaping)
+    const dataDir = '\\$HOME/.vscode-slurm/.vscode-server';
+    const machineSettingsDir = `${dataDir}/data/Machine`;
+    const extensionsDir = `${dataDir}/extensions`;
+    const userDataDir = '\\$HOME/.vscode-slurm/user-data';
+
+    // Machine settings JSON (base64 encoded to avoid escaping issues)
+    const machineSettings = JSON.stringify(vscodeDefaults.settings, null, 2);
+    const machineSettingsBase64 = Buffer.from(machineSettings).toString('base64');
+
+    // Setup: create dirs and write Machine settings
+    const setup = [
+      `mkdir -p ${machineSettingsDir}`,
+      `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
+    ].join(' && ');
+
+    // Build extension install flags (idempotent - skips if already installed)
+    const extensionFlags = vscodeDefaults.extensions
+      .map(ext => `--install-extension ${ext}`)
+      .join(' ');
+
+    // Singularity command
+    const singularityCmd = [
+      `${this.cluster.singularityBin} exec`,
+      `--env TERM=xterm-256color`,
+      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `-B ${this.cluster.bindPaths}`,
+      this.cluster.singularityImage,
+      `code serve-web`,
+      `--host 0.0.0.0`,
+      `--port ${ideConfig.port}`,
+      `--without-connection-token`,
+      `--accept-server-license-terms`,
+      `--disable-telemetry`,
+      `--server-base-path /vscode-direct`,
+      `--server-data-dir ${dataDir}`,
+      `--extensions-dir ${extensionsDir}`,
+      `--user-data-dir ${userDataDir}`,
+      extensionFlags,
+    ].join(' ');
+
+    return `${setup} && ${singularityCmd}`;
   }
 
   /**
@@ -156,18 +185,9 @@ www-root-path=/rstudio-direct
 `;
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
 
-    // rstudio-prefs.json - sensible defaults for HPC environment
-    // Prevents large .RData files from clogging home directories
-    // See: https://github.com/rstudio/rstudio/issues/12028
-    const rstudioPrefs = JSON.stringify({
-      save_workspace: 'never',
-      load_workspace: false,
-      restore_source_documents: false,
-      always_save_history: true,
-      restore_last_project: false,
-      insert_native_pipe_operator: true,
-      rainbow_parentheses: true,
-    });
+    // rstudio-prefs.json - global defaults from config
+    // See config/index.js for settings (HPC-friendly, fonts, terminal)
+    const rstudioPrefs = JSON.stringify(rstudioDefaults);
     const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
     const rsessionScript = `#!/bin/sh
