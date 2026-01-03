@@ -843,7 +843,7 @@ async function connect(hpc, ide) {
   resetProgress();
 
   const ideName = availableIdes[ide]?.name || ide;
-  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Connecting to ${ideName}...` });
+  updateProgress(0, `Connecting to ${hpc}...`, 'connecting', { header: `Reconnecting to ${ideName}...` });
 
   // Use SSE stream for progress feedback (same endpoint as launch)
   // Server detects existing job and just establishes tunnel
