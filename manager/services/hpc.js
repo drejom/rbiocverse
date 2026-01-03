@@ -174,6 +174,9 @@ done
       `${this.cluster.singularityBin} exec`,
       `--env TERM=xterm-256color`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      // Use file-based keyring instead of gnome-keyring (not available in container)
+      // See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/4
+      `--env VSCODE_KEYRING_PASS=hpc-code-server`,
       `-B ${this.cluster.bindPaths}`,
       this.cluster.singularityImage,
       `code serve-web`,
