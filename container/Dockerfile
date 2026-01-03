@@ -115,6 +115,20 @@ RUN curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-a
     && rm vscode_cli.tar.gz
 
 # =============================================================================
+# VS Code Extensions (pre-installed for HPC Code Server bootstrap)
+# =============================================================================
+# Location: /usr/local/share/vscode-extensions (not /opt due to Apollo bind mounts)
+# Extensions are copied to user's ~/.vscode-server/extensions on first run
+# See: https://github.com/drejom/vscode-rbioc/issues/14
+
+ENV VSCODE_EXTENSIONS_DIR=/usr/local/share/vscode-extensions
+
+RUN mkdir -p ${VSCODE_EXTENSIONS_DIR} \
+    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension REditorSupport.r \
+    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension RDebugger.r-debugger \
+    && code --extensions-dir ${VSCODE_EXTENSIONS_DIR} --install-extension ms-python.python
+
+# =============================================================================
 # SLURM Wrappers (SSH passthrough for HPC container usage)
 # =============================================================================
 COPY scripts/slurm-wrappers.sh /tmp/
