@@ -208,6 +208,8 @@ class HpcService {
     const keybindingsBase64 = Buffer.from(keybindings).toString('base64');
 
     // Bootstrap script - base64 encoded for clean embedding
+    // NOTE: VS Code serve-web 1.107+ only supports --server-data-dir, not --user-data-dir
+    // So keybindings must be written to server-data-dir/data/User/ not a separate user-data dir
     const bootstrapScript = `#!/bin/sh
 # Bootstrap extensions from container image (if available)
 if [ -d ${builtinExtDir} ]; then
@@ -217,9 +219,10 @@ if [ -d ${builtinExtDir} ]; then
   done
 fi
 # Bootstrap keybindings (only if user hasn't customized)
-keybindingsFile="$HOME/.vscode-slurm/user-data/User/keybindings.json"
+# serve-web 1.107+ looks in server-data-dir/data/User/, not separate user-data-dir
+keybindingsFile="$HOME/.vscode-slurm/.vscode-server/data/User/keybindings.json"
 if [ ! -f "$keybindingsFile" ]; then
-  mkdir -p "$HOME/.vscode-slurm/user-data/User"
+  mkdir -p "$HOME/.vscode-slurm/.vscode-server/data/User"
   echo ${keybindingsBase64} | base64 -d > "$keybindingsFile"
 fi
 `;
