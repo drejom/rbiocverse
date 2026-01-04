@@ -236,49 +236,29 @@ function createApiRouter(stateManager) {
   });
 
   // Get session status
+  // Returns cached state from StateManager background polling
+  // No SSH calls - instant response from cached data
   router.get('/status', async (req, res) => {
-    // Check actual job status for running sessions
-    let stateChanged = false;
-
-    for (const [key, session] of Object.entries(state.sessions)) {
-      if (session && session.status === 'running' && session.jobId) {
-        const { hpc, ide } = parseSessionKey(key);
-        try {
-          const hpcService = new HpcService(hpc);
-          const jobInfo = await hpcService.getJobInfo(ide);
-
-          if (!jobInfo || jobInfo.jobId !== session.jobId) {
-            // Job disappeared
-            tunnelService.stop(hpc, ide);
-            session.status = 'idle';
-            session.jobId = null;
-            session.node = null;
-            if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {
-              state.activeSession = null;
-            }
-            stateChanged = true;
-          }
-        } catch (e) {
-          log.error(`Error checking job status for ${key}`, { error: e.message });
-        }
-      }
-    }
-
-    if (stateChanged) {
-      await stateManager.save();
-    }
+    // Backend polling keeps state fresh automatically
+    // Frontend can poll frequently since this is just reading from memory
+    const pollingInfo = stateManager.getPollingInfo();
 
     res.json({
       sessions: getSessionsInfo(),
-      activeSession: state.activeSession,  // { hpc, ide } or null
-      ides: Object.keys(ides),  // Available IDE types
+      activeSession: state.activeSession, // { hpc, ide } or null
+      ides: Object.keys(ides), // Available IDE types
       config: {
         defaultHpc: config.defaultHpc,
         defaultIde: config.defaultIde,
         defaultCpus: config.defaultCpus,
         defaultMem: config.defaultMem,
         defaultTime: config.defaultTime,
-      }
+      },
+      polling: {
+        lastPollTime: pollingInfo.lastPollTime,
+        nextPollTime: pollingInfo.nextPollTime,
+        intervalMs: pollingInfo.currentInterval,
+      },
     });
   });
 

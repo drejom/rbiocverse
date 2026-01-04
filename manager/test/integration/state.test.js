@@ -50,12 +50,10 @@ describe('StateManager Integration Tests', () => {
 
     it('should handle non-existent state file gracefully', async () => {
       await stateManager.load();
+      // New structure uses dynamic keys and activeSession
       expect(stateManager.getState()).to.deep.equal({
-        sessions: {
-          gemini: null,
-          apollo: null,
-        },
-        activeHpc: null,
+        sessions: {},
+        activeSession: null,
       });
     });
 
@@ -67,11 +65,8 @@ describe('StateManager Integration Tests', () => {
 
       // Should fall back to default state
       expect(stateManager.getState()).to.deep.equal({
-        sessions: {
-          gemini: null,
-          apollo: null,
-        },
-        activeHpc: null,
+        sessions: {},
+        activeSession: null,
       });
     });
 
@@ -109,20 +104,21 @@ describe('StateManager Integration Tests', () => {
       expect(newManager.getSession('gemini')).to.be.null;
     });
 
-    it('should clear activeHpc when clearing its session', async () => {
-      await stateManager.setActiveHpc('gemini');
-      await stateManager.updateSession('gemini', {
+    it('should clear activeSession when clearing its session', async () => {
+      await stateManager.setActiveSession('gemini', 'vscode');
+      await stateManager.updateSessionByKey('gemini-vscode', {
         status: 'running',
         jobId: '12345',
+        ide: 'vscode',
       });
 
-      await stateManager.clearSession('gemini');
+      await stateManager.clearSessionByKey('gemini-vscode');
 
       // Load in new instance
       const newManager = new StateManager();
       await newManager.load();
 
-      expect(newManager.getState().activeHpc).to.be.null;
+      expect(newManager.getState().activeSession).to.be.null;
     });
   });
 
@@ -143,9 +139,10 @@ describe('StateManager Integration Tests', () => {
 
     it('should not load when persistence is disabled', async () => {
       // Create state file first with persistence enabled
-      await stateManager.updateSession('gemini', {
+      await stateManager.updateSessionByKey('gemini-vscode', {
         status: 'running',
         jobId: '12345',
+        ide: 'vscode',
       });
 
       // Disable persistence and create new manager
@@ -154,7 +151,7 @@ describe('StateManager Integration Tests', () => {
       await manager.load();
 
       // Should have default state (not loaded from file)
-      expect(manager.getSession('gemini')).to.be.null;
+      expect(manager.getSessionByKey('gemini-vscode')).to.be.null;
     });
   });
 
@@ -185,13 +182,13 @@ describe('StateManager Integration Tests', () => {
       expect(stateManager.getSession('gemini').jobId).to.equal('12345');
     });
 
-    it('should set and persist active HPC', async () => {
-      await stateManager.setActiveHpc('gemini');
+    it('should set and persist active session', async () => {
+      await stateManager.setActiveSession('gemini', 'vscode');
 
       const newManager = new StateManager();
       await newManager.load();
 
-      expect(newManager.getState().activeHpc).to.equal('gemini');
+      expect(newManager.getState().activeSession).to.deep.equal({ hpc: 'gemini', ide: 'vscode' });
     });
   });
 
