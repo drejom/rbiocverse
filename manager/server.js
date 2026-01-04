@@ -126,12 +126,24 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
+  // Rewrite Set-Cookie headers to work through proxy
+  // VS Code sets cookies for the backend domain, but browser accesses via proxy domain
+  // We need to strip domain/path restrictions so cookies work through proxy
+  const setCookies = proxyRes.headers['set-cookie'];
+  if (setCookies) {
+    proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
+      // Remove Domain= attribute (let browser use current domain)
+      // Change Path= to / so cookies work for all proxy paths
+      return cookie
+        .replace(/;\s*Domain=[^;]*/gi, '')
+        .replace(/;\s*Path=[^;]*/gi, '; Path=/');
+    });
+    log.debugFor('vscode', 'rewrote cookies', { original: setCookies, rewritten: proxyRes.headers['set-cookie'] });
+  }
+
   // Rewrite Location headers to point back through proxy
-  // VS Code auth redirects to /vscode-direct but we may need to adjust
   const location = proxyRes.headers['location'];
   if (location) {
-    // The redirect from /?tkn=... goes to /vscode-direct
-    // This is correct for our proxy setup, no rewrite needed
     log.debugFor('vscode', 'redirect location', { location, originalUrl: req.originalUrl });
   }
 
