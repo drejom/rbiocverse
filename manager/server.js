@@ -83,29 +83,50 @@ vscodeProxy.on('error', (err, req, res) => {
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
 // Rewrite path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
-  // VS Code expects all requests at /vscode-direct (--server-base-path)
-  // Requests from /code/* need to be rewritten to /vscode-direct/*
-  // Requests from /vscode-direct/* already have correct path in originalUrl
+  // VS Code serve-web 1.107+ auth flow:
+  // 1. Token must be passed at root path: /?tkn=TOKEN
+  // 2. Server sets vscode-tkn cookie and redirects to --server-base-path
+  // 3. Subsequent requests use cookie for auth
+  //
+  // For initial auth (no vscode-tkn cookie), we must hit / not /vscode-direct
+  // After auth, requests go to /vscode-direct/* as normal
+  const hasVscodeTknCookie = req.headers.cookie?.includes('vscode-tkn');
+  const token = getSessionToken('vscode');
+
   if (req.originalUrl.startsWith('/vscode-direct')) {
-    proxyReq.path = req.originalUrl;
+    // Direct proxy path - check if we need initial auth
+    if (!hasVscodeTknCookie && token) {
+      // No auth cookie yet - redirect to root with token to establish auth
+      // This will set the cookie and redirect back to /vscode-direct
+      proxyReq.path = `/?tkn=${token}`;
+      log.debugFor('vscode', 'initial auth redirect to root', { originalUrl: req.originalUrl });
+    } else {
+      proxyReq.path = req.originalUrl;
+    }
   } else if (req.originalUrl.startsWith('/code')) {
     // Rewrite /code/foo -> /vscode-direct/foo
-    proxyReq.path = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+    if (!hasVscodeTknCookie && token) {
+      // No auth cookie yet - redirect to root with token
+      proxyReq.path = `/?tkn=${token}`;
+      log.debugFor('vscode', 'initial auth redirect to root', { originalUrl: req.originalUrl });
+    } else {
+      proxyReq.path = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+    }
   }
 
-  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
-
-  // VS Code uses query param ?tkn=TOKEN for authentication
-  // Inject token if we have one and it's not already in the URL
-  const token = getSessionToken('vscode');
-  if (token && !proxyReq.path.includes('tkn=')) {
-    const separator = proxyReq.path.includes('?') ? '&' : '?';
-    proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
-    log.debugFor('vscode', 'injected token into request', { path: proxyReq.path });
-  }
+  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path, hasCookie: hasVscodeTknCookie });
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
+  // Rewrite Location headers to point back through proxy
+  // VS Code auth redirects to /vscode-direct but we may need to adjust
+  const location = proxyRes.headers['location'];
+  if (location) {
+    // The redirect from /?tkn=... goes to /vscode-direct
+    // This is correct for our proxy setup, no rewrite needed
+    log.debugFor('vscode', 'redirect location', { location, originalUrl: req.originalUrl });
+  }
+
   log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
   updateActivity();
 });
