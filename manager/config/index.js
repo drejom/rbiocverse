@@ -193,6 +193,31 @@ const rstudioDefaults = {
   terminal_initial_directory: 'home',
 };
 
+// JupyterLab global defaults - written to overrides.json
+// Settings in $JUPYTER_DATA_DIR/lab/settings/overrides.json
+// Font settings rendered by browser from local fonts (user needs Nerd Font installed)
+const jupyterlabDefaults = {
+  // Terminal settings - Nerd Font fallback chain for starship/powerline icons
+  '@jupyterlab/terminal-extension:plugin': {
+    fontFamily: "'FiraCode Nerd Font', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'Fira Code', monospace",
+    fontSize: 14,
+    lineHeight: 1.2,
+    scrollback: 10000,
+    theme: 'inherit',
+  },
+  // Code editor font via CSS variables
+  '@jupyterlab/apputils-extension:themes': {
+    'code-font-family': "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace",
+    'code-font-size': '14px',
+  },
+  // Notebook settings
+  '@jupyterlab/notebook-extension:tracker': {
+    codeCellConfig: {
+      lineNumbers: true,
+    },
+  },
+};
+
 // IDE definitions
 // Icons from devicon.dev
 const ides = {
@@ -372,4 +397,5 @@ module.exports = {
   pythonEnv,  // Deprecated - use getReleasePaths
   vscodeDefaults,
   rstudioDefaults,
+  jupyterlabDefaults,
 };
