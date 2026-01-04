@@ -177,7 +177,7 @@ class StateManager {
       this.state = loadedState;
 
       // Ensure tunnelProcess is null for all sessions (can't be restored from disk)
-      for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
+      for (const session of Object.values(this.state.sessions)) {
         if (session) {
           session.tunnelProcess = null;
         }
@@ -241,15 +241,8 @@ class StateManager {
         const exists = await this.checkJobExists(hpc, session.jobId);
         if (!exists) {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
+          this._clearActiveSessionIfMatches(hpc, session.ide);
           this.state.sessions[sessionKey] = null;
-
-          // Clear activeSession if it matches
-          if (
-            this.state.activeSession?.hpc === hpc &&
-            this.state.activeSession?.ide === session.ide
-          ) {
-            this.state.activeSession = null;
-          }
         }
       }
     }
@@ -277,6 +270,25 @@ class StateManager {
     } catch (e) {
       log.warn('Failed to check job existence, assuming exists', { hpc, jobId, error: e.message });
       return true; // Safe fallback
+    }
+  }
+
+  // ============================================
+  // Private helper methods
+  // ============================================
+
+  /**
+   * Clear activeSession if it matches the given hpc and ide
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @private
+   */
+  _clearActiveSessionIfMatches(hpc, ide) {
+    if (
+      this.state.activeSession?.hpc === hpc &&
+      this.state.activeSession?.ide === ide
+    ) {
+      this.state.activeSession = null;
     }
   }
 
@@ -312,18 +324,11 @@ class StateManager {
    */
   async clearSessionByKey(sessionKey) {
     const session = this.state.sessions[sessionKey];
-    this.state.sessions[sessionKey] = null;
-
-    // Clear activeSession if it matches
     if (session) {
       const [hpc] = sessionKey.split('-');
-      if (
-        this.state.activeSession?.hpc === hpc &&
-        this.state.activeSession?.ide === session.ide
-      ) {
-        this.state.activeSession = null;
-      }
+      this._clearActiveSessionIfMatches(hpc, session.ide);
     }
+    this.state.sessions[sessionKey] = null;
     await this.save();
   }
 
@@ -424,31 +429,38 @@ class StateManager {
   /**
    * Execute a poll cycle
    * Refreshes all running sessions and schedules next poll
+   * Error-safe: always reschedules even if refresh fails
    */
   async poll() {
     this.lastPollTime = Date.now();
-    const changed = await this.refreshAllSessions();
 
-    if (changed) {
-      this.consecutiveUnchangedPolls = 0;
-      log.debugFor('state', 'Poll detected changes, resetting backoff');
-    } else {
-      this.consecutiveUnchangedPolls++;
-      log.debugFor('state', `No changes for ${this.consecutiveUnchangedPolls} polls`);
+    try {
+      const changed = await this.refreshAllSessions();
+
+      if (changed) {
+        this.consecutiveUnchangedPolls = 0;
+        log.debugFor('state', 'Poll detected changes, resetting backoff');
+      } else {
+        this.consecutiveUnchangedPolls++;
+        log.debugFor('state', `No changes for ${this.consecutiveUnchangedPolls} polls`);
+      }
+    } catch (e) {
+      // Ensure polling continues even if an error occurs
+      log.error('Poll cycle failed', { error: e.message });
+    } finally {
+      this.schedulePoll();
     }
-
-    this.schedulePoll();
   }
 
   /**
    * Refresh all running sessions from SLURM
-   * @returns {Promise<boolean>} True if any changes detected
+   * @returns {Promise<boolean>} True if significant changes detected (for backoff reset)
    */
   async refreshAllSessions() {
     if (!this.hpcServiceFactory) return false;
 
-    let anyChanged = false;
-    const currentSnapshot = JSON.stringify(this.state.sessions);
+    let significantChange = false; // Status transitions, job disappearance
+    const snapshotBefore = JSON.stringify(this.state.sessions);
 
     for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
       if (!session || !session.jobId) continue;
@@ -462,8 +474,9 @@ class StateManager {
         if (!jobStatus) {
           // Job no longer exists
           log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
+          this._clearActiveSessionIfMatches(hpc, session.ide);
           this.state.sessions[sessionKey] = null;
-          anyChanged = true;
+          significantChange = true;
           continue;
         }
 
@@ -471,17 +484,18 @@ class StateManager {
         if (jobStatus.state === 'RUNNING' && session.status !== 'running') {
           session.status = 'running';
           session.node = jobStatus.node;
-          anyChanged = true;
+          significantChange = true;
         } else if (jobStatus.state === 'PENDING' && session.status !== 'pending') {
           session.status = 'pending';
-          anyChanged = true;
+          significantChange = true;
         } else if (['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT'].includes(jobStatus.state)) {
           log.state(`Job ${session.jobId} ended with ${jobStatus.state}`, { sessionKey });
+          this._clearActiveSessionIfMatches(hpc, session.ide);
           this.state.sessions[sessionKey] = null;
-          anyChanged = true;
+          significantChange = true;
         }
 
-        // Update time remaining
+        // Update time remaining (not a significant change for backoff purposes)
         if (jobStatus.timeLeftSeconds !== undefined) {
           session.timeLeftSeconds = jobStatus.timeLeftSeconds;
         }
@@ -490,17 +504,19 @@ class StateManager {
       }
     }
 
-    // Also detect changes by comparing snapshots
-    if (!anyChanged && currentSnapshot !== this.lastStateSnapshot) {
-      anyChanged = true;
-    }
-    this.lastStateSnapshot = JSON.stringify(this.state.sessions);
-
-    if (anyChanged) {
+    // Save if any modification occurred (including timeLeftSeconds updates)
+    const snapshotAfter = JSON.stringify(this.state.sessions);
+    if (snapshotBefore !== snapshotAfter) {
       await this.save();
     }
 
-    return anyChanged;
+    // Also detect external state changes between polls (for backoff reset)
+    if (!significantChange && snapshotBefore !== this.lastStateSnapshot) {
+      significantChange = true;
+    }
+    this.lastStateSnapshot = snapshotAfter;
+
+    return significantChange;
   }
 
   /**

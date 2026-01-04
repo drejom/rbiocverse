@@ -695,10 +695,15 @@ SLURM_SCRIPT`;
     if (timeStr.includes('-')) {
       const [d, r] = timeStr.split('-');
       days = parseInt(d, 10);
+      if (isNaN(days)) return null;
       rest = r;
     }
 
     const parts = rest.split(':').map(p => parseInt(p, 10));
+
+    // Validate all parsed values are numbers
+    if (parts.some(p => isNaN(p))) return null;
+
     let seconds = 0;
 
     if (parts.length === 3) {
@@ -712,7 +717,8 @@ SLURM_SCRIPT`;
       seconds = parts[0];
     }
 
-    return days * 86400 + seconds;
+    const total = days * 86400 + seconds;
+    return isNaN(total) ? null : total;
   }
 
   /**
