@@ -456,6 +456,10 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       '--ServerApp.root_dir=$HOME',
       '--ServerApp.base_url=/jupyter-direct',
       '--ServerApp.allow_remote_access=True',
+      // Proxy support flags (fixes "Not Found" when clicking notebooks)
+      '--ServerApp.trust_xheaders=True',
+      "--ServerApp.allow_origin='*'",
+      '--ServerApp.disable_check_xsrf=True',
     ].filter(Boolean).join(' \\\n    ');
 
     return `#!/bin/bash
