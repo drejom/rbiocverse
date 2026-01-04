@@ -53,23 +53,27 @@ The migration has two phases: **pre-release** (capture packages from old) and **
 Run on HPC cluster to capture packages from the current version:
 
 ```sh
-# 1. Sync DESCRIPTION with packages from current (e.g., 3.19) environment
-./scripts/sync-packages.sh --from 3.19         # Preview
-./scripts/sync-packages.sh --from 3.19 --apply # Apply
+# 1. Sync R packages: DESCRIPTION with packages from current (e.g., 3.22) environment
+./scripts/sync-packages.sh --from 3.22         # Preview
+./scripts/sync-packages.sh --from 3.22 --apply # Apply
 
-# 2. Check availability in new Bioconductor version
+# 2. Sync Python packages: compare installed vs pyproject.toml
+./scripts/sync-python-packages.sh --from 3.22
+# Review output, add new packages to [staged] in pyproject.toml
+
+# 3. Check R package availability in new Bioconductor version
 Rscript scripts/update-description.R check --apply
 
-# 3. Update GitHub remotes and bump version
+# 4. Update GitHub remotes and bump version
 Rscript scripts/update-description.R remotes --apply
 Rscript scripts/update-description.R bump bioc
 
-# 4. Update Dockerfile
-# Edit line 3: ARG BIOC_VERSION=RELEASE_3_22
+# 5. Update Dockerfile
+# Edit line 3: ARG BIOC_VERSION=RELEASE_3_23
 
-# 5. Commit and tag to trigger CI build
-git add -A && git commit -m "Bump to Bioconductor 3.22"
-git tag v2025-MM-DD
+# 6. Commit and tag to trigger CI build
+git add -A && git commit -m "Bump to Bioconductor 3.23"
+git tag v2026-MM-DD
 git push && git push --tags
 ```
 
@@ -173,7 +177,8 @@ See `rbiocverse/pyproject.toml` for Python packages:
 ### Wrapper Scripts (recommended)
 | Script | Purpose | When to Use |
 |--------|---------|-------------|
-| `sync-packages.sh --from X.Y` | Sync DESCRIPTION from existing library | Pre-release: capture packages |
+| `sync-packages.sh --from X.Y` | Sync R DESCRIPTION from existing library | Pre-release: capture R packages |
+| `sync-python-packages.sh --from X.Y` | Sync Python pyproject.toml from existing library | Pre-release: capture Python packages |
 | `install-packages.sh --to X.Y` | Generate/submit SLURM R package install | Post-release: install R packages |
 | `install-python.sh --to X.Y` | Generate/submit SLURM Python install | Post-release: install Python packages |
 | `pull-container.sh` | Pull container to cluster storage | Post-release: before install |
@@ -209,7 +214,9 @@ See `rbiocverse/pyproject.toml` for Python packages:
 │   └── jupyter_lab_config.py   # JupyterLab HPC config
 ├── scripts/
 │   ├── cluster-config.sh       # Shared cluster detection and paths
-│   ├── sync-packages.sh        # Pre-release: sync from old environment
+│   ├── sync-packages.sh        # Pre-release: sync R packages from old environment
+│   ├── sync-python-packages.sh # Pre-release: sync Python packages from old environment
+│   ├── sync-python.py          # Helper: categorize Python packages
 │   ├── install-packages.sh     # Post-release: install R packages
 │   ├── install-python.sh       # Post-release: install Python packages
 │   ├── pull-container.sh       # Pull container to HPC storage
