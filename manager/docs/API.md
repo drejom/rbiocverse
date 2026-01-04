@@ -37,20 +37,49 @@ Returns current status of both HPC clusters. Results are cached for 120 seconds 
 ```json
 {
   "gemini": {
-    "status": "running",
-    "jobId": "28692461",
-    "node": "g-h-1-9-25",
-    "timeLeft": "10:58:13",
-    "timeLeftSeconds": 39493,
-    "timeLeftHuman": "10h 58m",
-    "timeLimit": "12:00:00",
-    "timeLimitSeconds": 43200,
-    "cpus": "2",
-    "memory": "40G",
-    "startTime": "2025-12-30T23:28:20"
+    "vscode": {
+      "status": "running",
+      "jobId": "28692461",
+      "node": "g-h-1-9-25",
+      "ide": "vscode",
+      "port": 8000,
+      "releaseVersion": "3.22",
+      "gpu": "a100",
+      "timeLeft": "10:58:13",
+      "timeLeftSeconds": 39493,
+      "timeLeftHuman": "10h 58m",
+      "timeLimit": "12:00:00",
+      "timeLimitSeconds": 43200,
+      "cpus": "4",
+      "memory": "40G",
+      "startTime": "2025-12-30T23:28:20",
+      "shinyPort": 7777
+    },
+    "rstudio": { "status": "idle" },
+    "jupyter": { "status": "idle" }
   },
   "apollo": {
-    "status": "idle"
+    "vscode": { "status": "idle" },
+    "rstudio": { "status": "idle" }
+  },
+  "releases": {
+    "3.22": { "name": "Bioconductor 3.22", "ides": ["vscode", "rstudio", "jupyter"], "clusters": ["gemini", "apollo"] },
+    "3.19": { "name": "Bioconductor 3.19", "ides": ["vscode", "rstudio"], "clusters": ["gemini", "apollo"] },
+    "3.18": { "name": "Bioconductor 3.18", "ides": ["vscode", "rstudio"], "clusters": ["gemini", "apollo"] },
+    "3.17": { "name": "Bioconductor 3.17", "ides": ["vscode", "rstudio"], "clusters": ["gemini", "apollo"] }
+  },
+  "defaultReleaseVersion": "3.22",
+  "gpuConfig": {
+    "gemini": {
+      "a100": { "partition": "gpu-a100", "gres": "gpu:A100:1", "maxTime": "4-00:00:00", "mem": "256G" },
+      "v100": { "partition": "gpu-v100", "gres": "gpu:V100:1", "maxTime": "8-00:00:00", "mem": "96G" }
+    },
+    "apollo": null
+  },
+  "ides": {
+    "vscode": { "name": "VS Code", "port": 8000, "proxyPath": "/code/" },
+    "rstudio": { "name": "RStudio", "port": 8787, "proxyPath": "/rstudio/" },
+    "jupyter": { "name": "JupyterLab", "port": 8888, "proxyPath": "/jupyter/" }
   },
   "activeHpc": "gemini",
   "updatedAt": "2025-12-31T07:30:10.318Z",
@@ -104,73 +133,72 @@ Returns internal session state (less frequently used than cluster-status).
 
 ---
 
-### Launch Session
+### Launch Session (SSE Streaming)
 
 ```
-POST /api/launch
+GET /api/launch/:hpc/:ide/stream
 ```
 
-Launches a new VS Code session or reconnects to existing job.
+Launches a new IDE session via Server-Sent Events. Progress events are streamed to the client.
 
-**Request Body:**
-```json
-{
-  "hpc": "gemini",
-  "cpus": "4",
-  "mem": "40G",
-  "time": "12:00:00"
-}
-```
+**URL Parameters:**
+- `hpc` - Cluster name (`gemini` or `apollo`)
+- `ide` - IDE name (`vscode`, `rstudio`, or `jupyter`)
 
-**Parameters:**
+**Query Parameters:**
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `hpc` | string | `gemini` | Cluster name (`gemini` or `apollo`) |
 | `cpus` | string | `2` | Number of CPUs (1-128) |
 | `mem` | string | `40G` | Memory allocation (e.g., `40G`, `100M`) |
 | `time` | string | `12:00:00` | Walltime (HH:MM:SS or D-HH:MM:SS) |
+| `releaseVersion` | string | `3.22` | Bioconductor release (`3.22`, `3.19`, `3.18`, `3.17`) |
+| `gpu` | string | (none) | GPU type (`a100`, `v100`, or empty for CPU) |
 
-**Success Response (200):**
+**SSE Events:**
+
+Progress events during launch:
+```
+event: progress
+data: {"step":"submitting","message":"Submitting SLURM job..."}
+
+event: progress
+data: {"step":"waiting","message":"Waiting for node allocation...","jobId":"28692461"}
+
+event: progress
+data: {"step":"starting","message":"Node assigned: g-h-1-9-25","node":"g-h-1-9-25"}
+
+event: progress
+data: {"step":"tunnel","message":"Establishing SSH tunnel..."}
+```
+
+Final success event:
+```
+event: complete
+data: {"status":"running","jobId":"28692461","node":"g-h-1-9-25","hpc":"gemini","ide":"vscode","releaseVersion":"3.22","gpu":"a100","redirectUrl":"/code/"}
+```
+
+Reconnect event (session already running):
+```
+event: complete
+data: {"status":"reconnected","jobId":"28692461","node":"g-h-1-9-25","hpc":"gemini","ide":"vscode","redirectUrl":"/code/"}
+```
+
+Error event:
+```
+event: error
+data: {"error":"SSH connection failed","code":"SSH_ERROR"}
+```
+
+**Validation Errors (400):**
 ```json
 {
-  "status": "running",
-  "jobId": "28692461",
-  "node": "g-h-1-9-25",
-  "hpc": "gemini"
+  "error": "JupyterLab is only available on Bioconductor 3.22"
 }
 ```
 
-**Reconnect Response (200):**
-If session already running, reconnects to existing job:
 ```json
 {
-  "status": "connected",
-  "hpc": "gemini",
-  "jobId": "28692461",
-  "node": "g-h-1-9-25"
-}
-```
-
-**Error Responses:**
-
-- `400 Bad Request` - Invalid input
-```json
-{
-  "error": "Invalid CPU value: must be integer 1-128"
-}
-```
-
-- `429 Too Many Requests` - Operation in progress
-```json
-{
-  "error": "Operation already in progress"
-}
-```
-
-- `500 Internal Server Error` - Launch failed
-```json
-{
-  "error": "SSH connection failed"
+  "error": "Release 3.22 is not available on cluster apollo"
 }
 ```
 
@@ -209,12 +237,14 @@ Switches the active tunnel to a different running session.
 ```
 POST /api/stop
 POST /api/stop/:hpc
+POST /api/stop/:hpc/:ide
 ```
 
 Stops the SSH tunnel and optionally cancels the SLURM job.
 
 **URL Parameters:**
 - `hpc` (optional) - Specific cluster to stop. Defaults to active HPC.
+- `ide` (optional) - Specific IDE session to stop. Defaults to active IDE.
 
 **Request Body:**
 ```json
@@ -283,12 +313,28 @@ The API uses typed errors internally:
 
 ## Examples
 
-### Launch a session with curl
+### Launch VS Code session (SSE)
 
 ```bash
-curl -X POST https://hpc.omeally.com/api/launch \
-  -H "Content-Type: application/json" \
-  -d '{"hpc": "gemini", "cpus": "4", "mem": "40G", "time": "12:00:00"}'
+# Launch VS Code on Gemini with Bioconductor 3.22 and A100 GPU
+curl -N "https://hpc.omeally.com/api/launch/gemini/vscode/stream?\
+releaseVersion=3.22&gpu=a100&cpus=4&mem=40G&time=12:00:00"
+```
+
+### Launch RStudio session
+
+```bash
+# Launch RStudio on Apollo with Bioconductor 3.19
+curl -N "https://hpc.omeally.com/api/launch/apollo/rstudio/stream?\
+releaseVersion=3.19&cpus=2&mem=40G&time=8:00:00"
+```
+
+### Launch JupyterLab session
+
+```bash
+# JupyterLab only available on 3.22
+curl -N "https://hpc.omeally.com/api/launch/gemini/jupyter/stream?\
+releaseVersion=3.22&cpus=4&mem=80G&time=4:00:00"
 ```
 
 ### Check status
@@ -303,10 +349,10 @@ curl https://hpc.omeally.com/api/cluster-status
 curl https://hpc.omeally.com/api/cluster-status?refresh=true
 ```
 
-### Kill a job
+### Kill a specific IDE session
 
 ```bash
-curl -X POST https://hpc.omeally.com/api/stop/gemini \
+curl -X POST https://hpc.omeally.com/api/stop/gemini/vscode \
   -H "Content-Type: application/json" \
   -d '{"cancelJob": true}'
 ```

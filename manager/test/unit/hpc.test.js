@@ -509,42 +509,42 @@ describe('HpcService', () => {
     });
   });
 
-  describe('buildVscodeWrap (port finder integration)', () => {
-    it('should include port finder script in wrap command', async () => {
+  describe('buildVscodeScript (port finder integration)', () => {
+    it('should include port finder script in heredoc command', async () => {
       sshExecStub.resolves('Submitted batch job 12345');
 
       await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
 
       const sshCommand = sshExecStub.firstCall.args[0];
-      // Port finder writes to ~/.vscode-slurm/port and uses $IDE_PORT
+      // Port finder writes to ~/.vscode-slurm/port and uses $IDE_PORT (unescaped in heredoc)
       expect(sshCommand).to.include('IDE_PORT');
-      expect(sshCommand).to.include('--port \\$IDE_PORT');
+      expect(sshCommand).to.include('--port $IDE_PORT');
     });
   });
 
-  describe('buildRstudioWrap (port finder integration)', () => {
-    it('should include port finder script in wrap command', async () => {
+  describe('buildRstudioScript (port finder integration)', () => {
+    it('should include port finder script in heredoc command', async () => {
       sshExecStub.resolves('Submitted batch job 12345');
 
       await hpcService.submitJob('4', '40G', '12:00:00', 'rstudio');
 
       const sshCommand = sshExecStub.firstCall.args[0];
-      // Port finder uses $IDE_PORT
+      // Port finder uses $IDE_PORT (unescaped in heredoc)
       expect(sshCommand).to.include('IDE_PORT');
-      expect(sshCommand).to.include('--www-port=\\$IDE_PORT');
+      expect(sshCommand).to.include('--www-port=$IDE_PORT');
     });
   });
 
-  describe('buildJupyterWrap (port finder integration)', () => {
-    it('should include port finder script in wrap command', async () => {
+  describe('buildJupyterScript (port finder integration)', () => {
+    it('should include port finder script in heredoc command', async () => {
       sshExecStub.resolves('Submitted batch job 12345');
 
       await hpcService.submitJob('4', '40G', '12:00:00', 'jupyter');
 
       const sshCommand = sshExecStub.firstCall.args[0];
-      // Port finder uses $IDE_PORT
+      // Port finder uses $IDE_PORT (unescaped in heredoc)
       expect(sshCommand).to.include('IDE_PORT');
-      expect(sshCommand).to.include('--port=\\$IDE_PORT');
+      expect(sshCommand).to.include('--port=$IDE_PORT');
     });
   });
 });

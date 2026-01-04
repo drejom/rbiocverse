@@ -2,14 +2,14 @@
 
 ## Overview
 
-The HPC Code Server Manager is a web application that provides a browser-based VS Code experience on HPC SLURM clusters. It manages job submission, SSH tunneling, and proxies requests to code-server running on compute nodes.
+The HPC Code Server Manager is a web application that provides browser-based IDE experiences (VS Code, RStudio, JupyterLab) on HPC SLURM clusters. It manages job submission, SSH tunneling, and proxies requests to IDEs running in Singularity containers on compute nodes.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         User Browser                                 │
 │  ┌─────────────┐  ┌──────────────────────────────────────────────┐  │
-│  │  Launcher   │  │          VS Code (iframe)                    │  │
-│  │    Page     │  │   /code/ → /vscode-direct/ proxy             │  │
+│  │  Launcher   │  │     IDE (iframe) - VS Code / RStudio / Jupyter│  │
+│  │    Page     │  │  /code/ │ /rstudio/ │ /jupyter/ → proxy      │  │
 │  └─────────────┘  └──────────────────────────────────────────────┘  │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │ HTTPS
@@ -21,20 +21,21 @@ The HPC Code Server Manager is a web application that provides a browser-based V
 │  │  server.js - Main orchestration                               │   │
 │  │    ├── Static files (public/)                                 │   │
 │  │    ├── API routes (/api/*)                                    │   │
-│  │    └── HTTP Proxy (code-server, live-server)                  │   │
+│  │    └── HTTP Proxy (VS Code :8000, RStudio :8787, Jupyter :8888)│   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────┐   │
 │  │ HpcService │ │TunnelService│ │StateManager│ │   Validation   │   │
 │  │(SLURM ops) │ │ (SSH tunnels)│ │(persistence)│ │   (security)   │   │
 │  └────────────┘ └────────────┘ └────────────┘ └────────────────┘   │
 └──────────────────────────┬──────────────────────────────────────────┘
-                           │ SSH Tunnel (port 8000)
+                           │ SSH Tunnel (IDE port + additional ports)
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    HPC Login Node                                    │
 │                 (gemini-login2 / ppxhpcacc01)                        │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  SSH tunnel: localhost:8000 → compute-node:8000              │   │
+│  │  SSH tunnel: localhost:<port> → compute-node:<port>          │   │
+│  │  Ports: 8000 (VS Code), 8787 (RStudio), 8888 (Jupyter)       │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
@@ -43,11 +44,21 @@ The HPC Code Server Manager is a web application that provides a browser-based V
 │                    SLURM Compute Node                                │
 │                     (e.g., g-h-1-9-25)                              │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Singularity Container                                        │   │
-│  │    └── code serve-web (VS Code Server) on port 8000          │   │
+│  │  Singularity Container (vscode-rbioc_X.XX.sif)               │   │
+│  │    ├── VS Code: code serve-web on port 8000                  │   │
+│  │    ├── RStudio: rserver on port 8787                         │   │
+│  │    └── JupyterLab: jupyter lab on port 8888                  │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+## Supported IDEs
+
+| IDE | Port | Proxy Path | Releases |
+|-----|------|------------|----------|
+| VS Code | 8000 | `/code/` | All (3.17-3.22) |
+| RStudio | 8787 | `/rstudio/` | All (3.17-3.22) |
+| JupyterLab | 8888 | `/jupyter/` | 3.22 only |
 
 ## Directory Structure
 
@@ -88,11 +99,26 @@ Manages application state with persistence and operation locks.
 const StateManager = require('./lib/state');
 const stateManager = new StateManager();
 
-// State structure
+// State structure - sessions keyed by "${hpc}-${ide}"
 {
   sessions: {
-    gemini: { status, jobId, node, tunnelProcess, ... },
-    apollo: { status, jobId, node, tunnelProcess, ... }
+    'gemini-vscode': {
+      status: 'running',        // idle | pending | running
+      jobId: '28692461',
+      node: 'g-h-1-9-25',
+      ide: 'vscode',
+      port: 8000,               // Dynamically discovered
+      releaseVersion: '3.22',
+      gpu: 'a100',              // null for CPU-only
+      cpus: '4',
+      memory: '40G',
+      walltime: '12:00:00',
+      startedAt: '2025-01-01T10:00:00.000Z',
+      lastActivity: 1704268800000,  // Unix timestamp (ms)
+      shinyPort: 7777,          // VS Code only, if Shiny detected
+    },
+    'gemini-rstudio': { ... },
+    'apollo-vscode': { ... },
   },
   activeHpc: 'gemini' | 'apollo' | null
 }
@@ -108,25 +134,42 @@ stateManager.releaseLock('launch:gemini');
 
 ### 2. HpcService (`services/hpc.js`)
 
-Handles SLURM operations via SSH.
+Handles SLURM operations via SSH. Builds IDE-specific bash scripts for job submission.
 
 ```javascript
 const HpcService = require('./services/hpc');
 const hpc = new HpcService('gemini');
 
-// Submit job
-const jobId = await hpc.submitJob('4', '40G', '12:00:00');
+// Submit job with IDE and release-specific settings
+const { jobId, token } = await hpc.submitJob('4', '40G', '12:00:00', 'vscode', {
+  releaseVersion: '3.22',
+  gpu: 'a100',  // or '' for CPU
+});
 
 // Get job info (from squeue)
-const info = await hpc.getJobInfo();
+const info = await hpc.getJobInfo('vscode');
 // { jobId, state, node, timeLeft, timeLimit, cpus, memory, startTime }
 
 // Wait for node assignment
-const node = await hpc.waitForNode(jobId);
+const { node } = await hpc.waitForNode(jobId);
 
 // Cancel job
 await hpc.cancelJob(jobId);
+
+// IDE-specific script builders (return full bash scripts)
+// All set parallel processing env vars from cpus parameter
+hpc.buildVscodeScript({ token, releaseVersion: '3.22', cpus: 4 });
+hpc.buildRstudioScript(4, { releaseVersion: '3.22' });
+hpc.buildJupyterScript({ token, releaseVersion: '3.22', cpus: 4 });
 ```
+
+**Parallel Processing Environment Variables** (set automatically from SLURM allocation):
+- `OMP_NUM_THREADS` - OpenMP
+- `MKL_NUM_THREADS` - Intel MKL
+- `OPENBLAS_NUM_THREADS` - OpenBLAS
+- `NUMEXPR_NUM_THREADS` - NumPy numexpr
+- `MC_CORES` - R parallel::mclapply
+- `BIOCPARALLEL_WORKER_NUMBER` - BiocParallel
 
 ### 3. TunnelService (`services/tunnel.js`)
 
@@ -163,29 +206,31 @@ validateHpcName('invalid'); // Throws
 
 ## Data Flow
 
-### Launch Session Flow
+### Launch Session Flow (SSE Streaming)
 
 ```
-1. User clicks "Launch Session" on Gemini
-2. POST /api/launch { hpc: 'gemini', cpus: '4', mem: '40G', time: '12:00:00' }
-3. API acquires lock ('launch:gemini')
-4. HpcService.submitJob() → SSH sbatch command
-5. HpcService.waitForNode() → polls squeue until RUNNING
-6. TunnelService.start() → SSH -L 8000:node:8000
-7. State updated: { status: 'running', jobId, node }
-8. Lock released
-9. Redirect to /code/
+1. User selects IDE (VS Code), release (3.22), GPU (A100), resources
+2. GET /api/launch/gemini/vscode/stream?releaseVersion=3.22&gpu=a100&cpus=4&mem=40G&time=12:00:00
+3. SSE connection opened, progress events streamed to browser
+4. API acquires lock ('launch:gemini-vscode')
+5. HpcService.submitJob() → SSH sbatch with GPU partition
+6. HpcService.waitForNode() → polls squeue until RUNNING
+7. TunnelService.start() → SSH -L 8000:node:8000
+8. State updated: { status: 'running', jobId, node, ide, releaseVersion, gpu }
+9. Lock released
+10. Final SSE event with redirect URL → browser navigates to /code/
 ```
 
 ### Proxy Flow
 
 ```
-1. User loads /code/
-2. Express serves vscode-wrapper.html (iframe)
-3. iframe src="/vscode-direct/"
-4. http-proxy forwards to localhost:8000
-5. SSH tunnel forwards to compute-node:8000
-6. code-server responds
+1. User loads /code/ (or /rstudio/ or /jupyter/)
+2. Express serves ide-wrapper.html (iframe)
+3. iframe src="/vscode-direct/" (or /rstudio-direct/, /jupyter-direct/)
+4. http-proxy forwards to localhost:<port>
+   - VS Code: 8000, RStudio: 8787, JupyterLab: 8888
+5. SSH tunnel forwards to compute-node:<port>
+6. IDE server responds
 ```
 
 ## Configuration
@@ -221,11 +266,49 @@ clusters: {
     host: 'gemini-login2.coh.org',
     partition: 'compute',
     singularityBin: '/packages/.../singularity',
-    singularityImage: '/packages/.../vscode-rbioc_3.19.sif',
-    rLibsSite: '/packages/.../rlibs/bioc-3.19',
-    bindPaths: '/packages,/run,/scratch,/ref_genomes',
+    bindPaths: '/packages,/scratch,/ref_genomes',
   },
   apollo: { ... }
+}
+```
+
+### Bioconductor Releases (`config/index.js`)
+
+Release-specific Singularity images and library paths:
+
+```javascript
+releases: {
+  '3.22': {
+    name: 'Bioconductor 3.22',
+    ides: ['vscode', 'rstudio', 'jupyter'],  // JupyterLab only on 3.22
+    paths: {
+      gemini: {
+        singularityImage: '/packages/.../vscode-rbioc_3.22.sif',
+        rLibsSite: '/packages/.../rlibs/bioc-3.22',
+        pythonEnv: '/packages/.../python/bioc-3.22',
+      },
+      apollo: { ... }
+    }
+  },
+  '3.19': { ides: ['vscode', 'rstudio'], ... },
+  '3.18': { ides: ['vscode', 'rstudio'], ... },
+  '3.17': { ides: ['vscode', 'rstudio'], ... },
+}
+
+// Helper to get release-specific paths
+const paths = getReleasePaths('gemini', '3.22');
+// { singularityImage, rLibsSite, pythonEnv }
+```
+
+### GPU Configuration (Gemini only)
+
+```javascript
+gpuConfig: {
+  gemini: {
+    a100: { partition: 'gpu-a100', gres: 'gpu:A100:1', maxTime: '4-00:00:00', mem: '256G' },
+    v100: { partition: 'gpu-v100', gres: 'gpu:V100:1', maxTime: '8-00:00:00', mem: '96G' },
+  },
+  apollo: null,  // No GPU support
 }
 ```
 
@@ -253,7 +336,7 @@ All sbatch parameters are validated with strict regex patterns. No user input is
 ## Testing
 
 ```bash
-# Unit + Integration tests (167 tests)
+# Unit + Integration tests (226 tests)
 npm test
 
 # E2E browser tests (15 tests)

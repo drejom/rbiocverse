@@ -229,19 +229,102 @@ const gpuConfig = {
   apollo: null,
 };
 
-// Shared Python environment (mirrors R_LIBS_SITE pattern)
-const pythonEnv = {
-  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
-  apollo: '/opt/singularity-images/rbioc/python/bioc-3.22',
+// Partition resource limits (from scontrol show partition)
+// Used for input validation - prevents submitting jobs that exceed queue limits
+// Memory in MB (MaxMemPerNode), time in SLURM format, UNLIMITED = no limit
+const partitionLimits = {
+  gemini: {
+    compute: {
+      maxCpus: 44,            // MaxCPUsPerNode=44
+      maxMemMB: 640000,       // MaxMemPerNode=640000 (~625G)
+      maxTime: '14-00:00:00', // MaxTime=14-00:00:00
+    },
+    'gpu-a100': {
+      maxCpus: 34,            // MaxCPUsPerNode=34
+      maxMemMB: 384000,       // MaxMemPerNode=384000 (~375G)
+      maxTime: '4-00:00:00',  // MaxTime=4-00:00:00
+    },
+    'gpu-v100': {
+      maxCpus: 128,           // MaxCPUsPerNode=UNLIMITED (use reasonable default)
+      maxMemMB: 96000,        // ~96G (node has 96G)
+      maxTime: '8-00:00:00',  // MaxTime=8-00:00:00
+    },
+  },
+  apollo: {
+    // Apollo uses "fast,all" - SLURM picks first available
+    // fast: MaxTime=12:00:00, all: MaxTime=14-00:00:00
+    // Use the more permissive 'all' limits since jobs may land there
+    'fast,all': {
+      maxCpus: 128,           // MaxCPUsPerNode=UNLIMITED
+      maxMemMB: 512000,       // MaxMemPerNode=UNLIMITED (~500G reasonable limit)
+      maxTime: '14-00:00:00', // MaxTime=14-00:00:00 (all partition)
+    },
+  },
 };
 
+// Bioconductor release configurations
+// Each release specifies which IDEs are available and paths per cluster
+
+// Cluster base paths for Singularity images and libraries
+const clusterBasePaths = {
+  gemini: '/packages/singularity/shared_cache/rbioc',
+  apollo: '/opt/singularity-images/rbioc',
+};
+
+// Helper to generate paths for a given release version and clusters
+// Usage: createReleasePaths('3.22') for all clusters
+//        createReleasePaths('3.18', ['apollo']) for Apollo-only
+function createReleasePaths(version, supportedClusters = ['gemini', 'apollo']) {
+  const paths = {};
+  for (const cluster of supportedClusters) {
+    const basePath = clusterBasePaths[cluster];
+    if (basePath) {
+      paths[cluster] = {
+        singularityImage: `${basePath}/vscode-rbioc_${version}.sif`,
+        rLibsSite: `${basePath}/rlibs/bioc-${version}`,
+        pythonEnv: `${basePath}/python/bioc-${version}`,
+      };
+    }
+  }
+  return paths;
+}
+
+const releases = {
+  '3.22': {
+    name: 'Bioconductor 3.22',
+    ides: ['vscode', 'rstudio', 'jupyter'],
+    paths: createReleasePaths('3.22'),
+  },
+  '3.19': {
+    name: 'Bioconductor 3.19',
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.19'),
+  },
+  '3.18': {
+    name: 'Bioconductor 3.18',
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.18'),
+  },
+  '3.17': {
+    name: 'Bioconductor 3.17',
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.17'),
+  },
+};
+
+const defaultReleaseVersion = '3.22';
+
+// Cluster configurations (non-release-specific settings)
+// Note: singularityImage and rLibsSite use default release for backward compat
+// New code should use getReleasePaths() for release-specific paths
 const clusters = {
   gemini: {
     host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
     partition: 'compute',
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
-    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
-    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
+    // Legacy paths (default release) - use getReleasePaths for release-aware code
+    singularityImage: releases[defaultReleaseVersion].paths.gemini.singularityImage,
+    rLibsSite: releases[defaultReleaseVersion].paths.gemini.rLibsSite,
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/packages,/scratch,/ref_genomes',
   },
@@ -249,11 +332,44 @@ const clusters = {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
     partition: 'fast,all',
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
+    // Legacy paths (default release) - use getReleasePaths for release-aware code
+    singularityImage: releases[defaultReleaseVersion].paths.apollo.singularityImage,
+    rLibsSite: releases[defaultReleaseVersion].paths.apollo.rLibsSite,
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/opt,/labs',
   },
 };
 
-module.exports = { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults };
+// Helper to get release-specific paths for a cluster
+function getReleasePaths(clusterName, releaseVersion = defaultReleaseVersion) {
+  const releaseConfig = releases[releaseVersion];
+  if (!releaseConfig) {
+    throw new Error(`Unknown release: ${releaseVersion}`);
+  }
+  const paths = releaseConfig.paths[clusterName];
+  if (!paths) {
+    throw new Error(`Release ${releaseVersion} is not available on cluster ${clusterName}`);
+  }
+  return paths;
+}
+
+// Legacy pythonEnv export (deprecated - use getReleasePaths instead)
+// Kept for backward compatibility with existing hpc.js code
+const pythonEnv = {
+  gemini: releases[defaultReleaseVersion].paths.gemini.pythonEnv,
+  apollo: releases[defaultReleaseVersion].paths.apollo.pythonEnv,
+};
+
+module.exports = {
+  config,
+  clusters,
+  ides,
+  gpuConfig,
+  partitionLimits,
+  releases,
+  defaultReleaseVersion,
+  getReleasePaths,
+  pythonEnv,  // Deprecated - use getReleasePaths
+  vscodeDefaults,
+  rstudioDefaults,
+};

@@ -5,7 +5,7 @@
 
 const { exec } = require('child_process');
 const crypto = require('crypto');
-const { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults } = require('../config');
+const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
 
 /**
@@ -185,19 +185,20 @@ class HpcService {
    * Writes Machine settings and bootstraps extensions before starting server
    * @param {Object} options - Build options
    * @param {string} options.token - Connection token for authentication
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @param {number} options.cpus - Number of CPUs for parallel processing
    * @returns {string} Shell script content
    */
   buildVscodeScript(options = {}) {
-    const { token, cpus = 1 } = options;
+    const { token, releaseVersion = defaultReleaseVersion, cpus = 1 } = options;
     const ideConfig = ides.vscode;
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
 
     // Paths - no escaping needed with heredocs!
     const dataDir = '$HOME/.vscode-slurm/.vscode-server';
     const machineSettingsDir = `${dataDir}/data/Machine`;
     const extensionsDir = `${dataDir}/extensions`;
-    const userDataDir = '$HOME/.vscode-slurm/user-data';
     const builtinExtDir = vscodeDefaults.builtinExtensionsDir;
 
     // Machine settings JSON (base64 encoded for clean embedding)
@@ -240,7 +241,7 @@ fi
     // Set parallel processing env vars to match SLURM allocation
     const singularityEnvArgs = [
       '--env TERM=xterm-256color',
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
       `--env OMP_NUM_THREADS=${cpus}`,
@@ -273,7 +274,7 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
   -B ${this.cluster.bindPaths} \\
-  ${this.cluster.singularityImage} \\
+  ${releasePaths.singularityImage} \\
   code serve-web \\
     --host 0.0.0.0 \\
     --port $IDE_PORT \\
@@ -289,11 +290,15 @@ exec ${this.cluster.singularityBin} exec \\
    * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
    * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required.
    * @param {number} cpus - Number of CPUs
+   * @param {Object} options - Build options
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @returns {string} Shell script content
    */
-  buildRstudioScript(cpus) {
+  buildRstudioScript(cpus, options = {}) {
+    const { releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides.rstudio;
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
     const workdir = '$HOME/.rstudio-slurm/workdir';
 
     // Config files (base64 encoded for clean embedding)
@@ -312,6 +317,9 @@ www-root-path=/rstudio-direct
     const rstudioPrefs = JSON.stringify(rstudioDefaults);
     const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
+    // Use releaseVersion for R_LIBS_USER path (e.g., bioc-3.22)
+    const biocVersion = releaseVersion;
+
     // rsession wrapper script
     const rsessionScript = `#!/bin/sh
 exec 2>>$HOME/.rstudio-slurm/rsession.log
@@ -324,8 +332,8 @@ export OPENBLAS_NUM_THREADS=${cpus}
 export NUMEXPR_NUM_THREADS=${cpus}
 export MC_CORES=${cpus}
 export BIOCPARALLEL_WORKER_NUMBER=${cpus}
-export R_LIBS_SITE=${this.cluster.rLibsSite}
-export R_LIBS_USER=$HOME/R/bioc-3.19
+export R_LIBS_SITE=${releasePaths.rLibsSite}
+export R_LIBS_USER=$HOME/R/bioc-${biocVersion}
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 exec /usr/lib/rstudio-server/bin/rsession "$@"
@@ -350,7 +358,7 @@ exec /usr/lib/rstudio-server/bin/rsession "$@"
 
     // Build singularity env args (filter out empty strings)
     const singularityEnvArgs = [
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env USER=$(whoami)',
     ].filter(Boolean).join(' \\\n  ');
@@ -380,7 +388,7 @@ export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0
 exec ${this.cluster.singularityBin} exec --cleanenv \\
   ${singularityEnvArgs} \\
   -B ${rstudioBinds} \\
-  ${this.cluster.singularityImage} \\
+  ${releasePaths.singularityImage} \\
   rserver \\
     --www-address=0.0.0.0 \\
     --www-port=$IDE_PORT \\
@@ -396,17 +404,19 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
   /**
    * Build job script for JupyterLab
    * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
-   * @param {Object} options - Options including gpu type and token
+   * @param {Object} options - Options including gpu type, token, and release version
    * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
    * @param {string} options.token - Authentication token
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @param {number} options.cpus - Number of CPUs for parallel processing
    * @returns {string} Shell script content
    */
   buildJupyterScript(options = {}) {
-    const { gpu = 'none', token, cpus = 1 } = options;
+    const { gpu = 'none', token, releaseVersion = defaultReleaseVersion, cpus = 1 } = options;
     const ideConfig = ides.jupyter;
     const workdir = '$HOME/.jupyter-slurm';
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
 
     // Port finder script
     const portFile = '$HOME/.jupyter-slurm/port';
@@ -425,7 +435,7 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       '--env TERM=xterm-256color',
       token ? `--env JUPYTER_TOKEN=${token}` : '',
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
       `--env OMP_NUM_THREADS=${cpus}`,
@@ -463,7 +473,7 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 exec ${this.cluster.singularityBin} exec \\
   ${singularityArgs} \\
   -B ${this.cluster.bindPaths} \\
-  ${this.cluster.singularityImage} \\
+  ${releasePaths.singularityImage} \\
   jupyter lab \\
     ${jupyterArgs}
 `;
@@ -476,14 +486,20 @@ exec ${this.cluster.singularityBin} exec \\
    * @param {string} time - Walltime (e.g., "12:00:00")
    * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
    * @param {Object} options - Additional options
-   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100') - Gemini only
+   * @param {string} options.gpu - GPU type ('' for none, 'a100', 'v100') - Gemini only
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @returns {Promise<{jobId: string, token: string}>} Job ID and auth token
    */
   async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
-    const { gpu = 'none' } = options;
+    const { gpu = '', releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides[ide];
     if (!ideConfig) {
       throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    // Validate releaseVersion
+    if (!releases[releaseVersion]) {
+      throw new Error(`Unknown release: ${releaseVersion}`);
     }
 
     // Generate auth token for VS Code and JupyterLab (RStudio uses auth-none)
@@ -493,7 +509,7 @@ exec ${this.cluster.singularityBin} exec \\
     let partition = this.cluster.partition;
     let gresArg = '';
 
-    if (gpu !== 'none') {
+    if (gpu) {
       const clusterGpu = gpuConfig[this.clusterName];
       if (!clusterGpu || !clusterGpu[gpu]) {
         throw new Error(`GPU type '${gpu}' not available on ${this.clusterName}`);
@@ -506,17 +522,17 @@ exec ${this.cluster.singularityBin} exec \\
     // Logs written to /tmp on compute node
     const logDir = '/tmp';
 
-    // Build IDE-specific script
+    // Build IDE-specific script (pass releaseVersion and cpus for release-specific paths and parallelism)
     let script;
     switch (ide) {
       case 'vscode':
-        script = this.buildVscodeScript({ token, cpus });
+        script = this.buildVscodeScript({ token, releaseVersion, cpus });
         break;
       case 'rstudio':
-        script = this.buildRstudioScript(cpus);
+        script = this.buildRstudioScript(cpus, { releaseVersion });
         break;
       case 'jupyter':
-        script = this.buildJupyterScript({ gpu, token, cpus });
+        script = this.buildJupyterScript({ gpu, token, releaseVersion, cpus });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
