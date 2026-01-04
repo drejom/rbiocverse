@@ -279,10 +279,11 @@ function renderIdeSelector(hpc, runningIdeNames = []) {
  * Render idle state with IDE selector and launch form
  */
 function renderIdleContent(hpc, runningIdes) {
-  // If there are running IDEs, show them first, then offer to launch another
+  // If there are running IDEs, show them in a green-bordered container
   let runningSection = '';
   if (runningIdes.length > 0) {
-    runningSection = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
+    const sessions = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
+    runningSection = `<div class="running-sessions">${sessions}</div>`;
   }
 
   // Determine which IDEs are available to launch (not running, available for release)

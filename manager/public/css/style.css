@@ -121,8 +121,16 @@ h1 {
 }
 
 .cluster-card.running {
-  border-color: #4ade80;
+  /* Card itself no longer has green border - moved to .running-sessions */
+}
+
+/* Container for running IDE sessions - gets the green border */
+.running-sessions {
+  border: 2px solid #4ade80;
   background: rgba(74, 222, 128, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
 }
 
 .cluster-card.pending {
