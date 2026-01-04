@@ -195,7 +195,7 @@ function renderGpuSelector(hpc) {
 
   return `
     <div class="gpu-selector">
-      <label class="gpu-label">Accelerator</label>
+      <label class="gpu-label"><i data-lucide="gpu" class="icon-sm"></i>Accelerator</label>
       <div class="gpu-toggle" id="${hpc}-gpu-toggle">
         ${buttons}
       </div>
@@ -315,8 +315,8 @@ function renderIdleContent(hpc, runningIdes) {
             <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
             <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
           </div>
-          ${renderGpuSelector(hpc)}
         </div>
+        ${renderGpuSelector(hpc)}
         <div class="btn-group">
           <button class="btn btn-primary" onclick="launch('${hpc}')">
             <i data-lucide="play" class="lucide"></i> Launch ${availableIdes[selectedIde[hpc]]?.name || 'IDE'}
@@ -344,8 +344,8 @@ function renderIdleContent(hpc, runningIdes) {
           <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
           <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
         </div>
-        ${renderGpuSelector(hpc)}
       </div>
+      ${renderGpuSelector(hpc)}
       <div class="btn-group">
         <button class="btn btn-primary" onclick="launch('${hpc}')">
           <i data-lucide="play" class="lucide"></i> Launch ${availableIdes[selectedIde[hpc]]?.name || 'IDE'}

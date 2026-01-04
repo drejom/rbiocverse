@@ -751,8 +751,8 @@ h1 {
 
 /* GPU Selector - Segmented control (Apple-like) */
 .gpu-selector {
-  margin-top: 12px;
-  margin-bottom: 8px;
+  margin-top: 8px;
+  margin-bottom: 12px;
 }
 
 .gpu-label {
