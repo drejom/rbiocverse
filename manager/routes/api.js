@@ -183,6 +183,8 @@ function createApiRouter(stateManager) {
         memory: session.memory,
         walltime: session.walltime,
         startedAt: session.startedAt,
+        releaseVersion: session.releaseVersion,  // Bioconductor release for floating menu
+        gpu: session.gpu,                        // GPU type for floating menu
       };
     }
     return sessions;
@@ -318,9 +320,27 @@ function createApiRouter(stateManager) {
       const apolloCacheAge = apolloFetchNeeded ? 0 : apolloCache.age;
       const maxCacheAge = Math.max(geminiCacheAge, apolloCacheAge);
 
+      // Merge session data (releaseVersion, gpu) with SLURM job data
+      // SLURM doesn't track releaseVersion/gpu, so we get it from state.sessions
+      function enrichWithSessionData(clusterData, hpc) {
+        const enriched = { ...clusterData };
+        for (const [ide, jobData] of Object.entries(enriched)) {
+          const sessionKey = `${hpc}-${ide}`;
+          const session = state.sessions[sessionKey];
+          if (session) {
+            enriched[ide] = {
+              ...jobData,
+              releaseVersion: session.releaseVersion || null,
+              gpu: session.gpu || null,
+            };
+          }
+        }
+        return enriched;
+      }
+
       res.json({
-        gemini: geminiData,
-        apollo: apolloData,
+        gemini: enrichWithSessionData(geminiData, 'gemini'),
+        apollo: enrichWithSessionData(apolloData, 'apollo'),
         activeSession: state.activeSession,  // Always use current activeSession, not cached
         ides: Object.fromEntries(
           Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])

@@ -142,21 +142,25 @@ function getIdesForRelease(releaseVersion) {
 }
 
 /**
- * Render release selector dropdown
- * Only shows releases available for the current cluster
+ * Render release selector with Bioconductor logo
+ * Clean Apple-like design with minimal version display
  * @param {string} hpc - Cluster name
  */
 function renderReleaseSelector(hpc) {
   const clusterReleases = getReleasesForCluster(hpc);
   const options = Object.entries(clusterReleases).map(([version, info]) => {
     const selected = selectedReleaseVersion[hpc] === version ? 'selected' : '';
-    return `<option value="${version}" ${selected}>${info.name}</option>`;
+    // Show only version number in dropdown (e.g., "3.22" not "Bioconductor 3.22")
+    return `<option value="${version}" ${selected}>${version}</option>`;
   }).join('');
 
   return `
-    <div class="form-input form-input-release">
-      <label><i data-lucide="package" class="icon-sm"></i>Release</label>
-      <select id="${hpc}-release" onchange="onReleaseChange('${hpc}')">
+    <div class="release-selector">
+      <div class="release-brand">
+        <img src="/images/bioconductor-logo.svg" alt="Bioconductor" class="bioc-logo" onerror="this.style.display='none'">
+        <span class="release-label">Bioconductor</span>
+      </div>
+      <select id="${hpc}-release" class="release-dropdown" onchange="onReleaseChange('${hpc}')">
         ${options}
       </select>
     </div>
@@ -164,8 +168,8 @@ function renderReleaseSelector(hpc) {
 }
 
 /**
- * Render GPU selector dropdown
- * Only shown for clusters that have GPU support in gpuConfig
+ * Render GPU toggle selector
+ * Clean toggle buttons for GPU selection (Apple-like segmented control)
  * @param {string} hpc - Cluster name
  */
 function renderGpuSelector(hpc) {
@@ -173,24 +177,46 @@ function renderGpuSelector(hpc) {
   const clusterGpuConfig = gpuConfig[hpc];
   if (!clusterGpuConfig) return '';
 
-  // Build options from gpuConfig with selected state
-  const gpuOptions = Object.entries(clusterGpuConfig).map(([type, config]) => {
-    const maxTime = config.maxTime || '';
-    const label = `${type.toUpperCase()}${maxTime ? ` (${maxTime} max)` : ''}`;
-    const selected = selectedGpu[hpc] === type ? 'selected' : '';
-    return `<option value="${type}" ${selected}>${label}</option>`;
-  }).join('');
-
+  // Build toggle buttons (CPU, then each GPU type)
+  const gpuTypes = Object.keys(clusterGpuConfig);
   const noneSelected = !selectedGpu[hpc] ? 'selected' : '';
+
+  const buttons = [
+    `<button type="button" class="gpu-btn ${noneSelected}" data-gpu="" onclick="selectGpu('${hpc}', '')">
+      <i data-lucide="cpu" class="icon-xs"></i> CPU
+    </button>`,
+    ...gpuTypes.map(type => {
+      const selected = selectedGpu[hpc] === type ? 'selected' : '';
+      return `<button type="button" class="gpu-btn ${selected}" data-gpu="${type}" onclick="selectGpu('${hpc}', '${type}')">
+        <i data-lucide="zap" class="icon-xs"></i> ${type.toUpperCase()}
+      </button>`;
+    })
+  ].join('');
+
   return `
-    <div class="form-input">
-      <label><i data-lucide="zap" class="icon-sm"></i>GPU</label>
-      <select id="${hpc}-gpu" onchange="onGpuChange('${hpc}')">
-        <option value="" ${noneSelected}>None (CPU only)</option>
-        ${gpuOptions}
-      </select>
+    <div class="gpu-selector">
+      <label class="gpu-label">Accelerator</label>
+      <div class="gpu-toggle" id="${hpc}-gpu-toggle">
+        ${buttons}
+      </div>
     </div>
   `;
+}
+
+/**
+ * Handle GPU selection via toggle buttons
+ * @param {string} hpc - Cluster name
+ * @param {string} gpu - GPU type ('' for CPU only)
+ */
+function selectGpu(hpc, gpu) {
+  selectedGpu[hpc] = gpu;
+  // Update toggle button states
+  const toggle = document.getElementById(hpc + '-gpu-toggle');
+  if (toggle) {
+    toggle.querySelectorAll('.gpu-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.gpu === gpu);
+    });
+  }
 }
 
 /**
@@ -212,15 +238,6 @@ function onReleaseChange(hpc) {
   // Re-render the cluster card to update IDE buttons
   const ideStatuses = clusterStatus[hpc] || {};
   updateClusterCard(hpc, ideStatuses);
-}
-
-/**
- * Handle GPU change
- * @param {string} hpc - Cluster name
- */
-function onGpuChange(hpc) {
-  const select = document.getElementById(hpc + '-gpu');
-  selectedGpu[hpc] = select.value;
 }
 
 /**
