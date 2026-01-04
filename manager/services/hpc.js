@@ -237,12 +237,15 @@ fi
     const tokenArg = token ? `--connection-token=${token}` : '--without-connection-token';
 
     // Build singularity env args (filter out empty strings)
+    // Set parallel processing env vars to match SLURM allocation
     const singularityEnvArgs = [
       '--env TERM=xterm-256color',
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
       `--env OMP_NUM_THREADS=${cpus}`,
+      `--env MKL_NUM_THREADS=${cpus}`,
+      `--env MC_CORES=${cpus}`,
       `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
 
@@ -314,6 +317,8 @@ set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
+export MKL_NUM_THREADS=${cpus}
+export MC_CORES=${cpus}
 export BIOCPARALLEL_WORKER_NUMBER=${cpus}
 export R_LIBS_SITE=${this.cluster.rLibsSite}
 export R_LIBS_USER=$HOME/R/bioc-3.19
@@ -410,6 +415,7 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
     const tokenArg = token ? '' : "--ServerApp.token=''";
 
     // Build singularity args (filter out empty strings)
+    // Set parallel processing env vars to match SLURM allocation
     const singularityArgs = [
       nvFlag,
       '--env TERM=xterm-256color',
@@ -419,6 +425,8 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
       `--env OMP_NUM_THREADS=${cpus}`,
+      `--env MKL_NUM_THREADS=${cpus}`,
+      `--env MC_CORES=${cpus}`,
       `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
 
