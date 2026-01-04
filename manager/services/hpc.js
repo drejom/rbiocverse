@@ -245,6 +245,8 @@ fi
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
+      `--env OPENBLAS_NUM_THREADS=${cpus}`,
+      `--env NUMEXPR_NUM_THREADS=${cpus}`,
       `--env MC_CORES=${cpus}`,
       `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
@@ -318,6 +320,8 @@ export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
 export MKL_NUM_THREADS=${cpus}
+export OPENBLAS_NUM_THREADS=${cpus}
+export NUMEXPR_NUM_THREADS=${cpus}
 export MC_CORES=${cpus}
 export BIOCPARALLEL_WORKER_NUMBER=${cpus}
 export R_LIBS_SITE=${this.cluster.rLibsSite}
@@ -426,6 +430,8 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
+      `--env OPENBLAS_NUM_THREADS=${cpus}`,
+      `--env NUMEXPR_NUM_THREADS=${cpus}`,
       `--env MC_CORES=${cpus}`,
       `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
