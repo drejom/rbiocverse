@@ -229,19 +229,79 @@ const gpuConfig = {
   apollo: null,
 };
 
-// Shared Python environment (mirrors R_LIBS_SITE pattern)
-const pythonEnv = {
-  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
-  apollo: '/opt/singularity-images/rbioc/python/bioc-3.22',
+// Bioconductor release configurations
+// Each release specifies which IDEs are available and paths per cluster
+// Note: 3.18 and 3.17 are Apollo-only (legacy releases)
+const releases = {
+  '3.22': {
+    name: 'Bioconductor 3.22',
+    ides: ['vscode', 'rstudio', 'jupyter'],
+    paths: {
+      gemini: {
+        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
+        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
+        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
+      },
+      apollo: {
+        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
+        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
+        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.22',
+      },
+    },
+  },
+  '3.19': {
+    name: 'Bioconductor 3.19',
+    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.19
+    paths: {
+      gemini: {
+        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
+        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
+        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.19',
+      },
+      apollo: {
+        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
+        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
+        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.19',
+      },
+    },
+  },
+  '3.18': {
+    name: 'Bioconductor 3.18',
+    ides: ['vscode', 'rstudio'],  // Apollo only, no JupyterLab
+    paths: {
+      apollo: {
+        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.18.sif',
+        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
+        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.18',
+      },
+    },
+  },
+  '3.17': {
+    name: 'Bioconductor 3.17',
+    ides: ['vscode', 'rstudio'],  // Apollo only, no JupyterLab
+    paths: {
+      apollo: {
+        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.17.sif',
+        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.17',
+        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.17',
+      },
+    },
+  },
 };
 
+const defaultReleaseVersion = '3.22';
+
+// Cluster configurations (non-release-specific settings)
+// Note: singularityImage and rLibsSite use default release for backward compat
+// New code should use getReleasePaths() for release-specific paths
 const clusters = {
   gemini: {
     host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
     partition: 'compute',
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
-    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
-    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
+    // Legacy paths (default release) - use getReleasePaths for release-aware code
+    singularityImage: releases[defaultReleaseVersion].paths.gemini.singularityImage,
+    rLibsSite: releases[defaultReleaseVersion].paths.gemini.rLibsSite,
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/packages,/scratch,/ref_genomes',
   },
@@ -249,11 +309,39 @@ const clusters = {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
     partition: 'fast,all',
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
+    // Legacy paths (default release) - use getReleasePaths for release-aware code
+    singularityImage: releases[defaultReleaseVersion].paths.apollo.singularityImage,
+    rLibsSite: releases[defaultReleaseVersion].paths.apollo.rLibsSite,
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/opt,/labs',
   },
 };
 
-module.exports = { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults };
+// Helper to get release-specific paths for a cluster
+function getReleasePaths(clusterName, releaseVersion = defaultReleaseVersion) {
+  const releaseConfig = releases[releaseVersion];
+  if (!releaseConfig) {
+    throw new Error(`Unknown release: ${releaseVersion}`);
+  }
+  return releaseConfig.paths[clusterName];
+}
+
+// Legacy pythonEnv export (deprecated - use getReleasePaths instead)
+// Kept for backward compatibility with existing hpc.js code
+const pythonEnv = {
+  gemini: releases[defaultReleaseVersion].paths.gemini.pythonEnv,
+  apollo: releases[defaultReleaseVersion].paths.apollo.pythonEnv,
+};
+
+module.exports = {
+  config,
+  clusters,
+  ides,
+  gpuConfig,
+  releases,
+  defaultReleaseVersion,
+  getReleasePaths,
+  pythonEnv,  // Deprecated - use getReleasePaths
+  vscodeDefaults,
+  rstudioDefaults,
+};

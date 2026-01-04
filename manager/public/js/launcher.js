@@ -17,9 +17,15 @@ let defaultConfig = {
 // Available IDEs from server
 let availableIdes = {};
 
-// Selected IDE per cluster (for launch form)
+// Available releases from server
+let availableReleases = {};
+let defaultReleaseVersion = '3.22';
+
+// Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
 let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
+let selectedReleaseVersion = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '3.22']));
+let selectedGpu = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '']));  // '' = no GPU
 
 // Cluster status keyed by hpc (contains ides)
 // Initialized dynamically from CLUSTER_NAMES
@@ -105,20 +111,129 @@ function renderTimePie(remaining, total, hpc, ide) {
 }
 
 /**
+ * Get releases available for a specific cluster
+ * Filters out releases that don't have paths for the cluster
+ * @param {string} hpc - Cluster name (e.g., 'gemini', 'apollo')
+ * @returns {Object} Filtered releases object
+ */
+function getReleasesForCluster(hpc) {
+  const filtered = {};
+  for (const [version, info] of Object.entries(availableReleases)) {
+    // Only include releases that have paths for this cluster
+    if (info.clusters && info.clusters.includes(hpc)) {
+      filtered[version] = info;
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Get IDEs available for the selected release
+ * @param {string} releaseVersion - Release version (e.g., '3.22')
+ * @returns {string[]} List of IDE names available for this release
+ */
+function getIdesForRelease(releaseVersion) {
+  const releaseConfig = availableReleases[releaseVersion];
+  return releaseConfig ? releaseConfig.ides : Object.keys(availableIdes);
+}
+
+/**
+ * Render release selector dropdown
+ * Only shows releases available for the current cluster
+ * @param {string} hpc - Cluster name
+ */
+function renderReleaseSelector(hpc) {
+  const clusterReleases = getReleasesForCluster(hpc);
+  const options = Object.entries(clusterReleases).map(([version, info]) => {
+    const selected = selectedReleaseVersion[hpc] === version ? 'selected' : '';
+    return `<option value="${version}" ${selected}>${info.name}</option>`;
+  }).join('');
+
+  return `
+    <div class="form-input form-input-release">
+      <label><i data-lucide="package" class="icon-sm"></i>Release</label>
+      <select id="${hpc}-release" onchange="onReleaseChange('${hpc}')">
+        ${options}
+      </select>
+    </div>
+  `;
+}
+
+/**
+ * Render GPU selector dropdown (Gemini only)
+ * @param {string} hpc - Cluster name
+ */
+function renderGpuSelector(hpc) {
+  // Only show GPU selector for Gemini
+  if (hpc !== 'gemini') return '';
+
+  return `
+    <div class="form-input">
+      <label><i data-lucide="zap" class="icon-sm"></i>GPU</label>
+      <select id="${hpc}-gpu" onchange="onGpuChange('${hpc}')">
+        <option value="">None (CPU only)</option>
+        <option value="a100">A100 (4-day max)</option>
+        <option value="v100">V100 (8-day max)</option>
+      </select>
+    </div>
+  `;
+}
+
+/**
+ * Handle release change - filter available IDEs
+ * @param {string} hpc - Cluster name
+ */
+function onReleaseChange(hpc) {
+  const select = document.getElementById(hpc + '-release');
+  const newReleaseVersion = select.value;
+  selectedReleaseVersion[hpc] = newReleaseVersion;
+
+  // Check if current IDE is available in new release
+  const availableForRelease = getIdesForRelease(newReleaseVersion);
+  if (!availableForRelease.includes(selectedIde[hpc])) {
+    // Auto-select first available IDE
+    selectedIde[hpc] = availableForRelease[0] || 'vscode';
+  }
+
+  // Re-render the cluster card to update IDE buttons
+  const ideStatuses = clusterStatus[hpc] || {};
+  updateClusterCard(hpc, ideStatuses);
+}
+
+/**
+ * Handle GPU change
+ * @param {string} hpc - Cluster name
+ */
+function onGpuChange(hpc) {
+  const select = document.getElementById(hpc + '-gpu');
+  selectedGpu[hpc] = select.value;
+}
+
+/**
  * Render IDE selector buttons
  * @param {string} hpc - Cluster name
  * @param {string[]} runningIdeNames - List of IDE names that are already running
  */
 function renderIdeSelector(hpc, runningIdeNames = []) {
+  const releaseVersion = selectedReleaseVersion[hpc];
+  const idesForRelease = getIdesForRelease(releaseVersion);
+
   const buttons = Object.entries(availableIdes).map(([ide, info]) => {
     const isRunning = runningIdeNames.includes(ide);
+    const isAvailable = idesForRelease.includes(ide);
     const selected = selectedIde[hpc] === ide ? 'selected' : '';
-    const disabled = isRunning ? 'disabled' : '';
-    const title = isRunning ? `${info.name} is already running` : `Launch ${info.name}`;
+    const disabled = isRunning || !isAvailable ? 'disabled' : '';
+
+    let title = `Launch ${info.name}`;
+    if (isRunning) {
+      title = `${info.name} is already running`;
+    } else if (!isAvailable) {
+      title = `${info.name} not available on ${availableReleases[releaseVersion]?.name || releaseVersion}`;
+    }
 
     return `
       <button class="ide-btn ${selected} ${disabled}" data-ide="${ide}"
-        onclick="${isRunning ? '' : `selectIde('${hpc}', '${ide}')`}"
+        onclick="${isRunning || !isAvailable ? '' : `selectIde('${hpc}', '${ide}')`}"
         ${disabled} title="${title}">
         <i class="${info.icon} icon-sm"></i>
         <span>${info.name}</span>
@@ -139,20 +254,22 @@ function renderIdleContent(hpc, runningIdes) {
     runningSection = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
   }
 
-  // Determine which IDEs are available to launch
+  // Determine which IDEs are available to launch (not running, available for release)
   const runningIdeNames = runningIdes.map(r => r.ide);
-  const idleIdes = Object.keys(availableIdes).filter(ide => !runningIdeNames.includes(ide));
+  const idesForRelease = getIdesForRelease(selectedReleaseVersion[hpc]);
+  const idleIdes = idesForRelease.filter(ide => !runningIdeNames.includes(ide));
 
   let launchSection = '';
   if (idleIdes.length > 0) {
-    // Auto-select first idle IDE if current selection is running
-    if (runningIdeNames.includes(selectedIde[hpc])) {
+    // Auto-select first idle IDE if current selection is running or unavailable
+    if (runningIdeNames.includes(selectedIde[hpc]) || !idesForRelease.includes(selectedIde[hpc])) {
       selectedIde[hpc] = idleIdes[0];
     }
 
     launchSection = `
       <div class="launch-section">
         ${runningIdes.length > 0 ? '<div class="section-divider">Launch another IDE</div>' : ''}
+        ${renderReleaseSelector(hpc)}
         ${renderIdeSelector(hpc, runningIdeNames)}
         <div class="launch-form">
           <div class="form-input">
@@ -167,6 +284,7 @@ function renderIdleContent(hpc, runningIdes) {
             <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
             <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
           </div>
+          ${renderGpuSelector(hpc)}
         </div>
         <div class="btn-group">
           <button class="btn btn-primary" onclick="launch('${hpc}')">
@@ -180,6 +298,7 @@ function renderIdleContent(hpc, runningIdes) {
   if (runningIdes.length === 0) {
     return `
       <div class="cluster-info">No active sessions</div>
+      ${renderReleaseSelector(hpc)}
       ${renderIdeSelector(hpc)}
       <div class="launch-form">
         <div class="form-input">
@@ -194,6 +313,7 @@ function renderIdleContent(hpc, runningIdes) {
           <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
           <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
         </div>
+        ${renderGpuSelector(hpc)}
       </div>
       <div class="btn-group">
         <button class="btn btn-primary" onclick="launch('${hpc}')">
@@ -409,6 +529,20 @@ async function fetchStatus(forceRefresh = false) {
     // Store available IDEs
     if (data.ides) {
       availableIdes = data.ides;
+    }
+
+    // Store available releases
+    if (data.releases) {
+      availableReleases = data.releases;
+    }
+    if (data.defaultReleaseVersion) {
+      defaultReleaseVersion = data.defaultReleaseVersion;
+      // Initialize selected release if not already set
+      for (const hpc of CLUSTER_NAMES) {
+        if (!selectedReleaseVersion[hpc]) {
+          selectedReleaseVersion[hpc] = defaultReleaseVersion;
+        }
+      }
     }
 
     // Track cache info
@@ -731,7 +865,9 @@ function setupLaunchStreamHandlers(eventSource, hpc, ide) {
  */
 async function launch(hpc) {
   const ide = selectedIde[hpc];
-  console.log('[Launcher] Launch requested:', hpc, ide);
+  const releaseVersion = selectedReleaseVersion[hpc];
+  const gpu = selectedGpu[hpc] || '';
+  console.log('[Launcher] Launch requested:', hpc, ide, 'releaseVersion:', releaseVersion, 'gpu:', gpu || 'none');
 
   const overlay = document.getElementById('loading-overlay');
   const cancelBtn = document.getElementById('cancel-launch-btn');
@@ -749,8 +885,9 @@ async function launch(hpc) {
   const mem = document.getElementById(hpc + '-mem').value;
   const time = document.getElementById(hpc + '-time').value;
 
-  // Build SSE URL with query params
-  const params = new URLSearchParams({ cpus, mem, time });
+  // Build SSE URL with query params (include releaseVersion and gpu)
+  const params = new URLSearchParams({ cpus, mem, time, releaseVersion });
+  if (gpu) params.set('gpu', gpu);
   const url = `/api/launch/${hpc}/${ide}/stream?${params}`;
 
   // Create EventSource for SSE

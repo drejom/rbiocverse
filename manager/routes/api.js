@@ -12,7 +12,7 @@ const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
-const { config, ides, gpuConfig } = require('../config');
+const { config, ides, gpuConfig, releases, defaultReleaseVersion } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
 const { createIdleSession } = require('../lib/state');
@@ -325,6 +325,15 @@ function createApiRouter(stateManager) {
         ides: Object.fromEntries(
           Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
         ),
+        releases: Object.fromEntries(
+          Object.entries(releases).map(([k, v]) => [k, {
+            name: v.name,
+            ides: v.ides,
+            clusters: Object.keys(v.paths),  // Which clusters support this release
+          }])
+        ),
+        defaultReleaseVersion,
+        gpuConfig,  // Include GPU config for client-side validation
         updatedAt: new Date().toISOString(),
         cached: !anyFresh,
         cacheAge: Math.floor(maxCacheAge / 1000),
@@ -502,15 +511,34 @@ function createApiRouter(stateManager) {
     const cpus = req.query.cpus || config.defaultCpus;
     const mem = req.query.mem || config.defaultMem;
     const time = req.query.time || config.defaultTime;
-    const gpu = req.query.gpu || 'none';
+    const gpu = req.query.gpu || '';
+    const releaseVersion = req.query.releaseVersion || defaultReleaseVersion;
 
     // Validate IDE type
     if (!ides[ide]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
+    // Validate releaseVersion
+    if (!releases[releaseVersion]) {
+      const availableReleases = Object.keys(releases).join(', ');
+      return res.status(400).json({ error: `Invalid release: ${releaseVersion}. Available: ${availableReleases}` });
+    }
+
+    // Validate release is available for this cluster
+    if (!releases[releaseVersion].paths[hpc]) {
+      const availableClusters = Object.keys(releases[releaseVersion].paths).join(', ');
+      return res.status(400).json({ error: `${releases[releaseVersion].name} is not available on ${hpc}. Available on: ${availableClusters}` });
+    }
+
+    // Validate IDE is available for this release
+    if (!releases[releaseVersion].ides.includes(ide)) {
+      const availableIdes = releases[releaseVersion].ides.join(', ');
+      return res.status(400).json({ error: `${ides[ide].name} is not available on ${releases[releaseVersion].name}. Available IDEs: ${availableIdes}` });
+    }
+
     // Validate GPU type
-    if (gpu !== 'none') {
+    if (gpu) {
       const clusterGpuConfig = gpuConfig[hpc];
       if (!clusterGpuConfig) {
         return res.status(400).json({ error: `GPU support is not available on the ${hpc} cluster` });
@@ -657,13 +685,16 @@ function createApiRouter(stateManager) {
 
       if (!jobInfo) {
         // Fresh launch - submit new job
-        const gpuLabel = gpu !== 'none' ? ` (${gpu.toUpperCase()})` : '';
+        const gpuLabel = gpu ? ` (${gpu.toUpperCase()})` : '';
+        const releaseLabel = releases[releaseVersion]?.name || releaseVersion;
         sendProgress('submitting', `Requesting resources${gpuLabel}...`);
-        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu });
+        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu: gpu || 'none', releaseVersion });
 
-        const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu });
+        const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu, releaseVersion });
         session.jobId = result.jobId;
         session.token = result.token;  // Auth token for VS Code/Jupyter
+        session.releaseVersion = releaseVersion;  // Store release with session
+        session.gpu = gpu || null;                // Store GPU with session
 
         sendProgress('submitted', `Job ${session.jobId} submitted`, { jobId: session.jobId });
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });

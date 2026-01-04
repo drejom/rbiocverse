@@ -5,7 +5,7 @@
 
 const { exec } = require('child_process');
 const crypto = require('crypto');
-const { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults } = require('../config');
+const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
 
 /**
@@ -171,11 +171,13 @@ class HpcService {
    * Writes Machine settings and bootstraps extensions before starting server
    * @param {Object} options - Build options
    * @param {string} options.token - Connection token for authentication
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    */
   buildVscodeWrap(options = {}) {
-    const { token } = options;
+    const { token, releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides.vscode;
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
 
     // Paths (using \\$ for SSH escaping)
     const dataDir = '\\$HOME/.vscode-slurm/.vscode-server';
@@ -237,13 +239,13 @@ fi
     const singularityCmd = [
       `${this.cluster.singularityBin} exec`,
       `--env TERM=xterm-256color`,
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonEnvArg,
       // Use file-based keyring instead of gnome-keyring (not available in container)
       // See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/4
       `--env VSCODE_KEYRING_PASS=hpc-code-server`,
       `-B ${this.cluster.bindPaths}`,
-      this.cluster.singularityImage,
+      releasePaths.singularityImage,
       `code serve-web`,
       `--host 0.0.0.0`,
       `--port \\$IDE_PORT`,
@@ -265,11 +267,15 @@ fi
    * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required.
    * Requires --env USER for user-id cookie when using --cleanenv.
    * @param {number} cpus - Number of CPUs
+   * @param {Object} options - Build options
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @returns {string} sbatch wrap command
    */
-  buildRstudioWrap(cpus) {
+  buildRstudioWrap(cpus, options = {}) {
+    const { releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides.rstudio;
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
 
     // ESCAPING: Two different contexts require different escaping strategies
     // See docs/ESCAPING.md for full explanation.
@@ -309,14 +315,16 @@ www-root-path=/rstudio-direct
     const rstudioPrefs = JSON.stringify(rstudioDefaults);
     const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
+    // Extract major.minor version from releaseVersion for R_LIBS_USER path
+    const biocVersion = releaseVersion;
     const rsessionScript = `#!/bin/sh
 exec 2>>${dollar}HOME/.rstudio-slurm/rsession.log
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
-export R_LIBS_SITE=${this.cluster.rLibsSite}
-export R_LIBS_USER=${dollar}HOME/R/bioc-3.19
+export R_LIBS_SITE=${releasePaths.rLibsSite}
+export R_LIBS_USER=${dollar}HOME/R/bioc-${biocVersion}
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
@@ -368,11 +376,11 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 
     const singularityCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonEnvArg,
       '--env USER=\\$(whoami)',  // Required for auth-none - user-id cookie needs username
       `-B ${rstudioBinds}`,
-      `${this.cluster.singularityImage}`,
+      `${releasePaths.singularityImage}`,
       `rserver`,
       '--www-address=0.0.0.0',
       `--www-port=\\$IDE_PORT`,
@@ -392,16 +400,18 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
   /**
    * Build sbatch wrap command for JupyterLab
    * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
-   * @param {Object} options - Options including gpu type and token
+   * @param {Object} options - Options including gpu type, token, and release version
    * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
    * @param {string} options.token - Authentication token
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @returns {string} sbatch wrap command
    */
   buildJupyterWrap(options = {}) {
-    const { gpu = 'none', token } = options;
+    const { gpu = 'none', token, releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides.jupyter;
     const workdir = '\\$HOME/.jupyter-slurm';
-    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+    const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
+    const pythonSitePackages = releasePaths.pythonEnv || '';
 
     // Port finder script - finds available port and writes to ~/.jupyter-slurm/port
     // Handles port collisions when multiple users land on the same compute node
@@ -433,11 +443,11 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `--env TERM=xterm-256color`,
       tokenEnv,
       pythonEnvArg,
-      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
       `-B ${this.cluster.bindPaths}`,
-      this.cluster.singularityImage,
+      releasePaths.singularityImage,
       `jupyter lab`,
       `--ip=0.0.0.0`,
       `--port=\\$IDE_PORT`,
@@ -463,10 +473,15 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
    * @returns {Promise<{jobId: string, token: string}>} Job ID and auth token
    */
   async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
-    const { gpu = 'none' } = options;
+    const { gpu = '', releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides[ide];
     if (!ideConfig) {
       throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    // Validate releaseVersion
+    if (!releases[releaseVersion]) {
+      throw new Error(`Unknown release: ${releaseVersion}`);
     }
 
     // Generate auth token for VS Code and JupyterLab (RStudio uses auth-none)
@@ -476,7 +491,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     let partition = this.cluster.partition;
     let gresArg = null;
 
-    if (gpu !== 'none') {
+    if (gpu) {
       const clusterGpu = gpuConfig[this.clusterName];
       if (!clusterGpu || !clusterGpu[gpu]) {
         throw new Error(`GPU type '${gpu}' not available on ${this.clusterName}`);
@@ -490,17 +505,17 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     // To locate logs if needed: ssh <node> cat /tmp/hpc-vscode_<jobid>.log
     const logDir = '/tmp';
 
-    // Build IDE-specific wrap command
+    // Build IDE-specific wrap command (pass releaseVersion for release-specific paths)
     let wrapCmd;
     switch (ide) {
       case 'vscode':
-        wrapCmd = this.buildVscodeWrap({ token });
+        wrapCmd = this.buildVscodeWrap({ token, releaseVersion });
         break;
       case 'rstudio':
-        wrapCmd = this.buildRstudioWrap(cpus);
+        wrapCmd = this.buildRstudioWrap(cpus, { releaseVersion });
         break;
       case 'jupyter':
-        wrapCmd = this.buildJupyterWrap({ gpu, token });
+        wrapCmd = this.buildJupyterWrap({ gpu, token, releaseVersion });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
