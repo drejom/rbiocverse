@@ -93,7 +93,7 @@ body {
   backdrop-filter: blur(10px);
   border-radius: 20px;
   padding: 30px;
-  max-width: 720px;
+  max-width: 680px;
   width: 100%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
@@ -236,7 +236,8 @@ h1 {
 
 .form-input input {
   width: 100%;
-  padding: 8px;
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
@@ -760,7 +761,8 @@ h1 {
 
 /* GPU Selector - Segmented control (Apple-like) */
 .gpu-selector {
-  flex: 0 0 auto;
+  flex: 1.2;
+  min-width: 60px;
 }
 
 .gpu-label {
@@ -776,14 +778,16 @@ h1 {
   border-radius: 6px;
   padding: 2px;
   gap: 1px;
+  height: 36px;
 }
 
 .gpu-btn {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   background: transparent;
   border: none;
   border-radius: 5px;
