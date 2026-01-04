@@ -231,8 +231,8 @@ const gpuConfig = {
 
 // Shared Python environment (mirrors R_LIBS_SITE pattern)
 const pythonEnv = {
-  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.19',
-  apollo: '/opt/singularity-images/rbioc/python/bioc-3.19',
+  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
+  apollo: '/opt/singularity-images/rbioc/python/bioc-3.22',
 };
 
 const clusters = {
@@ -240,8 +240,8 @@ const clusters = {
     host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
     partition: 'compute',
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
-    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
+    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
+    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/packages,/scratch,/ref_genomes',
   },
@@ -249,8 +249,8 @@ const clusters = {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
     partition: 'fast,all',
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
+    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
+    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/opt,/labs',
   },

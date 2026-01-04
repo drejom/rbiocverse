@@ -526,8 +526,8 @@ stateManager.load().then(() => {
         if (!session || session.status !== 'running' || !session.jobId) continue;
 
         // Calculate last activity, handling NaN from invalid date strings
-        const startedAtTs = session.startedAt ? Date.parse(session.startedAt) : 0;
-        const safeStartedAtTs = Number.isNaN(startedAtTs) ? 0 : startedAtTs;
+        // Date.parse returns NaN for invalid dates, which || 0 handles
+        const safeStartedAtTs = Date.parse(session.startedAt) || 0;
         const lastActivity = session.lastActivity || safeStartedAtTs;
         if (!lastActivity) continue;
 
