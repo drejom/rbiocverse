@@ -112,14 +112,27 @@ main() {
     local repo_root
     repo_root="${REPO_ROOT:-$(dirname "$SCRIPT_DIR")}"
 
-    # Determine if GPU packages should be installed
+    # Determine which optional extras to install
+    # Always install [staged] packages (carried forward from previous release)
+    # Install [gpu] on clusters with GPU support
     local pip_extras=""
+    local extras_list=()
+
+    # Always include staged packages
+    extras_list+=("staged")
+
     if has_gpu_support "$cluster"; then
-        pip_extras="[gpu]"
+        extras_list+=("gpu")
         echo "GPU Support:     yes (installing GPU packages)"
     else
         echo "GPU Support:     no (skipping GPU packages)"
     fi
+
+    # Build extras string: [staged,gpu] or [staged]
+    if [[ ${#extras_list[@]} -gt 0 ]]; then
+        pip_extras="[$(IFS=,; echo "${extras_list[*]}")]"
+    fi
+    echo "Extras:          $pip_extras"
     echo ""
 
     # Create SLURM output directory

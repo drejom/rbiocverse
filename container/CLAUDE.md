@@ -27,10 +27,10 @@ rbiocverse/:          Metapackage manifest for R_LIBS_SITE contents
 
 ### Cluster Paths
 
-| Cluster | Container Path | Library Path |
-|---------|---------------|--------------|
-| Gemini  | `/packages/singularity/shared_cache/rbioc/vscode-rbioc_X.Y.sif` | `/packages/singularity/shared_cache/rbioc/rlibs/bioc-X.Y` |
-| Apollo  | `/opt/singularity-images/rbioc/vscode-rbioc_X.Y.sif` | `/opt/singularity-images/rbioc/rlibs/bioc-X.Y` |
+| Cluster | Container Path | R Library Path | Python Library Path |
+|---------|---------------|----------------|---------------------|
+| Gemini  | `/packages/singularity/shared_cache/rbioc/vscode-rbioc_X.Y.sif` | `/packages/singularity/shared_cache/rbioc/rlibs/bioc-X.Y` | `/packages/singularity/shared_cache/rbioc/python/bioc-X.Y` |
+| Apollo  | `/opt/singularity-images/rbioc/vscode-rbioc_X.Y.sif` | `/opt/singularity-images/rbioc/rlibs/bioc-X.Y` | `/opt/singularity-images/rbioc/python/bioc-X.Y` |
 
 ## Build Commands
 
@@ -101,6 +101,43 @@ The install uses a two-phase SLURM strategy to avoid NFS lock contention:
 
 Each job uses a local pak cache (`/tmp/pak_cache_*`) to prevent NFS lock issues.
 
+## Python Package Migration
+
+Python packages follow a similar workflow to R, with a **staging model** for packages added between releases.
+
+### Package Categories
+
+| Category | Source | Description |
+|----------|--------|-------------|
+| **Core** | `[project.dependencies]` | Blessed SCverse stack (scanpy, anndata, scvi-tools, etc.) |
+| **GPU** | `[optional-dependencies.gpu]` | GPU packages (Gemini only: rapids-singlecell, cupy, jax) |
+| **Staged** | `[optional-dependencies.staged]` | Packages added between releases, reviewed at upgrade |
+
+### Pre-Release: Sync Python Packages
+
+```sh
+# 1. Capture installed packages, compare to pyproject.toml
+./scripts/sync-python-packages.sh --from 3.22
+
+# 2. Review output - decide for each "NEW STAGED CANDIDATE":
+#    - PROMOTE: move to [project.dependencies] (core)
+#    - KEEP: add to [optional-dependencies.staged]
+#    - DROP: don't carry forward (was experimental)
+
+# 3. Edit rbiocverse/pyproject.toml accordingly
+
+# 4. Commit changes
+git add rbiocverse/pyproject.toml rbiocverse/pyproject.toml.*.from
+git commit -m "Update Python packages for 3.23"
+```
+
+### Post-Release: Install Python Packages
+
+```sh
+# Install Python packages (includes core + staged + gpu on Gemini)
+./scripts/install-python.sh --to 3.23 --submit
+```
+
 ## Scripts Reference
 
 ### Cluster Configuration
@@ -108,14 +145,19 @@ Each job uses a local pak cache (`/tmp/pak_cache_*`) to prevent NFS lock issues.
   - Auto-detects Gemini vs Apollo based on filesystem paths
   - Provides: `get_bioc_version`, `get_available_versions`, `get_container_path`, `get_library_path`, `run_in_container`
 
-### Pre-Release Scripts
-- `scripts/sync-packages.sh` - Sync DESCRIPTION from current environment
+### Pre-Release Scripts (R)
+- `scripts/sync-packages.sh` - Sync DESCRIPTION from current R environment
 - `scripts/update-description.R` - Check availability, update remotes, bump version
+
+### Pre-Release Scripts (Python)
+- `scripts/sync-python-packages.sh` - Sync pyproject.toml from current Python environment
+- `scripts/sync-python.py` - Helper to categorize packages (core/gpu/staged/transitive)
 
 ### Post-Release Scripts
 - `scripts/pull-container.sh` - Pull container to cluster storage
-- `scripts/install-packages.sh` - Generate/submit SLURM install jobs
+- `scripts/install-packages.sh` - Generate/submit SLURM R install jobs
 - `scripts/install.R` - Core R installation logic, SLURM generation
+- `scripts/install-python.sh` - Generate/submit SLURM Python install jobs
 
 ### Generated Files
 - `slurm_install/` - Generated SLURM scripts and package lists (gitignored)
@@ -125,9 +167,12 @@ Each job uses a local pak cache (`/tmp/pak_cache_*`) to prevent NFS lock issues.
 - `Dockerfile` - Main container (extends `bioconductor/bioconductor_docker:${BIOC_VERSION}`)
 - `.devcontainer/devcontainer.json` - VSCode devcontainer config
 - `rbiocverse/DESCRIPTION` - Metapackage listing standard R packages
+- `rbiocverse/pyproject.toml` - Python package manifest (SCverse ecosystem)
 - `scripts/cluster-config.sh` - Shared cluster detection and paths
-- `scripts/sync-packages.sh` - Pre-release package sync
-- `scripts/install-packages.sh` - Post-release package installation
+- `scripts/sync-packages.sh` - Pre-release R package sync
+- `scripts/sync-python-packages.sh` - Pre-release Python package sync
+- `scripts/install-packages.sh` - Post-release R package installation
+- `scripts/install-python.sh` - Post-release Python package installation
 - `scripts/install.R` - R installation functions and SLURM generation
 - `scripts/update-description.R` - DESCRIPTION management tools
 

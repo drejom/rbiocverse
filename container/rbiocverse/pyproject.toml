@@ -41,6 +41,14 @@ gpu = [
     "jax[cuda12]",
 ]
 
+# Staged packages - added between releases, reviewed at upgrade time
+# Packages here are candidates for promotion to core or removal
+# Install with: pip install ".[staged]"
+staged = [
+    # Add packages here as they are installed between releases
+    # At upgrade time, decide: promote to core, keep staged, or drop
+]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
