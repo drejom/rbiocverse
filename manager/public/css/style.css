@@ -751,15 +751,15 @@ h1 {
 
 /* GPU Selector - Segmented control (Apple-like) */
 .gpu-selector {
-  margin-top: 8px;
-  margin-bottom: 12px;
+  flex: 1.5;
+  min-width: 140px;
 }
 
 .gpu-label {
   display: block;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .gpu-toggle {
