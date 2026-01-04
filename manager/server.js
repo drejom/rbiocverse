@@ -138,21 +138,23 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
-  // On 403 Forbidden, clear the stale cookie and redirect to re-authenticate
-  // This handles the case where browser has old cookie that doesn't match current session
+  // On 403 Forbidden with stale cookie, intercept and redirect to re-authenticate
+  // This handles the case where browser sends stale cookie from previous session
   if (proxyRes.statusCode === 403) {
     const cookieToken = getCookieToken(req.headers.cookie);
     if (cookieToken) {
-      log.warn('VS Code returned 403 with stale cookie, clearing it', { url: req.url });
-      // Clear the stale cookie by setting it to expire in the past
-      // Append to existing set-cookie headers to avoid overwriting other cookies
-      const toClear = [
+      log.warn('VS Code 403 with stale cookie, redirecting to re-auth', { url: req.url });
+      // Consume the original response to prevent it being sent
+      proxyRes.resume();
+      // Clear stale cookies and redirect to root for fresh auth
+      res.setHeader('Set-Cookie', [
         'vscode-tkn=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         'vscode-secret-key-path=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         'vscode-cli-secret-half=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-      ];
-      const existing = proxyRes.headers['set-cookie'];
-      proxyRes.headers['set-cookie'] = existing ? [].concat(existing, toClear) : toClear;
+      ]);
+      res.writeHead(302, { Location: '/code/' });
+      res.end();
+      return;
     }
   }
 
