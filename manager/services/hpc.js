@@ -258,6 +258,7 @@ echo ${bootstrapBase64} | base64 -d | sh
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
 # Start VS Code server
+# Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
   -B ${this.cluster.bindPaths} \\
@@ -267,11 +268,8 @@ exec ${this.cluster.singularityBin} exec \\
     --port $IDE_PORT \\
     ${tokenArg} \\
     --accept-server-license-terms \\
-    --disable-telemetry \\
     --server-base-path /vscode-direct \\
-    --server-data-dir ${dataDir} \\
-    --extensions-dir ${extensionsDir} \\
-    --user-data-dir ${userDataDir}
+    --server-data-dir ${dataDir}
 `;
   }
 
