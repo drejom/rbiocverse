@@ -172,18 +172,20 @@ function renderGpuSelector(hpc) {
   const clusterGpuConfig = gpuConfig[hpc];
   if (!clusterGpuConfig) return '';
 
-  // Build options from gpuConfig
+  // Build options from gpuConfig with selected state
   const gpuOptions = Object.entries(clusterGpuConfig).map(([type, config]) => {
     const maxTime = config.maxTime || '';
     const label = `${type.toUpperCase()}${maxTime ? ` (${maxTime} max)` : ''}`;
-    return `<option value="${type}">${label}</option>`;
+    const selected = selectedGpu[hpc] === type ? 'selected' : '';
+    return `<option value="${type}" ${selected}>${label}</option>`;
   }).join('');
 
+  const noneSelected = !selectedGpu[hpc] ? 'selected' : '';
   return `
     <div class="form-input">
       <label><i data-lucide="zap" class="icon-sm"></i>GPU</label>
       <select id="${hpc}-gpu" onchange="onGpuChange('${hpc}')">
-        <option value="">None (CPU only)</option>
+        <option value="" ${noneSelected}>None (CPU only)</option>
         ${gpuOptions}
       </select>
     </div>
@@ -201,9 +203,9 @@ function onReleaseChange(hpc) {
 
   // Check if current IDE is available in new release
   const availableForRelease = getIdesForRelease(newReleaseVersion);
-  if (!availableForRelease.includes(selectedIde[hpc])) {
-    // Auto-select first available IDE
-    selectedIde[hpc] = availableForRelease[0] || 'vscode';
+  if (!availableForRelease.includes(selectedIde[hpc]) && availableForRelease.length > 0) {
+    // Auto-select first available IDE for this release
+    selectedIde[hpc] = availableForRelease[0];
   }
 
   // Re-render the cluster card to update IDE buttons

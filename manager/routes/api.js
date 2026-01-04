@@ -686,7 +686,6 @@ function createApiRouter(stateManager) {
       if (!jobInfo) {
         // Fresh launch - submit new job
         const gpuLabel = gpu ? ` (${gpu.toUpperCase()})` : '';
-        const releaseLabel = releases[releaseVersion]?.name || releaseVersion;
         sendProgress('submitting', `Requesting resources${gpuLabel}...`);
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu: gpu || 'none', releaseVersion });
 

@@ -315,7 +315,7 @@ www-root-path=/rstudio-direct
     const rstudioPrefs = JSON.stringify(rstudioDefaults);
     const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
-    // Extract major.minor version from releaseVersion for R_LIBS_USER path
+    // Use releaseVersion for R_LIBS_USER path (e.g., bioc-3.22)
     const biocVersion = releaseVersion;
     const rsessionScript = `#!/bin/sh
 exec 2>>${dollar}HOME/.rstudio-slurm/rsession.log
@@ -469,7 +469,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
    * @param {string} time - Walltime (e.g., "12:00:00")
    * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
    * @param {Object} options - Additional options
-   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100') - Gemini only
+   * @param {string} options.gpu - GPU type ('' for none, 'a100', 'v100') - Gemini only
+   * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
    * @returns {Promise<{jobId: string, token: string}>} Job ID and auth token
    */
   async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
