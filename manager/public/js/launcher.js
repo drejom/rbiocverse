@@ -21,6 +21,9 @@ let availableIdes = {};
 let availableReleases = {};
 let defaultReleaseVersion = '3.22';
 
+// GPU config from server (which clusters support GPUs)
+let gpuConfig = {};
+
 // Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
 let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
@@ -160,20 +163,28 @@ function renderReleaseSelector(hpc) {
 }
 
 /**
- * Render GPU selector dropdown (Gemini only)
+ * Render GPU selector dropdown
+ * Only shown for clusters that have GPU support in gpuConfig
  * @param {string} hpc - Cluster name
  */
 function renderGpuSelector(hpc) {
-  // Only show GPU selector for Gemini
-  if (hpc !== 'gemini') return '';
+  // Only show GPU selector for clusters with GPU support
+  const clusterGpuConfig = gpuConfig[hpc];
+  if (!clusterGpuConfig) return '';
+
+  // Build options from gpuConfig
+  const gpuOptions = Object.entries(clusterGpuConfig).map(([type, config]) => {
+    const maxTime = config.maxTime || '';
+    const label = `${type.toUpperCase()}${maxTime ? ` (${maxTime} max)` : ''}`;
+    return `<option value="${type}">${label}</option>`;
+  }).join('');
 
   return `
     <div class="form-input">
       <label><i data-lucide="zap" class="icon-sm"></i>GPU</label>
       <select id="${hpc}-gpu" onchange="onGpuChange('${hpc}')">
         <option value="">None (CPU only)</option>
-        <option value="a100">A100 (4-day max)</option>
-        <option value="v100">V100 (8-day max)</option>
+        ${gpuOptions}
       </select>
     </div>
   `;
@@ -543,6 +554,11 @@ async function fetchStatus(forceRefresh = false) {
           selectedReleaseVersion[hpc] = defaultReleaseVersion;
         }
       }
+    }
+
+    // Store GPU config
+    if (data.gpuConfig) {
+      gpuConfig = data.gpuConfig;
     }
 
     // Track cache info

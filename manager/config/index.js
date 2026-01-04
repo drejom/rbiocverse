@@ -323,7 +323,11 @@ function getReleasePaths(clusterName, releaseVersion = defaultReleaseVersion) {
   if (!releaseConfig) {
     throw new Error(`Unknown release: ${releaseVersion}`);
   }
-  return releaseConfig.paths[clusterName];
+  const paths = releaseConfig.paths[clusterName];
+  if (!paths) {
+    throw new Error(`Release ${releaseVersion} is not available on cluster ${clusterName}`);
+  }
+  return paths;
 }
 
 // Legacy pythonEnv export (deprecated - use getReleasePaths instead)
