@@ -231,7 +231,6 @@ const gpuConfig = {
 
 // Bioconductor release configurations
 // Each release specifies which IDEs are available and paths per cluster
-// Note: 3.18 and 3.17 are Apollo-only (legacy releases)
 const releases = {
   '3.22': {
     name: 'Bioconductor 3.22',
@@ -267,8 +266,13 @@ const releases = {
   },
   '3.18': {
     name: 'Bioconductor 3.18',
-    ides: ['vscode', 'rstudio'],  // Apollo only, no JupyterLab
+    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.18
     paths: {
+      gemini: {
+        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.18.sif',
+        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.18',
+        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.18',
+      },
       apollo: {
         singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.18.sif',
         rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
@@ -278,8 +282,13 @@ const releases = {
   },
   '3.17': {
     name: 'Bioconductor 3.17',
-    ides: ['vscode', 'rstudio'],  // Apollo only, no JupyterLab
+    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.17
     paths: {
+      gemini: {
+        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif',
+        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.17',
+        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.17',
+      },
       apollo: {
         singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.17.sif',
         rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.17',
