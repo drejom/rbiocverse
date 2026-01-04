@@ -241,7 +241,9 @@ fi
     ].filter(Boolean).join(' \\\n  ');
 
     return `#!/bin/bash
-set -e
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.vscode-slurm/job.err
+set -ex
 
 # Setup directories
 mkdir -p ${machineSettingsDir} ${extensionsDir}
@@ -340,7 +342,9 @@ exec /usr/lib/rstudio-server/bin/rsession "$@"
     ].filter(Boolean).join(' \\\n  ');
 
     return `#!/bin/bash
-set -e
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.rstudio-slurm/job.err
+set -ex
 
 # Setup directories
 mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server
@@ -423,7 +427,9 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
     ].filter(Boolean).join(' \\\n    ');
 
     return `#!/bin/bash
-set -e
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.jupyter-slurm/job.err
+set -ex
 
 # Setup directories
 mkdir -p ${workdir}/runtime
