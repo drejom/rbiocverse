@@ -304,15 +304,15 @@ function renderIdleContent(hpc, runningIdes) {
         ${renderReleaseSelector(hpc)}
         ${renderIdeSelector(hpc, runningIdeNames)}
         <div class="launch-form">
-          <div class="form-input">
+          <div class="form-input input-cpus">
             <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
             <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
           </div>
-          <div class="form-input">
+          <div class="form-input input-mem">
             <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
             <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
           </div>
-          <div class="form-input">
+          <div class="form-input input-time">
             <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
             <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
           </div>
@@ -333,15 +333,15 @@ function renderIdleContent(hpc, runningIdes) {
       ${renderReleaseSelector(hpc)}
       ${renderIdeSelector(hpc)}
       <div class="launch-form">
-        <div class="form-input">
+        <div class="form-input input-cpus">
           <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
           <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
         </div>
-        <div class="form-input">
+        <div class="form-input input-mem">
           <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
           <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
         </div>
-        <div class="form-input">
+        <div class="form-input input-time">
           <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
           <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
         </div>
