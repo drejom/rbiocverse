@@ -311,6 +311,7 @@ set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
+export BIOCPARALLEL_WORKER_NUMBER=${cpus}
 export R_LIBS_SITE=${this.cluster.rLibsSite}
 export R_LIBS_USER=$HOME/R/bioc-3.19
 export TMPDIR=/tmp
