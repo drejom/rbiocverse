@@ -81,13 +81,17 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
-// Prepend base path and inject connection token for VS Code authentication
+// Rewrite path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
-  // Express strips mount path (/vscode-direct) from req.path, but VS Code expects it
-  // Prepend /vscode-direct to match --server-base-path setting
-  // Use req.originalUrl to get the full path including mount point
-  const originalPath = req.originalUrl;
-  proxyReq.path = originalPath;
+  // VS Code expects all requests at /vscode-direct (--server-base-path)
+  // Requests from /code/* need to be rewritten to /vscode-direct/*
+  // Requests from /vscode-direct/* already have correct path in originalUrl
+  if (req.originalUrl.startsWith('/vscode-direct')) {
+    proxyReq.path = req.originalUrl;
+  } else if (req.originalUrl.startsWith('/code')) {
+    // Rewrite /code/foo -> /vscode-direct/foo
+    proxyReq.path = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+  }
 
   log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
 
@@ -316,13 +320,17 @@ jupyterProxy.on('error', (err, req, res) => {
 });
 
 // Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
-// Prepend base_url and inject authentication token for JupyterLab
+// Rewrite path and inject authentication token for JupyterLab
 jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
-  // Express strips mount path (/jupyter-direct) from req.path, but Jupyter expects it
-  // Prepend /jupyter-direct to match --ServerApp.base_url setting
-  // Use req.originalUrl to get the full path including mount point
-  const originalPath = req.originalUrl;
-  proxyReq.path = originalPath;
+  // Jupyter expects all requests at /jupyter-direct (--ServerApp.base_url)
+  // Requests from /jupyter/* need to be rewritten to /jupyter-direct/*
+  // Requests from /jupyter-direct/* already have correct path in originalUrl
+  if (req.originalUrl.startsWith('/jupyter-direct')) {
+    proxyReq.path = req.originalUrl;
+  } else if (req.originalUrl.startsWith('/jupyter')) {
+    // Rewrite /jupyter/foo -> /jupyter-direct/foo
+    proxyReq.path = req.originalUrl.replace(/^\/jupyter/, '/jupyter-direct');
+  }
 
   log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
 
