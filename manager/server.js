@@ -81,14 +81,20 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
-// Inject connection token for VS Code authentication
+// Prepend base path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
-  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url });
+  // Express strips mount path (/vscode-direct) from req.path, but VS Code expects it
+  // Prepend /vscode-direct to match --server-base-path setting
+  // Use req.originalUrl to get the full path including mount point
+  const originalPath = req.originalUrl;
+  proxyReq.path = originalPath;
+
+  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
 
   // VS Code uses query param ?tkn=TOKEN for authentication
   // Inject token if we have one and it's not already in the URL
   const token = getSessionToken('vscode');
-  if (token && !req.url.includes('tkn=')) {
+  if (token && !proxyReq.path.includes('tkn=')) {
     const separator = proxyReq.path.includes('?') ? '&' : '?';
     proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
     log.debugFor('vscode', 'injected token into request', { path: proxyReq.path });
@@ -310,14 +316,20 @@ jupyterProxy.on('error', (err, req, res) => {
 });
 
 // Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
-// Inject authentication token for JupyterLab
+// Prepend base_url and inject authentication token for JupyterLab
 jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
-  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url });
+  // Express strips mount path (/jupyter-direct) from req.path, but Jupyter expects it
+  // Prepend /jupyter-direct to match --ServerApp.base_url setting
+  // Use req.originalUrl to get the full path including mount point
+  const originalPath = req.originalUrl;
+  proxyReq.path = originalPath;
+
+  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
 
   // JupyterLab uses query param ?token=TOKEN for authentication
   // Inject token if we have one and it's not already in the URL
   const token = getSessionToken('jupyter');
-  if (token && !req.url.includes('token=')) {
+  if (token && !proxyReq.path.includes('token=')) {
     const separator = proxyReq.path.includes('?') ? '&' : '?';
     proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
     log.debugFor('jupyter', 'injected token into request', { path: proxyReq.path });
