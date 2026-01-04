@@ -53,6 +53,22 @@ function invalidateStatusCache(cluster = null) {
 }
 
 /**
+ * Start tunnel with dynamic port discovery
+ * Reads the IDE's actual port from the port file before establishing tunnel.
+ * This handles port collisions when multiple users land on the same compute node.
+ * @param {string} hpc - HPC cluster name
+ * @param {string} node - Compute node name
+ * @param {string} ide - IDE type
+ * @param {Function} onExit - Callback when tunnel exits
+ * @returns {Promise<Object>} Tunnel process
+ */
+async function startTunnelWithPortDiscovery(hpc, node, ide, onExit) {
+  const hpcService = new HpcService(hpc);
+  const remotePort = await hpcService.getIdePort(ide);
+  return tunnelService.start(hpc, node, ide, onExit, { remotePort });
+}
+
+/**
  * Fetch fresh status for a single cluster and update its cache
  * @param {string} clusterName - Cluster name ('gemini' or 'apollo')
  * @returns {Promise<Object>} Fresh cluster status data
@@ -342,7 +358,7 @@ function createApiRouter(stateManager) {
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
           try {
-            session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
               // Tunnel exit callback
               if (session.status === 'running') {
                 session.status = 'idle';
@@ -411,7 +427,8 @@ function createApiRouter(stateManager) {
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
       // Start tunnel - it will verify IDE is responding before returning
-      session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+      // Uses port discovery to handle dynamic ports from multi-user scenarios
+      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
         // Tunnel exit callback
         log.tunnel(`Exit callback`, { hpc, ide, code });
         if (session.status === 'running') {
@@ -539,7 +556,7 @@ function createApiRouter(stateManager) {
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
           try {
-            session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
               if (session.status === 'running') {
                 session.status = 'idle';
               }
@@ -668,7 +685,8 @@ function createApiRouter(stateManager) {
       sendProgress('establishing', 'Almost ready...');
 
       // Start tunnel and wait for it to establish
-      session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+      // Uses port discovery to handle dynamic ports from multi-user scenarios
+      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
         log.tunnel(`Exit callback`, { hpc, ide, code });
         if (session.status === 'running') {
           session.status = 'idle';
@@ -735,7 +753,7 @@ function createApiRouter(stateManager) {
     // Start tunnel to the requested HPC/IDE
     try {
       if (!session.tunnelProcess) {
-        session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+        session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
           if (session.status === 'running') {
             session.status = 'idle';
           }

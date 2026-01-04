@@ -441,4 +441,110 @@ describe('HpcService', () => {
       expect(result1.token).to.not.equal(result2.token);
     });
   });
+
+  describe('getIdePort (dynamic port discovery)', () => {
+    it('should return port from port file when available', async () => {
+      sshExecStub.resolves('8001');
+
+      const port = await hpcService.getIdePort('vscode');
+
+      expect(port).to.equal(8001);
+      expect(sshExecStub).to.have.been.calledWith('cat ~/.vscode-slurm/port 2>/dev/null');
+    });
+
+    it('should return default port when port file is missing', async () => {
+      sshExecStub.rejects(new Error('No such file'));
+
+      const port = await hpcService.getIdePort('vscode');
+
+      expect(port).to.equal(8000); // Default VS Code port
+    });
+
+    it('should return default port when port file has invalid content', async () => {
+      sshExecStub.resolves('invalid');
+
+      const port = await hpcService.getIdePort('vscode');
+
+      expect(port).to.equal(8000); // Default VS Code port
+    });
+
+    it('should return default port when port is out of range', async () => {
+      sshExecStub.resolves('99999');
+
+      const port = await hpcService.getIdePort('vscode');
+
+      expect(port).to.equal(8000); // Default VS Code port
+    });
+
+    it('should use correct port file for each IDE', async () => {
+      sshExecStub.resolves('8001');
+
+      await hpcService.getIdePort('vscode');
+      expect(sshExecStub).to.have.been.calledWith('cat ~/.vscode-slurm/port 2>/dev/null');
+
+      sshExecStub.resetHistory();
+      await hpcService.getIdePort('rstudio');
+      expect(sshExecStub).to.have.been.calledWith('cat ~/.rstudio-slurm/port 2>/dev/null');
+
+      sshExecStub.resetHistory();
+      await hpcService.getIdePort('jupyter');
+      expect(sshExecStub).to.have.been.calledWith('cat ~/.jupyter-slurm/port 2>/dev/null');
+    });
+
+    it('should throw error for unknown IDE', async () => {
+      try {
+        await hpcService.getIdePort('invalid');
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.include('Unknown IDE');
+      }
+    });
+
+    it('should handle whitespace in port file', async () => {
+      sshExecStub.resolves('  8001\n');
+
+      const port = await hpcService.getIdePort('vscode');
+
+      expect(port).to.equal(8001);
+    });
+  });
+
+  describe('buildVscodeWrap (port finder integration)', () => {
+    it('should include port finder script in wrap command', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'vscode');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      // Port finder writes to ~/.vscode-slurm/port and uses $IDE_PORT
+      expect(sshCommand).to.include('IDE_PORT');
+      expect(sshCommand).to.include('--port \\$IDE_PORT');
+    });
+  });
+
+  describe('buildRstudioWrap (port finder integration)', () => {
+    it('should include port finder script in wrap command', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'rstudio');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      // Port finder uses $IDE_PORT
+      expect(sshCommand).to.include('IDE_PORT');
+      expect(sshCommand).to.include('--www-port=\\$IDE_PORT');
+    });
+  });
+
+  describe('buildJupyterWrap (port finder integration)', () => {
+    it('should include port finder script in wrap command', async () => {
+      sshExecStub.resolves('Submitted batch job 12345');
+
+      await hpcService.submitJob('4', '40G', '12:00:00', 'jupyter');
+
+      const sshCommand = sshExecStub.firstCall.args[0];
+      // Port finder uses $IDE_PORT
+      expect(sshCommand).to.include('IDE_PORT');
+      expect(sshCommand).to.include('--port=\\$IDE_PORT');
+    });
+  });
 });
