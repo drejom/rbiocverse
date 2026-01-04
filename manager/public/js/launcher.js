@@ -19,7 +19,7 @@ let availableIdes = {};
 
 // Available releases from server
 let availableReleases = {};
-let defaultReleaseVersion = '3.22';
+let defaultReleaseVersion = null;  // Set from server in fetchStatus()
 
 // GPU config from server (which clusters support GPUs)
 let gpuConfig = {};
@@ -27,7 +27,7 @@ let gpuConfig = {};
 // Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
 let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
-let selectedReleaseVersion = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '3.22']));
+let selectedReleaseVersion = Object.fromEntries(CLUSTER_NAMES.map(c => [c, null]));  // Set from server
 let selectedGpu = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '']));  // '' = no GPU
 
 // Cluster status keyed by hpc (contains ides)
@@ -137,7 +137,8 @@ function getReleasesForCluster(hpc) {
  */
 function getIdesForRelease(releaseVersion) {
   const releaseConfig = availableReleases[releaseVersion];
-  return releaseConfig ? releaseConfig.ides : Object.keys(availableIdes);
+  // Return empty array for unknown releases to surface config errors
+  return releaseConfig && Array.isArray(releaseConfig.ides) ? releaseConfig.ides : [];
 }
 
 /**

@@ -521,8 +521,16 @@ function createApiRouter(stateManager) {
 
     // Validate releaseVersion
     if (!releases[releaseVersion]) {
-      const availableReleases = Object.keys(releases).join(', ');
-      return res.status(400).json({ error: `Invalid release: ${releaseVersion}. Available: ${availableReleases}` });
+      // Show releases available for this specific cluster
+      const releasesForCluster = Object.entries(releases)
+        .filter(([, release]) => release.paths && release.paths[hpc])
+        .map(([version]) => version)
+        .join(', ');
+      return res.status(400).json({
+        error: releasesForCluster
+          ? `Invalid release: ${releaseVersion} for ${hpc}. Available: ${releasesForCluster}`
+          : `Invalid release: ${releaseVersion}. No releases configured for ${hpc}.`
+      });
     }
 
     // Validate release is available for this cluster
