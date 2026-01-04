@@ -80,6 +80,13 @@ vscodeProxy.on('error', (err, req, res) => {
   }
 });
 
+// Extract token value from vscode-tkn cookie
+function getCookieToken(cookieHeader) {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/vscode-tkn=([^;]+)/);
+  return match ? match[1] : null;
+}
+
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
 // Rewrite path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
@@ -88,13 +95,12 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   // 2. Server sets vscode-tkn cookie and redirects to --server-base-path
   // 3. Subsequent requests use cookie for auth
   //
-  // Older VS Code (pre-1.107) accepts tokens directly on any path.
-  // We support both by:
-  // - Checking for vscode-tkn cookie (1.107+ sets this)
-  // - For initial requests without cookie, try root path auth
-  // - Always inject token as fallback for older versions
-  const hasVscodeTknCookie = req.headers.cookie?.includes('vscode-tkn');
-  const token = getSessionToken('vscode');
+  // Important: We must verify the cookie token matches our session token.
+  // Stale cookies from previous sessions cause 403 errors because VS Code
+  // validates the token against its current session.
+  const cookieToken = getCookieToken(req.headers.cookie);
+  const sessionToken = getSessionToken('vscode');
+  const hasValidCookie = cookieToken && sessionToken && cookieToken === sessionToken;
 
   // Determine the target path
   let targetPath;
@@ -106,26 +112,55 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
     targetPath = req.originalUrl;
   }
 
-  // For initial requests (no auth cookie), route through root path for 1.107+ auth
-  if (!hasVscodeTknCookie && token && (targetPath === '/vscode-direct' || targetPath === '/vscode-direct/')) {
-    // Initial page load without cookie - use root auth flow
-    proxyReq.path = `/?tkn=${token}`;
-    log.debugFor('vscode', 'initial auth via root path', { originalUrl: req.originalUrl });
+  // Re-authenticate if:
+  // 1. No cookie at all, or
+  // 2. Cookie token doesn't match session token (stale cookie from old session)
+  const isRootPath = targetPath === '/vscode-direct' || targetPath === '/vscode-direct/';
+  if (!hasValidCookie && sessionToken && isRootPath) {
+    // Initial page load or stale cookie - use root auth flow to get fresh cookie
+    proxyReq.path = `/?tkn=${sessionToken}`;
+    log.debugFor('vscode', 'auth via root path', {
+      originalUrl: req.originalUrl,
+      reason: cookieToken ? 'stale cookie' : 'no cookie',
+    });
   } else {
-    // Already authenticated (cookie present) or sub-resource request
-    // Don't inject token - cookie handles auth, and injecting causes redirect loops
+    // Cookie matches session token, or sub-resource request
     proxyReq.path = targetPath;
   }
 
-  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path, hasCookie: hasVscodeTknCookie });
+  log.debugFor('vscode', 'proxyReq', {
+    method: req.method,
+    url: req.url,
+    path: proxyReq.path,
+    hasValidCookie,
+    hasCookie: !!cookieToken,
+  });
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
+  // On 403 Forbidden, clear the stale cookie and redirect to re-authenticate
+  // This handles the case where browser has old cookie that doesn't match current session
+  if (proxyRes.statusCode === 403) {
+    const cookieToken = getCookieToken(req.headers.cookie);
+    if (cookieToken) {
+      log.warn('VS Code returned 403 with stale cookie, clearing it', { url: req.url });
+      // Clear the stale cookie by setting it to expire in the past
+      // Append to existing set-cookie headers to avoid overwriting other cookies
+      const toClear = [
+        'vscode-tkn=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        'vscode-secret-key-path=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        'vscode-cli-secret-half=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      ];
+      const existing = proxyRes.headers['set-cookie'];
+      proxyRes.headers['set-cookie'] = existing ? [].concat(existing, toClear) : toClear;
+    }
+  }
+
   // Rewrite Set-Cookie headers to work through proxy
   // VS Code sets cookies for the backend domain, but browser accesses via proxy domain
   // We need to strip domain/path restrictions so cookies work through proxy
   const setCookies = proxyRes.headers['set-cookie'];
-  if (setCookies) {
+  if (setCookies && proxyRes.statusCode !== 403) {
     proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
       // Remove Domain= attribute (let browser use current domain)
       // Change Path= to / so cookies work for all proxy paths

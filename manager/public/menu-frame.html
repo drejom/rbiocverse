@@ -145,6 +145,13 @@
       color: rgba(255,255,255,0.6);
       margin-bottom: 6px;
     }
+    .session-details {
+      display: flex;
+      gap: 1em;
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 6px;
+    }
     .node {
       font-size: 0.8rem;
       color: rgba(255,255,255,0.5);
@@ -446,9 +453,22 @@
 
       let resourcesHtml = '';
       let nodeText = '';
+      let sessionDetails = '';
       if (currentStatus) {
         resourcesHtml = '<i data-lucide="cpu" class="resource-icon"></i> ' + (currentStatus.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (currentStatus.memory || '?');
         nodeText = '<i data-lucide="server" class="resource-icon"></i> ' + (currentStatus.node || '');
+
+        // Build session details line (GPU, Release)
+        const detailParts = [];
+        if (currentStatus.gpu) {
+          detailParts.push('<span><i data-lucide="zap" class="resource-icon"></i> ' + currentStatus.gpu.toUpperCase() + '</span>');
+        }
+        if (currentStatus.releaseVersion) {
+          detailParts.push('<span><i data-lucide="package" class="resource-icon"></i> Bioc ' + currentStatus.releaseVersion + '</span>');
+        }
+        if (detailParts.length > 0) {
+          sessionDetails = '<div class="session-details">' + detailParts.join('') + '</div>';
+        }
       }
 
       content.innerHTML =
@@ -456,6 +476,7 @@
         '<div class="ide-badge"><i class="' + ideInfo.icon + ' resource-icon"></i> ' + ideInfo.name + '</div>' +
         renderTimePie(countdown || 0, walltime || countdown || 1) +
         '<div class="resources">' + resourcesHtml + '</div>' +
+        sessionDetails +
         '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
         liveServerBtn +

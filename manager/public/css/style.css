@@ -690,3 +690,116 @@ h1 {
   font-size: 0.9rem;
   margin-top: 15px;
 }
+
+/* Release Selector - Apple-like design */
+.release-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.release-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bioc-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.release-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.release-dropdown {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.release-dropdown:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.release-dropdown:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* GPU Selector - Segmented control (Apple-like) */
+.gpu-selector {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.gpu-label {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+
+.gpu-toggle {
+  display: flex;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.gpu-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gpu-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.gpu-btn.selected {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.gpu-btn .icon-xs {
+  width: 12px;
+  height: 12px;
+  margin-right: 0;
+}
