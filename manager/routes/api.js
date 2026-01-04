@@ -196,6 +196,35 @@ function createApiRouter(stateManager) {
     res.json({ status: 'ok', ready: true });
   });
 
+  // Check dev server ports (Live Server 5500, Shiny 3838) - single SSH call
+  router.get('/dev-servers', async (req, res) => {
+    // Only check if there's an active VS Code session
+    if (!state.activeSession || state.activeSession.ide !== 'vscode') {
+      return res.json({ liveServer: false, shiny: false });
+    }
+
+    const { hpc } = state.activeSession;
+    const sessionKey = `${hpc}-vscode`;
+    const session = state.sessions[sessionKey];
+
+    if (!session || session.status !== 'running' || !session.node) {
+      return res.json({ liveServer: false, shiny: false });
+    }
+
+    try {
+      const hpcService = new HpcService(hpc);
+      // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
+      const result = await hpcService.checkPorts(session.node, [5500, 3838]);
+      res.json({
+        liveServer: result[5500] || false,
+        shiny: result[3838] || false,
+      });
+    } catch (e) {
+      log.debugFor('api', 'dev-servers check failed', { error: e.message });
+      res.json({ liveServer: false, shiny: false });
+    }
+  });
+
   // Logging middleware for user actions
   router.use((req, res, next) => {
     if (req.method !== 'GET') {

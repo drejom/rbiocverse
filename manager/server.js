@@ -279,6 +279,21 @@ liveServerProxy.on('error', (err, req, res) => {
   }
 });
 
+// Proxy for Shiny Server (port 3838) - R Shiny apps
+const shinyProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: 'http://127.0.0.1:3838',
+  changeOrigin: true,
+});
+
+shinyProxy.on('error', (err, req, res) => {
+  log.debugFor('shiny', 'proxy error', { error: err.message });
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>Shiny Server not available</h1><p>Make sure a Shiny app is running (port 3838)</p><p><a href="/code/">Back to VS Code</a></p>');
+  }
+});
+
 // Proxy for JupyterLab (port 8888)
 const jupyterProxy = httpProxy.createProxyServer({
   ws: true,
@@ -424,6 +439,16 @@ app.use('/live', (req, res, next) => {
   liveServerProxy.web(req, res);
 });
 
+// Proxy to Shiny Server (port 3838) - access at /shiny/
+app.use('/shiny', (req, res, next) => {
+  if (!hasRunningSession()) {
+    log.debugFor('shiny', 'rejected - no running session');
+    return res.redirect('/');
+  }
+  log.debugFor('shiny', `${req.method} ${req.path}`);
+  shinyProxy.web(req, res);
+});
+
 // JupyterLab proxy - serves at /jupyter/
 app.use('/jupyter', (req, res, next) => {
   if (!hasRunningSession()) {
@@ -476,13 +501,18 @@ stateManager.load().then(() => {
     log.info(`Default HPC: ${config.defaultHpc}`);
   });
 
-  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, and Live Server
+  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, Live Server, and Shiny
   server.on('upgrade', (req, socket, head) => {
     log.proxy(`WebSocket upgrade: ${req.url}`);
     if (hasRunningSession()) {
       // Live Server WebSocket (for hot reload)
       if (req.url.startsWith('/live')) {
         liveServerProxy.ws(req, socket, head);
+      }
+      // Shiny WebSocket
+      else if (req.url.startsWith('/shiny')) {
+        log.debugFor('shiny', `WebSocket upgrade: ${req.url}`);
+        shinyProxy.ws(req, socket, head);
       }
       // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
       else if (req.url.startsWith('/jupyter')) {

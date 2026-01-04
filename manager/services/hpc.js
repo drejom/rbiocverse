@@ -637,6 +637,41 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       return ideConfig.port;
     }
   }
+
+  /**
+   * Check if multiple ports are listening on a compute node
+   * Used for dev server detection (Live Server, Shiny)
+   * @param {string} node - Compute node hostname
+   * @param {number[]} ports - Array of ports to check
+   * @returns {Promise<Object>} Map of port -> boolean (listening)
+   */
+  async checkPorts(node, ports) {
+    const result = {};
+    for (const p of ports) {
+      result[p] = false;
+    }
+
+    try {
+      // Build regex pattern: :5500|:3838
+      const pattern = ports.map((p) => `:${p}`).join('|');
+      // SSH to login node, then ssh to compute node to check ports
+      const cmd = `ssh ${node} "ss -tln 2>/dev/null | grep -E '${pattern}'"`;
+      const output = await this.sshExec(cmd);
+
+      // Parse output - each line shows a listening port
+      for (const port of ports) {
+        if (output.includes(`:${port}`)) {
+          result[port] = true;
+        }
+      }
+      log.debugFor('tunnel', `Port check on ${node}`, { ports: result, cluster: this.clusterName });
+    } catch (e) {
+      // SSH failed or no ports listening - return all false
+      log.debugFor('tunnel', `Port check failed on ${node}`, { error: e.message, cluster: this.clusterName });
+    }
+
+    return result;
+  }
 }
 
 module.exports = HpcService;
