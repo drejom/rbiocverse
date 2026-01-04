@@ -705,10 +705,11 @@ SLURM_SCRIPT`;
       // Build regex pattern: :5500|:3838
       const pattern = ports.map((p) => `:${p}`).join('|');
       // SSH to login node, then ssh to compute node to check ports
-      const cmd = `ssh ${node} "ss -tln 2>/dev/null | grep -E '${pattern}'"`;
+      // Use || true to prevent grep exit code 1 (no matches) from being an error
+      const cmd = `ssh ${node} "ss -tln 2>/dev/null | grep -E '${pattern}' || true"`;
       const output = await this.sshExec(cmd);
 
-      // Parse output - each line shows a listening port
+      // Parse output - each line shows a listening port (empty if none)
       for (const port of ports) {
         if (output.includes(`:${port}`)) {
           result[port] = true;
@@ -716,8 +717,8 @@ SLURM_SCRIPT`;
       }
       log.debugFor('tunnel', `Port check on ${node}`, { ports: result, cluster: this.clusterName });
     } catch (e) {
-      // SSH failed or no ports listening - return all false
-      log.debugFor('tunnel', `Port check failed on ${node}`, { error: e.message, cluster: this.clusterName });
+      // Actual SSH failure (connection refused, timeout, etc.)
+      log.warn(`Port check failed on ${node}`, { error: e.message, cluster: this.clusterName });
     }
 
     return result;
