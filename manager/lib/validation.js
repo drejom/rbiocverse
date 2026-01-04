@@ -62,11 +62,11 @@ function getPartitionLimits(hpc, gpu = '') {
  * @param {string} cpus - Number of CPUs
  * @param {string} mem - Memory allocation (format: "40G", "100M")
  * @param {string} time - Walltime (format: "HH:MM:SS" or "D-HH:MM:SS")
- * @param {string} hpc - Cluster name (optional, for limit checking)
+ * @param {string} hpc - Cluster name (required for limit checking)
  * @param {string} gpu - GPU type (optional, affects partition limits)
  * @throws {Error} If any parameter is invalid or exceeds limits
  */
-function validateSbatchInputs(cpus, mem, time, hpc = null, gpu = '') {
+function validateSbatchInputs(cpus, mem, time, hpc, gpu = '') {
   // CPUs: must be integer 1-128
   if (!/^\d+$/.test(cpus) || parseInt(cpus) < 1 || parseInt(cpus) > 128) {
     throw new Error('Invalid CPU value: must be integer 1-128');
@@ -82,25 +82,23 @@ function validateSbatchInputs(cpus, mem, time, hpc = null, gpu = '') {
     throw new Error('Invalid time value: use format like "12:00:00" or "1-00:00:00"');
   }
 
-  // If cluster specified, validate against partition limits
-  if (hpc) {
-    const limits = getPartitionLimits(hpc, gpu);
-    if (limits) {
-      const cpuVal = parseInt(cpus);
-      const memMB = parseMemToMB(mem);
-      const timeSecs = parseTimeToSeconds(time);
-      const maxTimeSecs = parseTimeToSeconds(limits.maxTime);
+  // Validate against partition limits
+  const limits = getPartitionLimits(hpc, gpu);
+  if (limits) {
+    const cpuVal = parseInt(cpus);
+    const memMB = parseMemToMB(mem);
+    const timeSecs = parseTimeToSeconds(time);
+    const maxTimeSecs = parseTimeToSeconds(limits.maxTime);
 
-      if (cpuVal > limits.maxCpus) {
-        throw new Error(`CPU limit exceeded: ${hpc} allows max ${limits.maxCpus} CPUs`);
-      }
-      if (memMB > limits.maxMemMB) {
-        const maxMemG = Math.floor(limits.maxMemMB / 1024);
-        throw new Error(`Memory limit exceeded: ${hpc} allows max ${maxMemG}G`);
-      }
-      if (timeSecs > maxTimeSecs) {
-        throw new Error(`Time limit exceeded: ${hpc} allows max ${limits.maxTime}`);
-      }
+    if (cpuVal > limits.maxCpus) {
+      throw new Error(`CPU limit exceeded: ${hpc} allows max ${limits.maxCpus} CPUs`);
+    }
+    if (memMB > limits.maxMemMB) {
+      const maxMemG = Math.floor(limits.maxMemMB / 1024);
+      throw new Error(`Memory limit exceeded: ${hpc} allows max ${maxMemG}G`);
+    }
+    if (timeSecs > maxTimeSecs) {
+      throw new Error(`Time limit exceeded: ${hpc} allows max ${limits.maxTime}`);
     }
   }
 }
