@@ -88,29 +88,37 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   // 2. Server sets vscode-tkn cookie and redirects to --server-base-path
   // 3. Subsequent requests use cookie for auth
   //
-  // For initial auth (no vscode-tkn cookie), we must hit / not /vscode-direct
-  // After auth, requests go to /vscode-direct/* as normal
+  // Older VS Code (pre-1.107) accepts tokens directly on any path.
+  // We support both by:
+  // - Checking for vscode-tkn cookie (1.107+ sets this)
+  // - For initial requests without cookie, try root path auth
+  // - Always inject token as fallback for older versions
   const hasVscodeTknCookie = req.headers.cookie?.includes('vscode-tkn');
   const token = getSessionToken('vscode');
 
+  // Determine the target path
+  let targetPath;
   if (req.originalUrl.startsWith('/vscode-direct')) {
-    // Direct proxy path - check if we need initial auth
-    if (!hasVscodeTknCookie && token) {
-      // No auth cookie yet - redirect to root with token to establish auth
-      // This will set the cookie and redirect back to /vscode-direct
-      proxyReq.path = `/?tkn=${token}`;
-      log.debugFor('vscode', 'initial auth redirect to root', { originalUrl: req.originalUrl });
-    } else {
-      proxyReq.path = req.originalUrl;
-    }
+    targetPath = req.originalUrl;
   } else if (req.originalUrl.startsWith('/code')) {
-    // Rewrite /code/foo -> /vscode-direct/foo
-    if (!hasVscodeTknCookie && token) {
-      // No auth cookie yet - redirect to root with token
-      proxyReq.path = `/?tkn=${token}`;
-      log.debugFor('vscode', 'initial auth redirect to root', { originalUrl: req.originalUrl });
-    } else {
-      proxyReq.path = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+    targetPath = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+  } else {
+    targetPath = req.originalUrl;
+  }
+
+  // For initial requests (no auth cookie), route through root path for 1.107+ auth
+  // This also works for older versions (they just redirect back quickly)
+  if (!hasVscodeTknCookie && token && (targetPath === '/vscode-direct' || targetPath === '/vscode-direct/')) {
+    // Initial page load without cookie - use root auth flow
+    proxyReq.path = `/?tkn=${token}`;
+    log.debugFor('vscode', 'initial auth via root path', { originalUrl: req.originalUrl });
+  } else {
+    // Already authenticated or sub-resource request
+    proxyReq.path = targetPath;
+    // Inject token for older VS Code versions that accept it on any path
+    if (token && !proxyReq.path.includes('tkn=')) {
+      const separator = proxyReq.path.includes('?') ? '&' : '?';
+      proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
     }
   }
 
