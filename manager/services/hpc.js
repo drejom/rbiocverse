@@ -5,7 +5,7 @@
 
 const { exec } = require('child_process');
 const crypto = require('crypto');
-const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults } = require('../config');
+const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } = require('../config');
 const { log } = require('../lib/logger');
 
 /**
@@ -436,6 +436,10 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
     // Token handling
     const tokenArg = token ? '' : "--ServerApp.token=''";
 
+    // JupyterLab overrides.json (base64 encoded for clean embedding)
+    const overridesJson = JSON.stringify(jupyterlabDefaults, null, 2);
+    const overridesBase64 = Buffer.from(overridesJson).toString('base64');
+
     // Build singularity args (filter out empty strings)
     // Set parallel processing env vars to match SLURM allocation
     const singularityArgs = [
@@ -476,7 +480,13 @@ exec 2>$HOME/.jupyter-slurm/job.err
 set -ex
 
 # Setup directories
-mkdir -p ${workdir}/runtime
+mkdir -p ${workdir}/runtime ${workdir}/lab/settings
+
+# Bootstrap JupyterLab settings (only if overrides.json doesn't exist)
+# Sets terminal font (Nerd Font fallback), code font, line numbers
+if [ ! -f ${workdir}/lab/settings/overrides.json ]; then
+  echo ${overridesBase64} | base64 -d > ${workdir}/lab/settings/overrides.json
+fi
 
 # Find available port and export as IDE_PORT
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
