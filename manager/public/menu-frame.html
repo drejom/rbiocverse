@@ -146,6 +146,8 @@
       margin-bottom: 6px;
     }
     .session-details {
+      display: flex;
+      gap: 1em;
       font-size: 0.8rem;
       color: rgba(255,255,255,0.5);
       margin-bottom: 6px;
@@ -459,13 +461,13 @@
         // Build session details line (GPU, Release)
         const detailParts = [];
         if (currentStatus.gpu) {
-          detailParts.push('<i data-lucide="zap" class="resource-icon"></i> ' + currentStatus.gpu.toUpperCase());
+          detailParts.push('<span><i data-lucide="zap" class="resource-icon"></i> ' + currentStatus.gpu.toUpperCase() + '</span>');
         }
         if (currentStatus.releaseVersion) {
-          detailParts.push('<i data-lucide="package" class="resource-icon"></i> Bioc ' + currentStatus.releaseVersion);
+          detailParts.push('<span><i data-lucide="package" class="resource-icon"></i> Bioc ' + currentStatus.releaseVersion + '</span>');
         }
         if (detailParts.length > 0) {
-          sessionDetails = '<div class="session-details">' + detailParts.join(' &nbsp;&nbsp; ') + '</div>';
+          sessionDetails = '<div class="session-details">' + detailParts.join('') + '</div>';
         }
       }
 

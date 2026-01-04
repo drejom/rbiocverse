@@ -145,11 +145,14 @@ vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
     if (cookieToken) {
       log.warn('VS Code returned 403 with stale cookie, clearing it', { url: req.url });
       // Clear the stale cookie by setting it to expire in the past
-      proxyRes.headers['set-cookie'] = [
+      // Append to existing set-cookie headers to avoid overwriting other cookies
+      const toClear = [
         'vscode-tkn=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         'vscode-secret-key-path=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         'vscode-cli-secret-half=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
       ];
+      const existing = proxyRes.headers['set-cookie'];
+      proxyRes.headers['set-cookie'] = existing ? [].concat(existing, toClear) : toClear;
     }
   }
 
