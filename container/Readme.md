@@ -13,7 +13,7 @@ Docker container extending [Bioconductor Docker](https://bioconductor.org/help/d
 │  - Genomics tools (bcftools, bedtools, sra-tools)          │
 │  - Python (dxpy, jupyterlab, radian, rpy2)                 │
 │  - VSCode CLI, SLURM wrappers                              │
-│  - JupyterLab with R kernel (IRkernel)                     │
+│  - JupyterLab with R kernel + SoS polyglot notebooks       │
 └─────────────────────────────────────────────────────────────┘
                             │
                             │ mounts R_LIBS_SITE + PYTHONPATH
@@ -133,6 +133,8 @@ bcftools, vcftools, samtools, tabix, bedtools, bedops, picard-tools, sra-tools
 - rpy2 (Python → R integration)
 - matplotlib, seaborn, plotly
 - numpy, scipy, scikit-learn, umap-learn, leidenalg (Seurat Python deps)
+- **SoS polyglot notebooks**: sos, sos-notebook, jupyterlab-sos, sos-r, sos-python, sos-bash
+- **SAS integration**: saspy, sas_kernel (requires external SAS server)
 
 ### Python (shared library via PYTHONPATH)
 SCverse single-cell ecosystem:

@@ -99,7 +99,13 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     nbconvert \
     numpy scipy scikit-learn umap-learn leidenalg \
     matplotlib seaborn plotly \
-    rpy2
+    rpy2 \
+    # SoS polyglot notebook (multi-language kernels in one notebook)
+    sos sos-notebook jupyterlab-sos \
+    sos-r sos-python sos-bash \
+    # SAS integration (requires external SAS server connection)
+    saspy sas_kernel \
+    && python3 -m sos_notebook.install
 
 # =============================================================================
 # External Tools (pinned versions for reproducibility)
@@ -179,7 +185,7 @@ ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/n
 # See: https://github.com/drejom/vscode-rbioc/issues/15
 
 RUN R -e "install.packages('IRkernel', repos='https://cloud.r-project.org')" \
-    && R -e "IRkernel::installspec(user = FALSE, name = 'ir', displayname = 'R 4.4')"
+    && R -e "IRkernel::installspec(user = FALSE, name = 'ir')"
 
 # JupyterLab default config (HPC-friendly: no auth, remote access enabled)
 RUN mkdir -p /etc/jupyter

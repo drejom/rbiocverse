@@ -5,6 +5,12 @@ All notable changes to the rbiocverse package collection will be documented in t
 ## [3.22.0] - 2026-01-03
 
 ### Added
+- **SoS polyglot notebooks** for multi-language workflows in JupyterLab:
+  - Core: sos, sos-notebook, jupyterlab-sos
+  - Language kernels: sos-r, sos-python, sos-bash
+  - SAS integration: saspy, sas_kernel (requires external SAS server)
+  - Enables running R, Python, Bash, and SAS in the same notebook with data exchange
+
 - **Python SCverse ecosystem** installed to shared PYTHONPATH:
   - Core: scanpy 1.11.5, anndata, scvi-tools, squidpy, cellrank, muon, pertpy
   - Utilities: harmonypy, bbknn, scanorama, scrublet, doubletdetection
