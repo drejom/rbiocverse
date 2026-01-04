@@ -589,6 +589,10 @@ let server;
 
 stateManager.load().then(() => {
   log.info('State manager initialized');
+
+  // Start background polling with HpcService factory
+  stateManager.startPolling(hpc => new HpcService(hpc));
+
   server = app.listen(PORT, () => {
     log.info(`HPC Code Server Manager listening on port ${PORT}`);
     log.info(`Default HPC: ${config.defaultHpc}`);

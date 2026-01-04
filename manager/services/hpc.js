@@ -644,6 +644,78 @@ SLURM_SCRIPT`;
   }
 
   /**
+   * Get detailed status of a specific job by ID
+   * Used by StateManager for background polling
+   * @param {string} jobId - Job ID to query
+   * @returns {Promise<Object|null>} Job status object or null if not found
+   */
+  async getJobStatus(jobId) {
+    try {
+      const output = await this.sshExec(
+        `squeue -j ${jobId} -h -O JobID,State,NodeList,TimeLeft,TimeLimit 2>/dev/null`
+      );
+
+      if (!output || !output.trim()) return null;
+
+      const parts = output.trim().split(/\s+/);
+      const [id, state, node, timeLeft, timeLimit] = parts;
+
+      // Parse timeLeft to seconds
+      let timeLeftSeconds = null;
+      if (timeLeft && timeLeft !== 'INVALID' && timeLeft !== 'UNLIMITED') {
+        timeLeftSeconds = this.parseTimeToSeconds(timeLeft);
+      }
+
+      return {
+        jobId: id,
+        state: state, // PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT
+        node: node === '(null)' ? null : node,
+        timeLeft,
+        timeLimit,
+        timeLeftSeconds,
+      };
+    } catch (e) {
+      log.warn('Failed to get job status', { jobId, error: e.message });
+      return null;
+    }
+  }
+
+  /**
+   * Parse SLURM time format to seconds
+   * Formats: DD-HH:MM:SS, HH:MM:SS, MM:SS, SS
+   * @param {string} timeStr - Time string from SLURM
+   * @returns {number|null} Seconds or null if invalid
+   */
+  parseTimeToSeconds(timeStr) {
+    if (!timeStr) return null;
+
+    // Handle days format: DD-HH:MM:SS
+    let days = 0;
+    let rest = timeStr;
+    if (timeStr.includes('-')) {
+      const [d, r] = timeStr.split('-');
+      days = parseInt(d, 10);
+      rest = r;
+    }
+
+    const parts = rest.split(':').map(p => parseInt(p, 10));
+    let seconds = 0;
+
+    if (parts.length === 3) {
+      // HH:MM:SS
+      seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      // MM:SS
+      seconds = parts[0] * 60 + parts[1];
+    } else if (parts.length === 1) {
+      // SS
+      seconds = parts[0];
+    }
+
+    return days * 86400 + seconds;
+  }
+
+  /**
    * Get the actual port the IDE is running on
    * Reads from the port file written by the job's port finder script.
    * Falls back to default port if file doesn't exist (backwards compatibility).
