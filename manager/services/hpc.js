@@ -185,10 +185,11 @@ class HpcService {
    * Writes Machine settings and bootstraps extensions before starting server
    * @param {Object} options - Build options
    * @param {string} options.token - Connection token for authentication
+   * @param {number} options.cpus - Number of CPUs for parallel processing
    * @returns {string} Shell script content
    */
   buildVscodeScript(options = {}) {
-    const { token } = options;
+    const { token, cpus = 1 } = options;
     const ideConfig = ides.vscode;
     const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
@@ -241,6 +242,8 @@ fi
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
+      `--env OMP_NUM_THREADS=${cpus}`,
+      `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
 
     return `#!/bin/bash
@@ -387,10 +390,11 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
    * @param {Object} options - Options including gpu type and token
    * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
    * @param {string} options.token - Authentication token
+   * @param {number} options.cpus - Number of CPUs for parallel processing
    * @returns {string} Shell script content
    */
   buildJupyterScript(options = {}) {
-    const { gpu = 'none', token } = options;
+    const { gpu = 'none', token, cpus = 1 } = options;
     const ideConfig = ides.jupyter;
     const workdir = '$HOME/.jupyter-slurm';
     const pythonSitePackages = pythonEnv[this.clusterName] || '';
@@ -414,6 +418,8 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
+      `--env OMP_NUM_THREADS=${cpus}`,
+      `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
     ].filter(Boolean).join(' \\\n  ');
 
     // Build jupyter args (filter out empty strings)
@@ -490,13 +496,13 @@ exec ${this.cluster.singularityBin} exec \\
     let script;
     switch (ide) {
       case 'vscode':
-        script = this.buildVscodeScript({ token });
+        script = this.buildVscodeScript({ token, cpus });
         break;
       case 'rstudio':
         script = this.buildRstudioScript(cpus);
         break;
       case 'jupyter':
-        script = this.buildJupyterScript({ gpu, token });
+        script = this.buildJupyterScript({ gpu, token, cpus });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
