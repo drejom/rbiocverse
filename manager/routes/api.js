@@ -12,9 +12,10 @@ const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
-const { config, ides } = require('../config');
+const { config, ides, gpuConfig } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
+const { createIdleSession } = require('../lib/state');
 
 // Shared tunnel service instance
 const tunnelService = new TunnelService();
@@ -50,6 +51,22 @@ const LAUNCH_PROGRESS = {
  */
 function invalidateStatusCache(cluster = null) {
   statusCache.invalidate(cluster);
+}
+
+/**
+ * Start tunnel with dynamic port discovery
+ * Reads the IDE's actual port from the port file before establishing tunnel.
+ * This handles port collisions when multiple users land on the same compute node.
+ * @param {string} hpc - HPC cluster name
+ * @param {string} node - Compute node name
+ * @param {string} ide - IDE type
+ * @param {Function} onExit - Callback when tunnel exits
+ * @returns {Promise<Object>} Tunnel process
+ */
+async function startTunnelWithPortDiscovery(hpc, node, ide, onExit) {
+  const hpcService = new HpcService(hpc);
+  const remotePort = await hpcService.getIdePort(ide);
+  return tunnelService.start(hpc, node, ide, onExit, { remotePort });
 }
 
 /**
@@ -145,21 +162,7 @@ function createApiRouter(stateManager) {
     return { hpc, ide };
   }
 
-  // Helper: create session object
-  function createSession(ide = 'vscode') {
-    return {
-      status: 'idle',
-      ide,
-      jobId: null,
-      node: null,
-      tunnelProcess: null,
-      startedAt: null,
-      cpus: null,
-      memory: null,
-      walltime: null,
-      error: null,
-    };
-  }
+  // Helper: create session object - uses shared createIdleSession from lib/state.js
 
   // Helper: get sessions info for status endpoint (grouped by hpc then ide)
   function getSessionsInfo() {
@@ -191,6 +194,35 @@ function createApiRouter(stateManager) {
       return res.status(503).json({ status: 'starting', ready: false });
     }
     res.json({ status: 'ok', ready: true });
+  });
+
+  // Check dev server ports (Live Server 5500, Shiny 3838) - single SSH call
+  router.get('/dev-servers', async (req, res) => {
+    // Only check if there's an active VS Code session
+    if (!state.activeSession || state.activeSession.ide !== 'vscode') {
+      return res.json({ liveServer: false, shiny: false });
+    }
+
+    const { hpc } = state.activeSession;
+    const sessionKey = `${hpc}-vscode`;
+    const session = state.sessions[sessionKey];
+
+    if (!session || session.status !== 'running' || !session.node) {
+      return res.json({ liveServer: false, shiny: false });
+    }
+
+    try {
+      const hpcService = new HpcService(hpc);
+      // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
+      const result = await hpcService.checkPorts(session.node, [5500, 3838]);
+      res.json({
+        liveServer: result[5500] || false,
+        shiny: result[3838] || false,
+      });
+    } catch (e) {
+      log.debugFor('api', 'dev-servers check failed', { error: e.message });
+      res.json({ liveServer: false, shiny: false });
+    }
   });
 
   // Logging middleware for user actions
@@ -332,7 +364,7 @@ function createApiRouter(stateManager) {
     try {
       // Initialize session if needed
       if (!state.sessions[sessionKey]) {
-        state.sessions[sessionKey] = createSession(ide);
+        state.sessions[sessionKey] = createIdleSession(ide);
       }
 
       const session = state.sessions[sessionKey];
@@ -342,7 +374,7 @@ function createApiRouter(stateManager) {
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
           try {
-            session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
               // Tunnel exit callback
               if (session.status === 'running') {
                 session.status = 'idle';
@@ -393,6 +425,7 @@ function createApiRouter(stateManager) {
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         session.jobId = result.jobId;
+        session.token = result.token;  // Auth token for VS Code/Jupyter
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
       } else {
         session.jobId = jobInfo.jobId;
@@ -410,7 +443,8 @@ function createApiRouter(stateManager) {
       log.job(`Running on node`, { hpc, ide, node: session.node });
 
       // Start tunnel - it will verify IDE is responding before returning
-      session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+      // Uses port discovery to handle dynamic ports from multi-user scenarios
+      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
         // Tunnel exit callback
         log.tunnel(`Exit callback`, { hpc, ide, code });
         if (session.status === 'running') {
@@ -468,10 +502,23 @@ function createApiRouter(stateManager) {
     const cpus = req.query.cpus || config.defaultCpus;
     const mem = req.query.mem || config.defaultMem;
     const time = req.query.time || config.defaultTime;
+    const gpu = req.query.gpu || 'none';
 
     // Validate IDE type
     if (!ides[ide]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
+    }
+
+    // Validate GPU type
+    if (gpu !== 'none') {
+      const clusterGpuConfig = gpuConfig[hpc];
+      if (!clusterGpuConfig) {
+        return res.status(400).json({ error: `GPU support is not available on the ${hpc} cluster` });
+      }
+      if (!clusterGpuConfig[gpu]) {
+        const availableGpus = Object.keys(clusterGpuConfig).join(', ');
+        return res.status(400).json({ error: `Invalid GPU type: ${gpu}. Available on ${hpc}: ${availableGpus}` });
+      }
     }
 
     // Set up SSE response
@@ -513,7 +560,7 @@ function createApiRouter(stateManager) {
     try {
       // Initialize session if needed
       if (!state.sessions[sessionKey]) {
-        state.sessions[sessionKey] = createSession(ide);
+        state.sessions[sessionKey] = createIdleSession(ide);
       }
 
       const session = state.sessions[sessionKey];
@@ -525,7 +572,7 @@ function createApiRouter(stateManager) {
         // Ensure tunnel is running for this session
         if (!session.tunnelProcess) {
           try {
-            session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
               if (session.status === 'running') {
                 session.status = 'idle';
               }
@@ -610,11 +657,13 @@ function createApiRouter(stateManager) {
 
       if (!jobInfo) {
         // Fresh launch - submit new job
-        sendProgress('submitting', 'Requesting resources...');
-        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
+        const gpuLabel = gpu !== 'none' ? ` (${gpu.toUpperCase()})` : '';
+        sendProgress('submitting', `Requesting resources${gpuLabel}...`);
+        log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu });
 
-        const result = await hpcService.submitJob(cpus, mem, time, ide);
+        const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu });
         session.jobId = result.jobId;
+        session.token = result.token;  // Auth token for VS Code/Jupyter
 
         sendProgress('submitted', `Job ${session.jobId} submitted`, { jobId: session.jobId });
         log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
@@ -652,7 +701,8 @@ function createApiRouter(stateManager) {
       sendProgress('establishing', 'Almost ready...');
 
       // Start tunnel and wait for it to establish
-      session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+      // Uses port discovery to handle dynamic ports from multi-user scenarios
+      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
         log.tunnel(`Exit callback`, { hpc, ide, code });
         if (session.status === 'running') {
           session.status = 'idle';
@@ -719,7 +769,7 @@ function createApiRouter(stateManager) {
     // Start tunnel to the requested HPC/IDE
     try {
       if (!session.tunnelProcess) {
-        session.tunnelProcess = await tunnelService.start(hpc, session.node, ide, (code) => {
+        session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
           if (session.status === 'running') {
             session.status = 'idle';
           }
@@ -781,7 +831,7 @@ function createApiRouter(stateManager) {
     }
 
     // Reset session
-    state.sessions[sessionKey] = createSession(ide);
+    state.sessions[sessionKey] = createIdleSession(ide);
 
     // Clear active session if this was it
     if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {
@@ -875,7 +925,7 @@ function createApiRouter(stateManager) {
       }
 
       // Reset session
-      state.sessions[sessionKey] = createSession(ide);
+      state.sessions[sessionKey] = createIdleSession(ide);
 
       // Clear active session if this was it
       if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {

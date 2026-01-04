@@ -63,8 +63,9 @@ describe('TunnelService', () => {
     it('should spawn SSH tunnel process with correct arguments', async function() {
       this.timeout(5000);
 
-      // Mock checkPort to immediately return true
+      // Mock checkPort and checkIdeReady to immediately return true
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -81,6 +82,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -112,6 +114,7 @@ describe('TunnelService', () => {
       const checkPortStub = sinon.stub(tunnelService, 'checkPort');
       checkPortStub.onFirstCall().resolves(false);
       checkPortStub.onSecondCall().resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -122,6 +125,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -147,23 +151,33 @@ describe('TunnelService', () => {
     });
 
     it('should timeout if port never opens', async function() {
-      this.timeout(35000);  // Allow time for timeout
+      this.timeout(5000);
 
+      // Use fake timers to speed up the 30-second timeout
+      const clock = sinon.useFakeTimers({ shouldAdvanceTime: true });
       sinon.stub(tunnelService, 'checkPort').resolves(false);
 
+      const startPromise = tunnelService.start('gemini', 'node01', 'vscode');
+
+      // Advance time past the 30-second timeout (30 iterations * 1000ms)
+      await clock.tickAsync(31000);
+
       try {
-        await tunnelService.start('gemini', 'node01', 'vscode');
+        await startPromise;
         expect.fail('Should have thrown error');
       } catch (error) {
         expect(error.message).to.include('Tunnel failed to establish');
         expect(mockTunnelProcess.kill).to.have.been.called;
       }
+
+      clock.restore();
     });
 
     it('should call onExit callback when tunnel exits', async function() {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       const onExitSpy = sinon.spy();
       await tunnelService.start('gemini', 'node01', 'vscode', onExitSpy);
@@ -178,6 +192,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
       expect(tunnelService.tunnels.has('gemini-vscode')).to.be.true;
@@ -192,6 +207,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
       // Stub the logger's ssh method to verify it gets called
       const { log } = require('../../lib/logger');
       const sshStub = sinon.stub(log, 'ssh');
@@ -212,6 +228,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'rstudio');
 
@@ -226,6 +243,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -245,6 +263,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -261,6 +280,7 @@ describe('TunnelService', () => {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
@@ -279,6 +299,7 @@ describe('TunnelService', () => {
       this.timeout(10000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       // Start multiple tunnels (gemini-vscode)
       await tunnelService.start('gemini', 'node01', 'vscode');

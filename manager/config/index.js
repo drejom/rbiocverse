@@ -27,6 +27,10 @@ const config = {
   defaultTime: process.env.DEFAULT_TIME || '12:00:00',
   // Additional ports to forward through SSH tunnel (e.g., Live Server: 5500, React: 3000)
   additionalPorts: parseAdditionalPorts(process.env.ADDITIONAL_PORTS),
+  // Session idle timeout in minutes (0 = disabled). Cancels SLURM job after inactivity.
+  // Activity is tracked via proxy data events (HTTP requests, WebSocket messages).
+  // The trailing || 0 handles NaN from invalid non-numeric values (e.g., "abc")
+  sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10) || 0,
 };
 
 // VS Code global defaults - written to Machine settings, user settings override
@@ -189,31 +193,46 @@ const rstudioDefaults = {
   terminal_initial_directory: 'home',
 };
 
-// IDE definitions - extensible for future Jupyter support
-// Icons from Lucide: https://lucide.dev/icons/
+// IDE definitions
+// Icons from devicon.dev
 const ides = {
   vscode: {
     name: 'VS Code',
-    icon: 'devicon-vscode-plain',  // devicon.dev
+    icon: 'devicon-vscode-plain',
     port: 8000,
     jobName: 'hpc-vscode',
     proxyPath: '/code/',
   },
   rstudio: {
     name: 'RStudio',
-    icon: 'devicon-rstudio-plain',  // devicon.dev
+    icon: 'devicon-rstudio-plain',
     port: 8787,
     jobName: 'hpc-rstudio',
     proxyPath: '/rstudio/',
   },
-  // Future: jupyter
-  // jupyter: {
-  //   name: 'Jupyter',
-  //   icon: 'devicon-jupyter-plain',  // devicon.dev
-  //   port: 8888,
-  //   jobName: 'hpc-jupyter',
-  //   proxyPath: '/jupyter/',
-  // },
+  jupyter: {
+    name: 'JupyterLab',
+    icon: 'devicon-jupyter-plain',
+    port: 8888,
+    jobName: 'hpc-jupyter',
+    proxyPath: '/jupyter/',
+  },
+};
+
+// GPU partitions (Gemini only - A100 and V100 available)
+// Apollo has no GPU support
+const gpuConfig = {
+  gemini: {
+    a100: { partition: 'gpu-a100', gres: 'gpu:A100:1', maxTime: '4-00:00:00', mem: '256G' },
+    v100: { partition: 'gpu-v100', gres: 'gpu:V100:1', maxTime: '8-00:00:00', mem: '96G' },
+  },
+  apollo: null,
+};
+
+// Shared Python environment (mirrors R_LIBS_SITE pattern)
+const pythonEnv = {
+  gemini: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
+  apollo: '/opt/singularity-images/rbioc/python/bioc-3.22',
 };
 
 const clusters = {
@@ -221,8 +240,8 @@ const clusters = {
     host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
     partition: 'compute',
     singularityBin: '/packages/easy-build/software/singularity/3.7.0/bin/singularity',
-    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
+    singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
+    rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/packages,/scratch,/ref_genomes',
   },
@@ -230,11 +249,11 @@ const clusters = {
     host: process.env.APOLLO_SSH_HOST || 'ppxhpcacc01.coh.org',
     partition: 'fast,all',
     singularityBin: '/opt/singularity/3.7.0/bin/singularity',
-    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
-    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
+    singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
+    rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
     // RStudio bind paths created in user space (see hpc.js buildRstudioWrap)
     bindPaths: '/opt,/labs',
   },
 };
 
-module.exports = { config, clusters, ides, vscodeDefaults, rstudioDefaults };
+module.exports = { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults };

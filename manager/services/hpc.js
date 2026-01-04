@@ -4,8 +4,46 @@
  */
 
 const { exec } = require('child_process');
-const { config, clusters, ides, vscodeDefaults, rstudioDefaults } = require('../config');
+const crypto = require('crypto');
+const { config, clusters, ides, gpuConfig, pythonEnv, vscodeDefaults, rstudioDefaults } = require('../config');
 const { log } = require('../lib/logger');
+
+/**
+ * Generate a secure random token for IDE authentication
+ * @returns {string} 32-character hex token
+ */
+function generateToken() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * Generate shell script to find an available port starting from defaultPort.
+ * Writes the chosen port to a file for the manager to read when establishing tunnels.
+ * This handles port collisions when multiple users land on the same compute node.
+ * See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/18
+ *
+ * @param {number} defaultPort - Starting port to try
+ * @param {string} portFile - Path to write the chosen port (e.g., ~/.vscode-slurm/port)
+ * @returns {string} Shell script snippet (base64 encoded for safe transport)
+ */
+function buildPortFinderScript(defaultPort, portFile) {
+  const dollar = '$';
+  const script = `#!/bin/sh
+# Find available port starting from ${defaultPort}
+PORT=${defaultPort}
+while ss -tln | grep -q ":${dollar}PORT "; do
+  PORT=${dollar}((PORT + 1))
+  # Safety: don't search forever
+  if [ ${dollar}PORT -gt ${dollar}((${defaultPort} + 100)) ]; then
+    echo "ERROR: Could not find available port after 100 attempts" >&2
+    exit 1
+  fi
+done
+echo ${dollar}PORT > ${portFile}
+export IDE_PORT=${dollar}PORT
+`;
+  return Buffer.from(script).toString('base64');
+}
 
 class HpcService {
   constructor(clusterName) {
@@ -131,9 +169,13 @@ class HpcService {
   /**
    * Build sbatch wrap command for VS Code
    * Writes Machine settings and bootstraps extensions before starting server
+   * @param {Object} options - Build options
+   * @param {string} options.token - Connection token for authentication
    */
-  buildVscodeWrap() {
+  buildVscodeWrap(options = {}) {
+    const { token } = options;
     const ideConfig = ides.vscode;
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
     // Paths (using \\$ for SSH escaping)
     const dataDir = '\\$HOME/.vscode-slurm/.vscode-server';
@@ -174,18 +216,29 @@ fi
 `;
     const bootstrapBase64 = Buffer.from(bootstrapScript).toString('base64');
 
+    // Port finder script - finds available port and writes to ~/.vscode-slurm/port
+    // Handles port collisions when multiple users land on the same compute node
+    const portFile = '\\$HOME/.vscode-slurm/port';
+    const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
+
     const setup = [
       `mkdir -p ${machineSettingsDir} ${extensionsDir}`,
       `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
       // Run bootstrap script (extensions + keybindings)
       `echo ${bootstrapBase64} | base64 -d | sh`,
+      // Find available port and export as IDE_PORT
+      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
     ].join(' && ');
 
-    // Singularity command
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
+    // Singularity command - uses IDE_PORT from port finder
     const singularityCmd = [
       `${this.cluster.singularityBin} exec`,
       `--env TERM=xterm-256color`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      pythonEnvArg,
       // Use file-based keyring instead of gnome-keyring (not available in container)
       // See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/4
       `--env VSCODE_KEYRING_PASS=hpc-code-server`,
@@ -193,15 +246,15 @@ fi
       this.cluster.singularityImage,
       `code serve-web`,
       `--host 0.0.0.0`,
-      `--port ${ideConfig.port}`,
-      `--without-connection-token`,
+      `--port \\$IDE_PORT`,
+      token ? `--connection-token=${token}` : '--without-connection-token',
       `--accept-server-license-terms`,
       `--disable-telemetry`,
       `--server-base-path /vscode-direct`,
       `--server-data-dir ${dataDir}`,
       `--extensions-dir ${extensionsDir}`,
       `--user-data-dir ${userDataDir}`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     return `${setup} && ${singularityCmd}`;
   }
@@ -216,6 +269,7 @@ fi
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
     // ESCAPING: Two different contexts require different escaping strategies
     // See docs/ESCAPING.md for full explanation.
@@ -269,6 +323,11 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
+    // Port finder script - finds available port and writes to ~/.rstudio-slurm/port
+    // Handles port collisions when multiple users land on the same compute node
+    const portFile = '\\$HOME/.rstudio-slurm/port';
+    const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
+
     // IMPORTANT: Do NOT use quotes around base64 strings!
     // The sbatch --wrap='...' uses single quotes, so any single quotes inside
     // would break shell parsing. Base64 is alphanumeric + /+= so no quotes needed.
@@ -278,6 +337,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `echo ${rserverConfBase64} | base64 -d > ${workdir}/rserver.conf`,
       `echo ${rstudioPrefsBase64} | base64 -d > ${workdir}/rstudio-prefs.json`,
       `echo ${rsessionBase64} | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`,
+      // Find available port and export as IDE_PORT
+      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
     ].join(' && ');
 
     // Build singularity bind paths for RStudio
@@ -292,7 +353,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       this.cluster.bindPaths,
     ].join(',');
 
-    // Build rserver command
+    // Build rserver command - uses IDE_PORT from port finder
     // Use auth-none=1 mode like jupyter-rsession-proxy - no login required
     // See: https://github.com/jupyterhub/jupyter-rsession-proxy
     // --secure-cookie-key-file must be unique per session to avoid conflicts
@@ -302,22 +363,26 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       'export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0',
     ].join(' && ');
 
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
     const singularityCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      pythonEnvArg,
       '--env USER=\\$(whoami)',  // Required for auth-none - user-id cookie needs username
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
       `rserver`,
       '--www-address=0.0.0.0',
-      `--www-port=${ideConfig.port}`,
+      `--www-port=\\$IDE_PORT`,
       `--server-user=\\$(whoami)`,
       '--auth-none=1',
       '--www-frame-origin=same',
       '--www-verify-user-agent=0',
       `--secure-cookie-key-file=${workdir}/secure-cookie-key`,
       '--rsession-path=/etc/rstudio/rsession.sh',
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const rserverCmd = `${envSetup} && ${singularityCmd}`;
 
@@ -325,17 +390,100 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
   }
 
   /**
+   * Build sbatch wrap command for JupyterLab
+   * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
+   * @param {Object} options - Options including gpu type and token
+   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
+   * @param {string} options.token - Authentication token
+   * @returns {string} sbatch wrap command
+   */
+  buildJupyterWrap(options = {}) {
+    const { gpu = 'none', token } = options;
+    const ideConfig = ides.jupyter;
+    const workdir = '\\$HOME/.jupyter-slurm';
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
+
+    // Port finder script - finds available port and writes to ~/.jupyter-slurm/port
+    // Handles port collisions when multiple users land on the same compute node
+    const portFile = '\\$HOME/.jupyter-slurm/port';
+    const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
+
+    const setup = [
+      `mkdir -p ${workdir}`,
+      `mkdir -p ${workdir}/runtime`,
+      // Find available port and export as IDE_PORT
+      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
+    ].join(' && ');
+
+    // GPU passthrough flag (--nv enables NVIDIA GPU access in container)
+    const nvFlag = gpu !== 'none' ? '--nv' : null;
+
+    // Token env var for authentication (null if no token = disable auth)
+    const tokenEnv = token ? `--env JUPYTER_TOKEN=${token}` : null;
+    const tokenArg = token ? null : `--ServerApp.token=''`;
+
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
+    // Singularity command - uses IDE_PORT from port finder
+    const singularityCmd = [
+      this.cluster.singularityBin,
+      'exec',
+      nvFlag,
+      `--env TERM=xterm-256color`,
+      tokenEnv,
+      pythonEnvArg,
+      `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      `--env JUPYTER_DATA_DIR=${workdir}`,
+      `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
+      `-B ${this.cluster.bindPaths}`,
+      this.cluster.singularityImage,
+      `jupyter lab`,
+      `--ip=0.0.0.0`,
+      `--port=\\$IDE_PORT`,
+      `--no-browser`,
+      tokenArg,
+      `--ServerApp.password=''`,
+      `--ServerApp.root_dir=\\$HOME`,
+      `--ServerApp.base_url=/jupyter-direct`,
+      `--ServerApp.allow_remote_access=True`,
+    ].filter(Boolean).join(' ');
+
+    return `${setup} && ${singularityCmd}`;
+  }
+
+  /**
    * Submit a new SLURM job for an IDE
    * @param {string} cpus - Number of CPUs
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
-   * @param {string} ide - IDE type ('vscode', 'rstudio')
-   * @returns {Promise<{jobId: string}>} Job ID
+   * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
+   * @param {Object} options - Additional options
+   * @param {string} options.gpu - GPU type ('none', 'a100', 'v100') - Gemini only
+   * @returns {Promise<{jobId: string, token: string}>} Job ID and auth token
    */
-  async submitJob(cpus, mem, time, ide = 'vscode') {
+  async submitJob(cpus, mem, time, ide = 'vscode', options = {}) {
+    const { gpu = 'none' } = options;
     const ideConfig = ides[ide];
     if (!ideConfig) {
       throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    // Generate auth token for VS Code and JupyterLab (RStudio uses auth-none)
+    const token = (ide === 'vscode' || ide === 'jupyter') ? generateToken() : null;
+
+    // GPU handling (Gemini only)
+    let partition = this.cluster.partition;
+    let gresArg = null;
+
+    if (gpu !== 'none') {
+      const clusterGpu = gpuConfig[this.clusterName];
+      if (!clusterGpu || !clusterGpu[gpu]) {
+        throw new Error(`GPU type '${gpu}' not available on ${this.clusterName}`);
+      }
+      const gpuOpts = clusterGpu[gpu];
+      partition = gpuOpts.partition;
+      gresArg = `--gres=${gpuOpts.gres}`;
     }
 
     // Logs written to /tmp on compute node - node name available in server logs
@@ -346,10 +494,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     let wrapCmd;
     switch (ide) {
       case 'vscode':
-        wrapCmd = this.buildVscodeWrap();
+        wrapCmd = this.buildVscodeWrap({ token });
         break;
       case 'rstudio':
         wrapCmd = this.buildRstudioWrap(cpus);
+        break;
+      case 'jupyter':
+        wrapCmd = this.buildJupyterWrap({ gpu, token });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
@@ -361,12 +512,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       '--nodes=1',
       `--cpus-per-task=${cpus}`,
       `--mem=${mem}`,
-      `--partition=${this.cluster.partition}`,
+      `--partition=${partition}`,
+      gresArg,
       `--time=${time}`,
       `--output=${logDir}/${ideConfig.jobName}_%j.log`,
       `--error=${logDir}/${ideConfig.jobName}_%j.err`,
       `--wrap='${wrapCmd}'`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const output = await this.sshExec(submitCmd);
     const match = output.match(/Submitted batch job (\d+)/);
@@ -375,8 +527,8 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       throw new Error('Failed to parse job ID from: ' + output);
     }
 
-    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time });
-    return { jobId: match[1] };
+    log.job(`Submitted`, { cluster: this.clusterName, jobId: match[1], ide, cpus, mem, time, gpu, hasToken: !!token });
+    return { jobId: match[1], token };
   }
 
   /**
@@ -439,6 +591,86 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
     } catch (e) {
       return false;
     }
+  }
+
+  /**
+   * Get the actual port the IDE is running on
+   * Reads from the port file written by the job's port finder script.
+   * Falls back to default port if file doesn't exist (backwards compatibility).
+   * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
+   * @returns {Promise<number>} The port number
+   */
+  async getIdePort(ide) {
+    const ideConfig = ides[ide];
+    if (!ideConfig) {
+      throw new Error(`Unknown IDE: ${ide}`);
+    }
+
+    // Port file paths match those in build*Wrap methods
+    const portFiles = {
+      vscode: '~/.vscode-slurm/port',
+      rstudio: '~/.rstudio-slurm/port',
+      jupyter: '~/.jupyter-slurm/port',
+    };
+
+    const portFile = portFiles[ide];
+    if (!portFile) {
+      return ideConfig.port; // Fallback to default
+    }
+
+    try {
+      const output = await this.sshExec(`cat ${portFile} 2>/dev/null`);
+      const port = parseInt(output.trim(), 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        log.warn(`Invalid port in ${portFile}: ${output}, using default ${ideConfig.port}`);
+        return ideConfig.port;
+      }
+      // Log at info level if port differs from default (port collision was resolved)
+      if (port !== ideConfig.port) {
+        log.info(`Dynamic port discovered`, { ide, port, default: ideConfig.port, cluster: this.clusterName });
+      }
+      log.debugFor('tunnel', `Read port from ${portFile}`, { ide, port, cluster: this.clusterName });
+      return port;
+    } catch (e) {
+      // File doesn't exist or can't be read - use default port
+      log.debugFor('tunnel', `Port file not found, using default`, { ide, port: ideConfig.port, cluster: this.clusterName });
+      return ideConfig.port;
+    }
+  }
+
+  /**
+   * Check if multiple ports are listening on a compute node
+   * Used for dev server detection (Live Server, Shiny)
+   * @param {string} node - Compute node hostname
+   * @param {number[]} ports - Array of ports to check
+   * @returns {Promise<Object>} Map of port -> boolean (listening)
+   */
+  async checkPorts(node, ports) {
+    const result = {};
+    for (const p of ports) {
+      result[p] = false;
+    }
+
+    try {
+      // Build regex pattern: :5500|:3838
+      const pattern = ports.map((p) => `:${p}`).join('|');
+      // SSH to login node, then ssh to compute node to check ports
+      const cmd = `ssh ${node} "ss -tln 2>/dev/null | grep -E '${pattern}'"`;
+      const output = await this.sshExec(cmd);
+
+      // Parse output - each line shows a listening port
+      for (const port of ports) {
+        if (output.includes(`:${port}`)) {
+          result[port] = true;
+        }
+      }
+      log.debugFor('tunnel', `Port check on ${node}`, { ports: result, cluster: this.clusterName });
+    } catch (e) {
+      // SSH failed or no ports listening - return all false
+      log.debugFor('tunnel', `Port check failed on ${node}`, { error: e.message, cluster: this.clusterName });
+    }
+
+    return result;
   }
 }
 

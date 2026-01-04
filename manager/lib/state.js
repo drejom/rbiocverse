@@ -8,6 +8,29 @@ const path = require('path');
 const { LockError } = require('./errors');
 const { log } = require('./logger');
 
+/**
+ * Create a fresh idle session object
+ * Use this to ensure consistent session structure across the codebase
+ * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
+ * @returns {Object} Fresh idle session
+ */
+function createIdleSession(ide) {
+  return {
+    status: 'idle',
+    ide: ide,
+    jobId: null,
+    node: null,
+    tunnelProcess: null,
+    startedAt: null,
+    cpus: null,
+    memory: null,
+    walltime: null,
+    error: null,
+    lastActivity: null,
+    token: null,
+  };
+}
+
 class StateManager {
   constructor() {
     // Read environment variables at construction time (not module load time)
@@ -229,4 +252,4 @@ class StateManager {
   }
 }
 
-module.exports = StateManager;
+module.exports = { StateManager, createIdleSession };

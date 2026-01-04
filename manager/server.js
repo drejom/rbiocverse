@@ -11,8 +11,9 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const httpProxy = require('http-proxy');
-const StateManager = require('./lib/state');
+const { StateManager, createIdleSession } = require('./lib/state');
 const { config, ides } = require('./config');
+const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
@@ -37,6 +38,27 @@ app.use((req, res, next) => {
 const stateManager = new StateManager();
 const state = stateManager.state;
 
+// Activity tracking for idle session cleanup
+// Updates lastActivity timestamp on proxy traffic (like JupyterHub's CHP)
+function updateActivity() {
+  const { activeSession } = state;
+  if (activeSession) {
+    const sessionKey = `${activeSession.hpc}-${activeSession.ide}`;
+    if (state.sessions[sessionKey]) {
+      state.sessions[sessionKey].lastActivity = Date.now();
+    }
+  }
+}
+
+// Get token for active session's IDE
+// Used by proxies to inject authentication tokens into requests
+function getSessionToken(ide) {
+  const { activeSession } = state;
+  if (!activeSession) return null;
+  const sessionKey = `${activeSession.hpc}-${ide}`;
+  return state.sessions[sessionKey]?.token || null;
+}
+
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
 
@@ -59,16 +81,28 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
+// Inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url });
+
+  // VS Code uses query param ?tkn=TOKEN for authentication
+  // Inject token if we have one and it's not already in the URL
+  const token = getSessionToken('vscode');
+  if (token && !req.url.includes('tkn=')) {
+    const separator = proxyReq.path.includes('?') ? '&' : '?';
+    proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
+    log.debugFor('vscode', 'injected token into request', { path: proxyReq.path });
+  }
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
   log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+  updateActivity();
 });
 
 vscodeProxy.on('open', () => {
   log.debugFor('vscode', 'proxy socket opened');
+  updateActivity();
 });
 
 vscodeProxy.on('close', () => {
@@ -109,6 +143,7 @@ rstudioProxy.on('end', (req, res, proxyRes) => {
 // Log when proxy successfully connects to target
 rstudioProxy.on('open', (proxySocket) => {
   log.debugFor('rstudio', 'proxy socket opened');
+  updateActivity();
 });
 
 rstudioProxy.on('close', (res, socket, head) => {
@@ -225,6 +260,7 @@ rstudioProxy.on('proxyRes', (proxyRes, req, res) => {
       log.debugFor('rstudio', `redirect rewritten: ${location} -> ${rewritten}`);
     }
   }
+  updateActivity();
 });
 
 // Proxy for Live Server (port 5500) - allows accessing dev server through manager
@@ -241,6 +277,65 @@ liveServerProxy.on('error', (err, req, res) => {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
   }
+});
+
+// Proxy for Shiny Server (port 3838) - R Shiny apps
+const shinyProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: 'http://127.0.0.1:3838',
+  changeOrigin: true,
+});
+
+shinyProxy.on('error', (err, req, res) => {
+  log.debugFor('shiny', 'proxy error', { error: err.message });
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>Shiny Server not available</h1><p>Make sure a Shiny app is running (port 3838)</p><p><a href="/code/">Back to VS Code</a></p>');
+  }
+});
+
+// Proxy for JupyterLab (port 8888)
+const jupyterProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: `http://127.0.0.1:${ides.jupyter.port}`,
+  changeOrigin: true,
+});
+
+jupyterProxy.on('error', (err, req, res) => {
+  log.proxyError('JupyterLab proxy error', { error: err.message });
+  if (res && res.writeHead && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<h1>JupyterLab not available</h1><p><a href="/">Back to launcher</a></p>');
+  }
+});
+
+// Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
+// Inject authentication token for JupyterLab
+jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
+  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url });
+
+  // JupyterLab uses query param ?token=TOKEN for authentication
+  // Inject token if we have one and it's not already in the URL
+  const token = getSessionToken('jupyter');
+  if (token && !req.url.includes('token=')) {
+    const separator = proxyReq.path.includes('?') ? '&' : '?';
+    proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
+    log.debugFor('jupyter', 'injected token into request', { path: proxyReq.path });
+  }
+});
+
+jupyterProxy.on('proxyRes', (proxyRes, req, res) => {
+  log.debugFor('jupyter', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+  updateActivity();
+});
+
+jupyterProxy.on('open', () => {
+  updateActivity();
+  log.debugFor('jupyter', 'proxy socket opened');
+});
+
+jupyterProxy.on('close', () => {
+  log.debugFor('jupyter', 'proxy connection closed');
 });
 
 // Check if any session is running
@@ -344,6 +439,40 @@ app.use('/live', (req, res, next) => {
   liveServerProxy.web(req, res);
 });
 
+// Proxy to Shiny Server (port 3838) - access at /shiny/
+app.use('/shiny', (req, res, next) => {
+  if (!hasRunningSession()) {
+    log.debugFor('shiny', 'rejected - no running session');
+    return res.redirect('/');
+  }
+  log.debugFor('shiny', `${req.method} ${req.path}`);
+  shinyProxy.web(req, res);
+});
+
+// JupyterLab proxy - serves at /jupyter/
+app.use('/jupyter', (req, res, next) => {
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+
+  // Main /jupyter/ page gets wrapper with floating menu
+  if (req.path === '/' || req.path === '') {
+    return res.sendFile(path.join(__dirname, 'public', 'jupyter-wrapper.html'));
+  }
+
+  // All other /jupyter/* paths proxy directly
+  jupyterProxy.web(req, res);
+});
+
+// Direct proxy to JupyterLab (used by wrapper iframe)
+app.use('/jupyter-direct', (req, res, next) => {
+  log.debugFor('jupyter', `direct ${req.method} ${req.path}`);
+  if (!hasRunningSession()) {
+    return res.redirect('/');
+  }
+  jupyterProxy.web(req, res);
+});
+
 // Global error handler - catches HpcError and returns structured JSON
 app.use((err, req, res, next) => {
   if (err instanceof HpcError) {
@@ -372,13 +501,23 @@ stateManager.load().then(() => {
     log.info(`Default HPC: ${config.defaultHpc}`);
   });
 
-  // Handle WebSocket upgrades for VS Code, RStudio, and Live Server
+  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, Live Server, and Shiny
   server.on('upgrade', (req, socket, head) => {
     log.proxy(`WebSocket upgrade: ${req.url}`);
     if (hasRunningSession()) {
       // Live Server WebSocket (for hot reload)
       if (req.url.startsWith('/live')) {
         liveServerProxy.ws(req, socket, head);
+      }
+      // Shiny WebSocket
+      else if (req.url.startsWith('/shiny')) {
+        log.debugFor('shiny', `WebSocket upgrade: ${req.url}`);
+        shinyProxy.ws(req, socket, head);
+      }
+      // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
+      else if (req.url.startsWith('/jupyter')) {
+        log.debugFor('jupyter', `WebSocket upgrade: ${req.url}`);
+        jupyterProxy.ws(req, socket, head);
       }
       // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
       else if (req.url.startsWith('/rstudio')) {
@@ -403,6 +542,54 @@ stateManager.load().then(() => {
       socket.destroy();
     }
   });
+
+  // Idle session cleanup (disabled by default, enable with SESSION_IDLE_TIMEOUT env var)
+  // Checks every minute if any session has been idle longer than timeout, cancels SLURM job
+  if (config.sessionIdleTimeout > 0) {
+    const timeoutMs = config.sessionIdleTimeout * 60 * 1000;
+    log.info(`Idle session cleanup enabled: ${config.sessionIdleTimeout} minutes`);
+
+    setInterval(async () => {
+      for (const sessionKey of Object.keys(state.sessions)) {
+        const session = state.sessions[sessionKey];
+
+        if (!session || session.status !== 'running' || !session.jobId) continue;
+
+        // Calculate last activity, handling NaN from invalid date strings
+        // Date.parse returns NaN for invalid dates, which || 0 handles
+        const safeStartedAtTs = Date.parse(session.startedAt) || 0;
+        const lastActivity = session.lastActivity || safeStartedAtTs;
+        if (!lastActivity) continue;
+
+        const idleMs = Date.now() - lastActivity;
+
+        if (idleMs > timeoutMs) {
+          // Parse hpc and ide from composite key (e.g., 'gemini-vscode' -> ['gemini', 'vscode'])
+          const [hpc, ide] = sessionKey.split('-');
+          const idleMins = Math.round(idleMs / 60000);
+          log.info(`Session ${sessionKey} idle for ${idleMins} minutes, cancelling job`, {
+            sessionKey,
+            hpc,
+            jobId: session.jobId,
+            ide: session.ide,
+          });
+
+          try {
+            const hpcService = new HpcService(hpc);
+            await hpcService.cancelJob(session.jobId);
+            // Reset session to idle state
+            state.sessions[sessionKey] = createIdleSession(ide);
+            if (state.activeSession?.hpc === hpc && state.activeSession?.ide === session.ide) {
+              state.activeSession = null;
+            }
+            log.info(`Idle session ${sessionKey} cancelled successfully`);
+          } catch (err) {
+            log.error(`Failed to cancel idle session ${sessionKey}`, { error: err.message });
+          }
+        }
+      }
+    }, 60 * 1000); // Check every minute
+  }
 }).catch(err => {
   log.error('Failed to load state', { error: err.message });
   process.exit(1);

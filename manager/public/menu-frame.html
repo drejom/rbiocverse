@@ -176,6 +176,11 @@
       color: #4ade80;
     }
     .actions button.live-server:hover { background: rgba(74,222,128,0.2); }
+    .actions button.shiny-server {
+      border-color: rgba(59,130,246,0.5);
+      color: #60a5fa;
+    }
+    .actions button.shiny-server:hover { background: rgba(59,130,246,0.2); }
     .actions button:disabled {
       opacity: 0.4;
       cursor: not-allowed;
@@ -276,6 +281,21 @@
     </div>
   </div>
 
+  <!-- Shiny Server Modal -->
+  <div id="shiny-modal" class="modal-overlay">
+    <div class="modal">
+      <h3><i data-lucide="sparkles" style="width:18px;height:18px;"></i> Shiny App</h3>
+      <div class="modal-actions">
+        <button onclick="copyShinyUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+        <button class="primary" onclick="openShinyServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      </div>
+      <div id="shiny-copy-feedback" class="copy-feedback">Copied!</div>
+      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
+        Run shiny::runApp(port=3838)
+      </div>
+    </div>
+  </div>
+
   <script>
     const toggle = document.getElementById('toggle');
     const panel = document.getElementById('panel');
@@ -285,6 +305,7 @@
     let activeSession = null;  // { hpc, ide }
     let availableIdes = {};    // IDE info from server
     let liveServerAvailable = false;
+    let shinyServerAvailable = false;
     let currentStatus = null;
     let isKilling = false;     // Prevent UI updates during kill
 
@@ -410,12 +431,17 @@
       else if (countdown < 1800) toggle.classList.add('warning');
       if (open) toggle.classList.add('open');
 
-      // Only show Live Server for VS Code
-      const showLiveServer = ide === 'vscode';
-      const liveServerBtn = showLiveServer
+      // Only show Live Server and Shiny for VS Code
+      const showDevServers = ide === 'vscode';
+      const liveServerBtn = showDevServers
         ? (liveServerAvailable
             ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
             : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>')
+        : '';
+      const shinyServerBtn = showDevServers
+        ? (shinyServerAvailable
+            ? '<button class="shiny-server" onclick="showShinyModal()"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>'
+            : '<button class="shiny-server" disabled title="Run shiny::runApp(port=3838)"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>')
         : '';
 
       let resourcesHtml = '';
@@ -433,6 +459,7 @@
         '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
         liveServerBtn +
+        shinyServerBtn +
         '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
         '<button class="danger" onclick="killJob()"><i data-lucide="square" class="lucide"></i> Kill Job</button>' +
         '</div>';
@@ -440,17 +467,26 @@
       lucide.createIcons();
     }
 
-    async function checkLiveServer() {
+    async function checkDevServers() {
       // Only check if VS Code is active
       if (!activeSession || activeSession.ide !== 'vscode') {
         liveServerAvailable = false;
+        shinyServerAvailable = false;
         return;
       }
       try {
-        const res = await fetch('/live/', { method: 'HEAD' });
-        liveServerAvailable = res.ok;
+        const res = await fetch('/api/dev-servers');
+        if (res.ok) {
+          const data = await res.json();
+          liveServerAvailable = data.liveServer || false;
+          shinyServerAvailable = data.shiny || false;
+        } else {
+          liveServerAvailable = false;
+          shinyServerAvailable = false;
+        }
       } catch (e) {
         liveServerAvailable = false;
+        shinyServerAvailable = false;
       }
       render();
     }
@@ -644,11 +680,48 @@
       if (e.target === this) hideLiveModal();
     });
 
+    // Shiny Server Modal functions
+    function getShinyUrl() {
+      return window.location.origin + '/shiny/';
+    }
+
+    function showShinyModal() {
+      console.log('[Menu] Shiny modal opened');
+      document.getElementById('shiny-modal').classList.add('show');
+      lucide.createIcons();
+    }
+
+    function hideShinyModal() {
+      document.getElementById('shiny-modal').classList.remove('show');
+      document.getElementById('shiny-copy-feedback').classList.remove('show');
+    }
+
+    function copyShinyUrl() {
+      const url = getShinyUrl();
+      console.log('[Menu] Copying Shiny URL:', url);
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('shiny-copy-feedback').classList.add('show');
+        setTimeout(() => {
+          document.getElementById('shiny-copy-feedback').classList.remove('show');
+        }, 2000);
+      });
+    }
+
+    function openShinyServer() {
+      console.log('[Menu] Opening Shiny in new tab');
+      window.open('/shiny/', '_blank');
+      hideShinyModal();
+    }
+
+    document.getElementById('shiny-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideShinyModal();
+    });
+
     // Initialize
     fetchStatus();
-    checkLiveServer();
+    checkDevServers();
     setInterval(fetchStatus, 60000);
-    setInterval(checkLiveServer, 10000);
+    setInterval(checkDevServers, 10000);
     setInterval(tickCountdown, 1000);
     lucide.createIcons();
   </script>

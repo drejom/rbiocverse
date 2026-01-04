@@ -201,6 +201,8 @@ validateHpcName('invalid'); // Throws
 | `ENABLE_STATE_PERSISTENCE` | `true` | Enable/disable state persistence |
 | `STATUS_CACHE_TTL` | `120000` | Cluster status cache TTL (ms) |
 | `LOG_LEVEL` | `info` | Winston log level |
+| `SESSION_IDLE_TIMEOUT` | `0` | Minutes of inactivity before auto-cancel (0 = disabled) |
+| `ADDITIONAL_PORTS` | `5500` | Extra ports to tunnel (comma-separated) |
 
 ### IDE Global Defaults (`config/index.js`)
 
@@ -279,3 +281,46 @@ log.error('Failed', { error: err.message });
 ```
 
 Log levels: `error`, `warn`, `info`, `debug`
+
+## Session Activity Tracking
+
+The manager tracks user activity via proxy traffic events. This enables optional idle session cleanup to free HPC resources.
+
+### How It Works
+
+```
+User interacts with IDE → Proxy event fires → lastActivity timestamp updated
+                                                      ↓
+                                    Cleanup interval checks every 60s
+                                                      ↓
+                              If idle > SESSION_IDLE_TIMEOUT → scancel job
+```
+
+### Activity Sources
+
+Activity is tracked on these proxy events for all IDEs (VS Code, RStudio, JupyterLab):
+- `proxyRes` - HTTP response received from IDE
+- `open` - WebSocket connection opened
+
+### Idle Cleanup (Opt-in)
+
+**Disabled by default** (`SESSION_IDLE_TIMEOUT=0`). Enable with caution:
+
+```bash
+# Cancel session after 2 hours of inactivity
+SESSION_IDLE_TIMEOUT=120 npm start
+```
+
+**Warning**: Activity tracking is based on proxy traffic, not CPU usage. A long-running simulation with no UI interaction will appear "idle" and get cancelled. For batch workloads, submit separate SLURM jobs instead of running in the IDE.
+
+### State
+
+Activity timestamp stored in session state (keyed by `${hpc}-${ide}`):
+```javascript
+state.sessions['gemini-vscode'] = {
+  status: 'running',
+  jobId: '12345',
+  lastActivity: 1704268800000,  // Unix timestamp (ms)
+  // ...
+};
+```
