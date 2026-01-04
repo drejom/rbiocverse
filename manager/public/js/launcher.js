@@ -377,6 +377,8 @@ function renderRunningIdeSection(hpc, ide, status) {
         <div class="resources-inline">
           <span><i data-lucide="cpu" class="icon-xs"></i>${status.cpus || '?'}</span>
           <span><i data-lucide="memory-stick" class="icon-xs"></i>${status.memory || '?'}</span>
+          ${status.gpu ? `<span><i data-lucide="zap" class="icon-xs"></i>${status.gpu.toUpperCase()}</span>` : ''}
+          ${status.releaseVersion ? `<span><i data-lucide="package" class="icon-xs"></i>${status.releaseVersion}</span>` : ''}
         </div>
       </div>
       <div class="btn-group btn-group-sm">
