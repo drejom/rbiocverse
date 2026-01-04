@@ -409,8 +409,9 @@ function createApiRouter(stateManager) {
       }
 
       // SECURITY: Validate inputs before using in shell command
+      // Note: POST /launch doesn't support GPU, so no GPU limit checking here
       try {
-        validateSbatchInputs(cpus, mem, time);
+        validateSbatchInputs(cpus, mem, time, hpc);
       } catch (e) {
         stateManager.releaseLock(lockName);
         return res.status(400).json({ error: e.message });
@@ -642,8 +643,9 @@ function createApiRouter(stateManager) {
       }
 
       // SECURITY: Validate inputs before using in shell command
+      // Pass hpc and gpu for cluster-specific limit checking
       try {
-        validateSbatchInputs(cpus, mem, time);
+        validateSbatchInputs(cpus, mem, time, hpc, gpu);
       } catch (e) {
         stateManager.releaseLock(lockName);
         return sendError(e.message);

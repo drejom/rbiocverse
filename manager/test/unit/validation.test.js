@@ -250,3 +250,59 @@ describe('validateHpcName', () => {
     });
   });
 });
+
+describe('validateSbatchInputs with cluster limits', () => {
+  describe('Gemini compute partition limits', () => {
+    it('should accept valid resources within limits', () => {
+      expect(() => validateSbatchInputs('4', '40G', '12:00:00', 'gemini')).to.not.throw();
+      expect(() => validateSbatchInputs('44', '600G', '14-00:00:00', 'gemini')).to.not.throw();
+    });
+
+    it('should reject CPUs exceeding partition limit', () => {
+      expect(() => validateSbatchInputs('45', '40G', '12:00:00', 'gemini'))
+        .to.throw('CPU limit exceeded: gemini allows max 44 CPUs');
+    });
+
+    it('should reject memory exceeding partition limit', () => {
+      expect(() => validateSbatchInputs('4', '700G', '12:00:00', 'gemini'))
+        .to.throw('Memory limit exceeded: gemini allows max 625G');
+    });
+
+    it('should reject time exceeding partition limit', () => {
+      expect(() => validateSbatchInputs('4', '40G', '15-00:00:00', 'gemini'))
+        .to.throw('Time limit exceeded: gemini allows max 14-00:00:00');
+    });
+  });
+
+  describe('Gemini GPU partition limits', () => {
+    it('should apply A100 partition limits when GPU specified', () => {
+      // A100 max CPUs is 34
+      expect(() => validateSbatchInputs('34', '300G', '4-00:00:00', 'gemini', 'a100')).to.not.throw();
+      expect(() => validateSbatchInputs('35', '300G', '4-00:00:00', 'gemini', 'a100'))
+        .to.throw('CPU limit exceeded: gemini allows max 34 CPUs');
+    });
+
+    it('should apply A100 time limit', () => {
+      expect(() => validateSbatchInputs('4', '40G', '5-00:00:00', 'gemini', 'a100'))
+        .to.throw('Time limit exceeded: gemini allows max 4-00:00:00');
+    });
+  });
+
+  describe('Apollo limits', () => {
+    it('should accept valid resources for Apollo', () => {
+      expect(() => validateSbatchInputs('64', '400G', '14-00:00:00', 'apollo')).to.not.throw();
+    });
+
+    it('should reject time exceeding Apollo limit', () => {
+      expect(() => validateSbatchInputs('4', '40G', '15-00:00:00', 'apollo'))
+        .to.throw('Time limit exceeded: apollo allows max 14-00:00:00');
+    });
+  });
+
+  describe('Backwards compatibility', () => {
+    it('should work without cluster parameter (no limit checking)', () => {
+      // Without hpc parameter, only format validation is done
+      expect(() => validateSbatchInputs('128', '999G', '99-00:00:00')).to.not.throw();
+    });
+  });
+});

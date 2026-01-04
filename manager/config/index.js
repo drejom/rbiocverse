@@ -229,6 +229,39 @@ const gpuConfig = {
   apollo: null,
 };
 
+// Partition resource limits (from scontrol show partition)
+// Used for input validation - prevents submitting jobs that exceed queue limits
+// Memory in MB (MaxMemPerNode), time in SLURM format, UNLIMITED = no limit
+const partitionLimits = {
+  gemini: {
+    compute: {
+      maxCpus: 44,            // MaxCPUsPerNode=44
+      maxMemMB: 640000,       // MaxMemPerNode=640000 (~625G)
+      maxTime: '14-00:00:00', // MaxTime=14-00:00:00
+    },
+    'gpu-a100': {
+      maxCpus: 34,            // MaxCPUsPerNode=34
+      maxMemMB: 384000,       // MaxMemPerNode=384000 (~375G)
+      maxTime: '4-00:00:00',  // MaxTime=4-00:00:00
+    },
+    'gpu-v100': {
+      maxCpus: 128,           // MaxCPUsPerNode=UNLIMITED (use reasonable default)
+      maxMemMB: 96000,        // ~96G (node has 96G)
+      maxTime: '8-00:00:00',  // MaxTime=8-00:00:00
+    },
+  },
+  apollo: {
+    // Apollo uses "fast,all" - SLURM picks first available
+    // fast: MaxTime=12:00:00, all: MaxTime=14-00:00:00
+    // Use the more permissive 'all' limits since jobs may land there
+    'fast,all': {
+      maxCpus: 128,           // MaxCPUsPerNode=UNLIMITED
+      maxMemMB: 512000,       // MaxMemPerNode=UNLIMITED (~500G reasonable limit)
+      maxTime: '14-00:00:00', // MaxTime=14-00:00:00 (all partition)
+    },
+  },
+};
+
 // Bioconductor release configurations
 // Each release specifies which IDEs are available and paths per cluster
 
@@ -332,6 +365,7 @@ module.exports = {
   clusters,
   ides,
   gpuConfig,
+  partitionLimits,
   releases,
   defaultReleaseVersion,
   getReleasePaths,
