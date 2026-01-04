@@ -5,9 +5,15 @@
 #
 # Usage: ./scripts/pull-container.sh [--tag TAG] [--force] [--dry-run]
 #
+# Tagging scheme:
+#   - Dev releases:    vYYYY-M-DD (e.g., v2026-1-4)
+#   - Stable releases: vX.Y.Z     (e.g., v3.22.0)
+#   - Also available:  latest, RELEASE_X_YY
+#
 # Examples:
 #   ./scripts/pull-container.sh                    # Pull :latest (skip if exists)
-#   ./scripts/pull-container.sh --tag v2025-12-31 # Pull specific tag
+#   ./scripts/pull-container.sh --tag v2026-1-4   # Pull specific dev release
+#   ./scripts/pull-container.sh --tag v3.22.0     # Pull specific stable release
 #   ./scripts/pull-container.sh --force           # Overwrite existing container
 
 set -euo pipefail

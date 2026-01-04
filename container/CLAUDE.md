@@ -182,6 +182,30 @@ GitHub Actions (`.github/workflows/publish-to-github-package.yaml`) builds on:
 - Push of version tags (`v*`)
 - Manual workflow dispatch (can specify BIOC_VERSION)
 
+### Container Tagging Scheme
+
+Two tagging schemes are used:
+
+| Tag Type | Format | Example | When to Use |
+|----------|--------|---------|-------------|
+| **Dev releases** | `vYYYY-M-DD` | `v2026-1-4` | Incremental updates, bug fixes, new packages |
+| **Stable releases** | Semver `vX.Y.Z` | `v3.22.0` | Major Bioconductor version upgrades |
+
+Both schemes trigger CI builds and push to GHCR. Additional auto-generated tags:
+- `:latest` - always points to most recent build
+- `:RELEASE_X_YY` - matches Bioconductor version (e.g., `RELEASE_3_22`)
+
+**Examples:**
+```sh
+# Dev release (incremental update)
+git tag v2026-1-15
+git push --tags
+
+# Stable release (new Bioconductor version)
+git tag v3.23.0
+git push --tags
+```
+
 ## Design Decisions
 
 - SLURM commands use SSH wrappers to passthrough from container to host

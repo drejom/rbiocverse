@@ -72,8 +72,11 @@ Rscript scripts/update-description.R bump bioc
 # Edit line 3: ARG BIOC_VERSION=RELEASE_3_23
 
 # 6. Commit and tag to trigger CI build
+# Use date tag for dev releases: vYYYY-M-DD
+# Use semver for stable releases: vX.Y.Z (e.g., v3.23.0)
 git add -A && git commit -m "Bump to Bioconductor 3.23"
-git tag v2026-MM-DD
+git tag v2026-1-15      # Dev release (date-based)
+# git tag v3.23.0       # Stable release (semver)
 git push && git push --tags
 ```
 
@@ -232,11 +235,29 @@ See `rbiocverse/pyproject.toml` for Python packages:
 └── Readme.md
 ```
 
-## Previous Versions
+## Container Tags
 
-| Bioconductor | Container Tag | R_LIBS_SITE |
-|--------------|---------------|-------------|
-| 3.22 | `ghcr.io/drejom/vscode-rbioc:latest` | `rlibs/bioc-3.22` |
-| 3.19 | `ghcr.io/drejom/vscode-rbioc:v2024-7-17` | `rlibs/bioc-3.19` |
-| 3.18 | `ghcr.io/drejom/vscode-rbioc:v2023-11-27` | `rlibs/bioc-3.18` |
-| 3.17 | `ghcr.io/drejom/vscode-rbioc:v2023-9-26` | `rlibs/bioc-3.17` |
+### Tagging Scheme
+
+The container uses two tagging schemes:
+
+| Tag Type | Format | Example | Use Case |
+|----------|--------|---------|----------|
+| **Dev releases** | `vYYYY-M-DD` | `v2026-1-4` | Incremental updates during development |
+| **Stable releases** | Semver `vX.Y.Z` | `v3.22.0` | Major Bioconductor version releases |
+| **Latest** | `latest` | `latest` | Always points to most recent build |
+| **Bioc version** | `RELEASE_X_YY` | `RELEASE_3_22` | Matches Bioconductor release branch |
+
+**Recommended usage:**
+- Production: Use `:latest` or `:RELEASE_3_22` for stability
+- Development: Use date tags like `:v2026-1-4` to pin specific builds
+- Upgrades: Use semver tags like `:v3.22.0` for major version upgrades
+
+### Version History
+
+| Bioconductor | Stable Tag | Dev Tags | R_LIBS_SITE |
+|--------------|------------|----------|-------------|
+| 3.22 | `v3.22.0` | `v2026-1-4`, `v2026-1-3` | `rlibs/bioc-3.22` |
+| 3.19 | - | `v2024-7-17` | `rlibs/bioc-3.19` |
+| 3.18 | - | `v2023-11-27` | `rlibs/bioc-3.18` |
+| 3.17 | - | `v2023-9-26` | `rlibs/bioc-3.17` |
