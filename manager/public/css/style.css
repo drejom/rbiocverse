@@ -93,7 +93,7 @@ body {
   backdrop-filter: blur(10px);
   border-radius: 20px;
   padding: 30px;
-  max-width: 600px;
+  max-width: 720px;
   width: 100%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
@@ -209,13 +209,14 @@ h1 {
 .launch-form {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: flex-end;
   margin-top: 12px;
 }
 
 .form-input {
   flex: 1;
-  min-width: 70px;
+  min-width: 60px;
 }
 
 .form-input label {
@@ -751,8 +752,7 @@ h1 {
 
 /* GPU Selector - Segmented control (Apple-like) */
 .gpu-selector {
-  flex: 1.5;
-  min-width: 140px;
+  flex: 0 0 auto;
 }
 
 .gpu-label {
@@ -765,26 +765,26 @@ h1 {
 .gpu-toggle {
   display: flex;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 1px;
 }
 
 .gpu-btn {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 3px;
+  padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 5px;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
 }
 
 .gpu-btn:hover {
