@@ -1,7 +1,7 @@
 const { expect } = require('chai');
 const fs = require('fs').promises;
 const path = require('path');
-const StateManager = require('../../lib/state');
+const { StateManager } = require('../../lib/state');
 
 describe('StateManager Integration Tests', () => {
   let stateManager;

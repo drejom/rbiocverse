@@ -175,6 +175,7 @@ class HpcService {
   buildVscodeWrap(options = {}) {
     const { token } = options;
     const ideConfig = ides.vscode;
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
     // Paths (using \\$ for SSH escaping)
     const dataDir = '\\$HOME/.vscode-slurm/.vscode-server';
@@ -229,11 +230,15 @@ fi
       `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
     ].join(' && ');
 
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
     // Singularity command - uses IDE_PORT from port finder
     const singularityCmd = [
       `${this.cluster.singularityBin} exec`,
       `--env TERM=xterm-256color`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      pythonEnvArg,
       // Use file-based keyring instead of gnome-keyring (not available in container)
       // See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/4
       `--env VSCODE_KEYRING_PASS=hpc-code-server`,
@@ -249,7 +254,7 @@ fi
       `--server-data-dir ${dataDir}`,
       `--extensions-dir ${extensionsDir}`,
       `--user-data-dir ${userDataDir}`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     return `${setup} && ${singularityCmd}`;
   }
@@ -264,6 +269,7 @@ fi
    */
   buildRstudioWrap(cpus) {
     const ideConfig = ides.rstudio;
+    const pythonSitePackages = pythonEnv[this.clusterName] || '';
 
     // ESCAPING: Two different contexts require different escaping strategies
     // See docs/ESCAPING.md for full explanation.
@@ -357,9 +363,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       'export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0',
     ].join(' && ');
 
+    // Python site-packages env (null if not configured for this cluster)
+    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
+
     const singularityCmd = [
       `${this.cluster.singularityBin} exec --cleanenv`,
       `--env R_LIBS_SITE=${this.cluster.rLibsSite}`,
+      pythonEnvArg,
       '--env USER=\\$(whoami)',  // Required for auth-none - user-id cookie needs username
       `-B ${rstudioBinds}`,
       `${this.cluster.singularityImage}`,
@@ -372,7 +382,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       '--www-verify-user-agent=0',
       `--secure-cookie-key-file=${workdir}/secure-cookie-key`,
       '--rsession-path=/etc/rstudio/rsession.sh',
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const rserverCmd = `${envSetup} && ${singularityCmd}`;
 

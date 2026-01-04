@@ -15,6 +15,7 @@ const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
 const { config, ides, gpuConfig } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
+const { createIdleSession } = require('../lib/state');
 
 // Shared tunnel service instance
 const tunnelService = new TunnelService();
@@ -161,21 +162,7 @@ function createApiRouter(stateManager) {
     return { hpc, ide };
   }
 
-  // Helper: create session object
-  function createSession(ide = 'vscode') {
-    return {
-      status: 'idle',
-      ide,
-      jobId: null,
-      node: null,
-      tunnelProcess: null,
-      startedAt: null,
-      cpus: null,
-      memory: null,
-      walltime: null,
-      error: null,
-    };
-  }
+  // Helper: create session object - uses shared createIdleSession from lib/state.js
 
   // Helper: get sessions info for status endpoint (grouped by hpc then ide)
   function getSessionsInfo() {
@@ -348,7 +335,7 @@ function createApiRouter(stateManager) {
     try {
       // Initialize session if needed
       if (!state.sessions[sessionKey]) {
-        state.sessions[sessionKey] = createSession(ide);
+        state.sessions[sessionKey] = createIdleSession(ide);
       }
 
       const session = state.sessions[sessionKey];
@@ -544,7 +531,7 @@ function createApiRouter(stateManager) {
     try {
       // Initialize session if needed
       if (!state.sessions[sessionKey]) {
-        state.sessions[sessionKey] = createSession(ide);
+        state.sessions[sessionKey] = createIdleSession(ide);
       }
 
       const session = state.sessions[sessionKey];
@@ -815,7 +802,7 @@ function createApiRouter(stateManager) {
     }
 
     // Reset session
-    state.sessions[sessionKey] = createSession(ide);
+    state.sessions[sessionKey] = createIdleSession(ide);
 
     // Clear active session if this was it
     if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {
@@ -909,7 +896,7 @@ function createApiRouter(stateManager) {
       }
 
       // Reset session
-      state.sessions[sessionKey] = createSession(ide);
+      state.sessions[sessionKey] = createIdleSession(ide);
 
       // Clear active session if this was it
       if (state.activeSession?.hpc === hpc && state.activeSession?.ide === ide) {
