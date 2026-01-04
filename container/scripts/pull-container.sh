@@ -123,7 +123,7 @@ main() {
     cat > "$job_script" << EOF
 #!/bin/bash
 #SBATCH --job-name=pull_${bioc_version}
-#SBATCH --time=01:00:00
+#SBATCH --time=04:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --output=${log_file}
