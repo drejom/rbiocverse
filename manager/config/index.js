@@ -231,70 +231,51 @@ const gpuConfig = {
 
 // Bioconductor release configurations
 // Each release specifies which IDEs are available and paths per cluster
+
+// Cluster base paths for Singularity images and libraries
+const clusterBasePaths = {
+  gemini: '/packages/singularity/shared_cache/rbioc',
+  apollo: '/opt/singularity-images/rbioc',
+};
+
+// Helper to generate paths for a given release version and clusters
+// Usage: createReleasePaths('3.22') for all clusters
+//        createReleasePaths('3.18', ['apollo']) for Apollo-only
+function createReleasePaths(version, supportedClusters = ['gemini', 'apollo']) {
+  const paths = {};
+  for (const cluster of supportedClusters) {
+    const basePath = clusterBasePaths[cluster];
+    if (basePath) {
+      paths[cluster] = {
+        singularityImage: `${basePath}/vscode-rbioc_${version}.sif`,
+        rLibsSite: `${basePath}/rlibs/bioc-${version}`,
+        pythonEnv: `${basePath}/python/bioc-${version}`,
+      };
+    }
+  }
+  return paths;
+}
+
 const releases = {
   '3.22': {
     name: 'Bioconductor 3.22',
     ides: ['vscode', 'rstudio', 'jupyter'],
-    paths: {
-      gemini: {
-        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif',
-        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
-        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
-      },
-      apollo: {
-        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif',
-        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
-        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.22',
-      },
-    },
+    paths: createReleasePaths('3.22'),
   },
   '3.19': {
     name: 'Bioconductor 3.19',
-    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.19
-    paths: {
-      gemini: {
-        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.19.sif',
-        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.19',
-        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.19',
-      },
-      apollo: {
-        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.19.sif',
-        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.19',
-        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.19',
-      },
-    },
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.19'),
   },
   '3.18': {
     name: 'Bioconductor 3.18',
-    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.18
-    paths: {
-      gemini: {
-        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.18.sif',
-        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.18',
-        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.18',
-      },
-      apollo: {
-        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.18.sif',
-        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.18',
-        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.18',
-      },
-    },
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.18'),
   },
   '3.17': {
     name: 'Bioconductor 3.17',
-    ides: ['vscode', 'rstudio'],  // No JupyterLab on 3.17
-    paths: {
-      gemini: {
-        singularityImage: '/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.17.sif',
-        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.17',
-        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.17',
-      },
-      apollo: {
-        singularityImage: '/opt/singularity-images/rbioc/vscode-rbioc_3.17.sif',
-        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.17',
-        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.17',
-      },
-    },
+    ides: ['vscode', 'rstudio'],
+    paths: createReleasePaths('3.17'),
   },
 };
 

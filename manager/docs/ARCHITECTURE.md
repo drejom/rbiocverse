@@ -134,16 +134,16 @@ stateManager.releaseLock('launch:gemini');
 
 ### 2. HpcService (`services/hpc.js`)
 
-Handles SLURM operations via SSH. Builds IDE-specific Singularity wrapper scripts.
+Handles SLURM operations via SSH. Builds IDE-specific bash scripts for job submission.
 
 ```javascript
 const HpcService = require('./services/hpc');
 const hpc = new HpcService('gemini');
 
 // Submit job with IDE and release-specific settings
-const jobId = await hpc.submitJob('vscode', '4', '40G', '12:00:00', {
+const { jobId, token } = await hpc.submitJob('4', '40G', '12:00:00', 'vscode', {
   releaseVersion: '3.22',
-  gpu: 'a100',  // or null for CPU
+  gpu: 'a100',  // or '' for CPU
 });
 
 // Get job info (from squeue)
@@ -151,16 +151,25 @@ const info = await hpc.getJobInfo('vscode');
 // { jobId, state, node, timeLeft, timeLimit, cpus, memory, startTime }
 
 // Wait for node assignment
-const node = await hpc.waitForNode(jobId);
+const { node } = await hpc.waitForNode(jobId);
 
 // Cancel job
 await hpc.cancelJob(jobId);
 
-// IDE-specific wrap builders (use release-specific paths)
-hpc.buildVscodeWrap({ token, releaseVersion: '3.22' });
-hpc.buildRstudioWrap({ releaseVersion: '3.22' });
-hpc.buildJupyterWrap({ token, releaseVersion: '3.22' });
+// IDE-specific script builders (return full bash scripts)
+// All set parallel processing env vars from cpus parameter
+hpc.buildVscodeScript({ token, releaseVersion: '3.22', cpus: 4 });
+hpc.buildRstudioScript(4, { releaseVersion: '3.22' });
+hpc.buildJupyterScript({ token, releaseVersion: '3.22', cpus: 4 });
 ```
+
+**Parallel Processing Environment Variables** (set automatically from SLURM allocation):
+- `OMP_NUM_THREADS` - OpenMP
+- `MKL_NUM_THREADS` - Intel MKL
+- `OPENBLAS_NUM_THREADS` - OpenBLAS
+- `NUMEXPR_NUM_THREADS` - NumPy numexpr
+- `MC_CORES` - R parallel::mclapply
+- `BIOCPARALLEL_WORKER_NUMBER` - BiocParallel
 
 ### 3. TunnelService (`services/tunnel.js`)
 
@@ -327,7 +336,7 @@ All sbatch parameters are validated with strict regex patterns. No user input is
 ## Testing
 
 ```bash
-# Unit + Integration tests (167 tests)
+# Unit + Integration tests (226 tests)
 npm test
 
 # E2E browser tests (15 tests)
