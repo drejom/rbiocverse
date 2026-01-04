@@ -28,6 +28,8 @@ function createIdleSession(ide) {
     error: null,
     lastActivity: null,
     token: null,
+    releaseVersion: null,
+    gpu: null,
   };
 }
 
