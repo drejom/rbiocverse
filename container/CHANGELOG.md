@@ -2,9 +2,25 @@
 
 All notable changes to the rbiocverse package collection will be documented in this file.
 
-## [3.22.0] - 2026-01-01
+## [3.22.0] - 2026-01-03
 
 ### Added
+- **Python SCverse ecosystem** installed to shared PYTHONPATH:
+  - Core: scanpy 1.11.5, anndata, scvi-tools, squidpy, cellrank, muon, pertpy
+  - Utilities: harmonypy, bbknn, scanorama, scrublet, doubletdetection
+  - GPU (Gemini only): rapids-singlecell, cupy-cuda12x, jax[cuda12]
+  - ~470 packages, 14GB per cluster
+
+- **Python package upgrade workflow** with staging model:
+  - `sync-python-packages.sh` - Capture installed packages for upgrade review
+  - `sync-python.py` - Categorize packages (core/gpu/staged/transitive)
+  - `[staged]` section in pyproject.toml for packages added between releases
+  - Staging model: packages can be promoted to core, kept staged, or dropped
+
+- **VS Code extensions pre-installed** for HPC Code Server bootstrap:
+  - REditorSupport.r, RDebugger.r-debugger, ms-python.python
+  - Extensions in `/usr/local/share/vscode-extensions`
+
 - **GitHub packages added to Imports** (previously only in Remotes):
   - `azimuth` - Reference-based single-cell mapping
   - `cellassign` - Automated cell type annotation
