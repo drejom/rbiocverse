@@ -1,7 +1,7 @@
 # HPC Code Server Stack
 
 [![Tests](https://github.com/drejom/omhq-hpc-code-server-stack/actions/workflows/test.yml/badge.svg)](https://github.com/drejom/omhq-hpc-code-server-stack/actions/workflows/test.yml)
-[![codecov](https://codecov.io/gh/drejom/omhq-hpc-code-server-stack/graph/badge.svg)](https://codecov.io/gh/drejom/omhq-hpc-code-server-stack)
+[![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/drejom/5309bba1b50ac79e6b1744fd0ccfd20d/raw/coverage-main.json)](https://github.com/drejom/omhq-hpc-code-server-stack/actions/workflows/test.yml)
 
 Browser-based IDE access to HPC SLURM clusters via SSH tunneling.
 
