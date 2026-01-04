@@ -81,21 +81,67 @@ vscodeProxy.on('error', (err, req, res) => {
 });
 
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
-// Inject connection token for VS Code authentication
+// Rewrite path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
-  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url });
-
-  // VS Code uses query param ?tkn=TOKEN for authentication
-  // Inject token if we have one and it's not already in the URL
+  // VS Code serve-web 1.107+ auth flow:
+  // 1. Token must be passed at root path: /?tkn=TOKEN
+  // 2. Server sets vscode-tkn cookie and redirects to --server-base-path
+  // 3. Subsequent requests use cookie for auth
+  //
+  // Older VS Code (pre-1.107) accepts tokens directly on any path.
+  // We support both by:
+  // - Checking for vscode-tkn cookie (1.107+ sets this)
+  // - For initial requests without cookie, try root path auth
+  // - Always inject token as fallback for older versions
+  const hasVscodeTknCookie = req.headers.cookie?.includes('vscode-tkn');
   const token = getSessionToken('vscode');
-  if (token && !req.url.includes('tkn=')) {
-    const separator = proxyReq.path.includes('?') ? '&' : '?';
-    proxyReq.path = `${proxyReq.path}${separator}tkn=${token}`;
-    log.debugFor('vscode', 'injected token into request', { path: proxyReq.path });
+
+  // Determine the target path
+  let targetPath;
+  if (req.originalUrl.startsWith('/vscode-direct')) {
+    targetPath = req.originalUrl;
+  } else if (req.originalUrl.startsWith('/code')) {
+    targetPath = req.originalUrl.replace(/^\/code/, '/vscode-direct');
+  } else {
+    targetPath = req.originalUrl;
   }
+
+  // For initial requests (no auth cookie), route through root path for 1.107+ auth
+  if (!hasVscodeTknCookie && token && (targetPath === '/vscode-direct' || targetPath === '/vscode-direct/')) {
+    // Initial page load without cookie - use root auth flow
+    proxyReq.path = `/?tkn=${token}`;
+    log.debugFor('vscode', 'initial auth via root path', { originalUrl: req.originalUrl });
+  } else {
+    // Already authenticated (cookie present) or sub-resource request
+    // Don't inject token - cookie handles auth, and injecting causes redirect loops
+    proxyReq.path = targetPath;
+  }
+
+  log.debugFor('vscode', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path, hasCookie: hasVscodeTknCookie });
 });
 
 vscodeProxy.on('proxyRes', (proxyRes, req, res) => {
+  // Rewrite Set-Cookie headers to work through proxy
+  // VS Code sets cookies for the backend domain, but browser accesses via proxy domain
+  // We need to strip domain/path restrictions so cookies work through proxy
+  const setCookies = proxyRes.headers['set-cookie'];
+  if (setCookies) {
+    proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
+      // Remove Domain= attribute (let browser use current domain)
+      // Change Path= to / so cookies work for all proxy paths
+      return cookie
+        .replace(/;\s*Domain=[^;]*/gi, '')
+        .replace(/;\s*Path=[^;]*/gi, '; Path=/');
+    });
+    log.debugFor('vscode', 'rewrote cookies', { original: setCookies, rewritten: proxyRes.headers['set-cookie'] });
+  }
+
+  // Rewrite Location headers to point back through proxy
+  const location = proxyRes.headers['location'];
+  if (location) {
+    log.debugFor('vscode', 'redirect location', { location, originalUrl: req.originalUrl });
+  }
+
   log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
   updateActivity();
 });
@@ -310,14 +356,24 @@ jupyterProxy.on('error', (err, req, res) => {
 });
 
 // Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
-// Inject authentication token for JupyterLab
+// Rewrite path and inject authentication token for JupyterLab
 jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
-  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url });
+  // Jupyter expects all requests at /jupyter-direct (--ServerApp.base_url)
+  // Requests from /jupyter/* need to be rewritten to /jupyter-direct/*
+  // Requests from /jupyter-direct/* already have correct path in originalUrl
+  if (req.originalUrl.startsWith('/jupyter-direct')) {
+    proxyReq.path = req.originalUrl;
+  } else if (req.originalUrl.startsWith('/jupyter')) {
+    // Rewrite /jupyter/foo -> /jupyter-direct/foo
+    proxyReq.path = req.originalUrl.replace(/^\/jupyter/, '/jupyter-direct');
+  }
+
+  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
 
   // JupyterLab uses query param ?token=TOKEN for authentication
   // Inject token if we have one and it's not already in the URL
   const token = getSessionToken('jupyter');
-  if (token && !req.url.includes('token=')) {
+  if (token && !proxyReq.path.includes('token=')) {
     const separator = proxyReq.path.includes('?') ? '&' : '?';
     proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
     log.debugFor('jupyter', 'injected token into request', { path: proxyReq.path });

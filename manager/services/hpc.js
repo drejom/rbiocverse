@@ -22,25 +22,30 @@ function generateToken() {
  * This handles port collisions when multiple users land on the same compute node.
  * See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/18
  *
+ * Uses netstat pattern from proven /opt/singularity-images/rbioc/rbioc319.job script.
+ * (ss command not available on all compute nodes)
+ *
+ * IMPORTANT: This script is called via `eval $(... | sh -s)` so the LAST LINE must
+ * echo the export statement for eval to capture. Don't just execute `export` - that
+ * runs in a subshell and doesn't propagate to the parent.
+ *
  * @param {number} defaultPort - Starting port to try
- * @param {string} portFile - Path to write the chosen port (e.g., ~/.vscode-slurm/port)
- * @returns {string} Shell script snippet (base64 encoded for safe transport)
+ * @param {string} portFile - Path to write the chosen port (e.g., $HOME/.vscode-slurm/port)
+ * @returns {string} Shell script (base64 encoded for safe transport)
  */
 function buildPortFinderScript(defaultPort, portFile) {
-  const dollar = '$';
   const script = `#!/bin/sh
 # Find available port starting from ${defaultPort}
 PORT=${defaultPort}
-while ss -tln | grep -q ":${dollar}PORT "; do
-  PORT=${dollar}((PORT + 1))
-  # Safety: don't search forever
-  if [ ${dollar}PORT -gt ${dollar}((${defaultPort} + 100)) ]; then
+until ! netstat -ln | grep "  LISTEN  " | grep -iEo ":[0-9]+" | cut -d: -f2 | grep -wqc $PORT; do
+  PORT=$((PORT + 1))
+  if [ $PORT -gt $((${defaultPort} + 100)) ]; then
     echo "ERROR: Could not find available port after 100 attempts" >&2
     exit 1
   fi
 done
-echo ${dollar}PORT > ${portFile}
-export IDE_PORT=${dollar}PORT
+echo $PORT > ${portFile}
+echo "export IDE_PORT=$PORT"
 `;
   return Buffer.from(script).toString('base64');
 }
@@ -57,6 +62,7 @@ class HpcService {
 
   /**
    * Execute SSH command on cluster
+   * Supports multi-line commands (heredocs) via stdin
    * @param {string} command - Command to execute
    * @returns {Promise<string>} Command output
    */
@@ -64,8 +70,12 @@ class HpcService {
     return new Promise((resolve, reject) => {
       log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
       log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
-      exec(
-        `ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} "${command}"`,
+
+      // Use bash -s to read script from stdin - handles heredocs cleanly
+      const sshCmd = `ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
+
+      const child = exec(
+        sshCmd,
         { timeout: 30000 },
         (error, stdout, stderr) => {
           if (error) {
@@ -76,6 +86,10 @@ class HpcService {
           }
         }
       );
+
+      // Write command to stdin
+      child.stdin.write(command);
+      child.stdin.end();
     });
   }
 
@@ -167,26 +181,27 @@ class HpcService {
   }
 
   /**
-   * Build sbatch wrap command for VS Code
+   * Build job script for VS Code
    * Writes Machine settings and bootstraps extensions before starting server
    * @param {Object} options - Build options
    * @param {string} options.token - Connection token for authentication
    * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
+   * @param {number} options.cpus - Number of CPUs for parallel processing
+   * @returns {string} Shell script content
    */
-  buildVscodeWrap(options = {}) {
-    const { token, releaseVersion = defaultReleaseVersion } = options;
+  buildVscodeScript(options = {}) {
+    const { token, releaseVersion = defaultReleaseVersion, cpus = 1 } = options;
     const ideConfig = ides.vscode;
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
 
-    // Paths (using \\$ for SSH escaping)
-    const dataDir = '\\$HOME/.vscode-slurm/.vscode-server';
+    // Paths - no escaping needed with heredocs!
+    const dataDir = '$HOME/.vscode-slurm/.vscode-server';
     const machineSettingsDir = `${dataDir}/data/Machine`;
     const extensionsDir = `${dataDir}/extensions`;
-    const userDataDir = '\\$HOME/.vscode-slurm/user-data';
     const builtinExtDir = vscodeDefaults.builtinExtensionsDir;
 
-    // Machine settings JSON (base64 encoded to avoid escaping issues)
+    // Machine settings JSON (base64 encoded for clean embedding)
     const machineSettings = JSON.stringify(vscodeDefaults.settings, null, 2);
     const machineSettingsBase64 = Buffer.from(machineSettings).toString('base64');
 
@@ -194,111 +209,99 @@ class HpcService {
     const keybindings = JSON.stringify(vscodeDefaults.keybindings, null, 2);
     const keybindingsBase64 = Buffer.from(keybindings).toString('base64');
 
-    // Setup: create dirs, write Machine settings, bootstrap extensions (if available)
-    // Extension bootstrap: copy from image's builtin dir to user dir if not present
-    // Conditional: older images (3.19) don't have builtin extensions - gracefully skip
-    // See: https://github.com/drejom/vscode-rbioc/issues/14
-
-    // Bootstrap script - base64 encoded to avoid escaping hell (see docs/ESCAPING.md)
-    const dollar = '$';
+    // Bootstrap script - base64 encoded for clean embedding
+    // NOTE: VS Code serve-web 1.107+ only supports --server-data-dir, not --user-data-dir
+    // So keybindings must be written to server-data-dir/data/User/ not a separate user-data dir
     const bootstrapScript = `#!/bin/sh
 # Bootstrap extensions from container image (if available)
 if [ -d ${builtinExtDir} ]; then
   for ext in ${builtinExtDir}/*; do
-    name=${dollar}{ext##*/}
-    [ -d "${dollar}HOME/.vscode-slurm/.vscode-server/extensions/${dollar}name" ] || cp -r "${dollar}ext" "${dollar}HOME/.vscode-slurm/.vscode-server/extensions/"
+    name=\${ext##*/}
+    [ -d "$HOME/.vscode-slurm/.vscode-server/extensions/$name" ] || cp -r "$ext" "$HOME/.vscode-slurm/.vscode-server/extensions/"
   done
 fi
 # Bootstrap keybindings (only if user hasn't customized)
-keybindingsFile="${dollar}HOME/.vscode-slurm/user-data/User/keybindings.json"
-if [ ! -f "${dollar}keybindingsFile" ]; then
-  mkdir -p "${dollar}HOME/.vscode-slurm/user-data/User"
-  echo '${keybindingsBase64}' | base64 -d > "${dollar}keybindingsFile"
+# serve-web 1.107+ looks in server-data-dir/data/User/, not separate user-data-dir
+keybindingsFile="$HOME/.vscode-slurm/.vscode-server/data/User/keybindings.json"
+if [ ! -f "$keybindingsFile" ]; then
+  mkdir -p "$HOME/.vscode-slurm/.vscode-server/data/User"
+  echo ${keybindingsBase64} | base64 -d > "$keybindingsFile"
 fi
 `;
     const bootstrapBase64 = Buffer.from(bootstrapScript).toString('base64');
 
-    // Port finder script - finds available port and writes to ~/.vscode-slurm/port
-    // Handles port collisions when multiple users land on the same compute node
-    const portFile = '\\$HOME/.vscode-slurm/port';
+    // Port finder script
+    const portFile = '$HOME/.vscode-slurm/port';
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
-    const setup = [
-      `mkdir -p ${machineSettingsDir} ${extensionsDir}`,
-      `echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json`,
-      // Run bootstrap script (extensions + keybindings)
-      `echo ${bootstrapBase64} | base64 -d | sh`,
-      // Find available port and export as IDE_PORT
-      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
-    ].join(' && ');
+    // Token handling
+    const tokenArg = token ? `--connection-token=${token}` : '--without-connection-token';
 
-    // Python site-packages env (null if not configured for this cluster)
-    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
-
-    // Singularity command - uses IDE_PORT from port finder
-    const singularityCmd = [
-      `${this.cluster.singularityBin} exec`,
-      `--env TERM=xterm-256color`,
+    // Build singularity env args (filter out empty strings)
+    // Set parallel processing env vars to match SLURM allocation
+    const singularityEnvArgs = [
+      '--env TERM=xterm-256color',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
-      pythonEnvArg,
-      // Use file-based keyring instead of gnome-keyring (not available in container)
-      // See: https://github.com/drejom/omhq-hpc-code-server-stack/issues/4
-      `--env VSCODE_KEYRING_PASS=hpc-code-server`,
-      `-B ${this.cluster.bindPaths}`,
-      releasePaths.singularityImage,
-      `code serve-web`,
-      `--host 0.0.0.0`,
-      `--port \\$IDE_PORT`,
-      token ? `--connection-token=${token}` : '--without-connection-token',
-      `--accept-server-license-terms`,
-      `--disable-telemetry`,
-      `--server-base-path /vscode-direct`,
-      `--server-data-dir ${dataDir}`,
-      `--extensions-dir ${extensionsDir}`,
-      `--user-data-dir ${userDataDir}`,
-    ].filter(Boolean).join(' ');
+      pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
+      '--env VSCODE_KEYRING_PASS=hpc-code-server',
+      `--env OMP_NUM_THREADS=${cpus}`,
+      `--env MKL_NUM_THREADS=${cpus}`,
+      `--env OPENBLAS_NUM_THREADS=${cpus}`,
+      `--env NUMEXPR_NUM_THREADS=${cpus}`,
+      `--env MC_CORES=${cpus}`,
+      `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
+    ].filter(Boolean).join(' \\\n  ');
 
-    return `${setup} && ${singularityCmd}`;
+    return `#!/bin/bash
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.vscode-slurm/job.err
+set -ex
+
+# Setup directories
+mkdir -p ${machineSettingsDir} ${extensionsDir}
+
+# Write Machine settings
+echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json
+
+# Run bootstrap script (extensions + keybindings)
+echo ${bootstrapBase64} | base64 -d | sh
+
+# Find available port and export as IDE_PORT
+eval $(echo ${portFinderBase64} | base64 -d | sh -s)
+
+# Start VS Code server
+# Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
+exec ${this.cluster.singularityBin} exec \\
+  ${singularityEnvArgs} \\
+  -B ${this.cluster.bindPaths} \\
+  ${releasePaths.singularityImage} \\
+  code serve-web \\
+    --host 0.0.0.0 \\
+    --port $IDE_PORT \\
+    ${tokenArg} \\
+    --accept-server-license-terms \\
+    --server-base-path /vscode-direct \\
+    --server-data-dir ${dataDir}
+`;
   }
 
   /**
-   * Build sbatch wrap command for RStudio
+   * Build job script for RStudio
    * Based on proven /opt/singularity-images/rbioc/rbioc319.job script
    * Uses auth-none=1 mode (like jupyter-rsession-proxy) - no login required.
-   * Requires --env USER for user-id cookie when using --cleanenv.
    * @param {number} cpus - Number of CPUs
    * @param {Object} options - Build options
    * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
-   * @returns {string} sbatch wrap command
+   * @returns {string} Shell script content
    */
-  buildRstudioWrap(cpus, options = {}) {
+  buildRstudioScript(cpus, options = {}) {
     const { releaseVersion = defaultReleaseVersion } = options;
     const ideConfig = ides.rstudio;
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
+    const workdir = '$HOME/.rstudio-slurm/workdir';
 
-    // ESCAPING: Two different contexts require different escaping strategies
-    // See docs/ESCAPING.md for full explanation.
-    //
-    // 1. INLINE SHELL COMMANDS (setup array, singularity binds):
-    //    These go through: JS -> SSH double-quotes -> shell on compute node
-    //    Use \\$HOME which becomes \$HOME after JS, then $HOME on compute node
-    //
-    // 2. BASE64-ENCODED SCRIPTS (rsessionScript, config files):
-    //    These are base64-encoded in JS, decoded on compute node, then executed
-    //    Use ${dollar} pattern: JS interprets ${dollar} as '$', base64 preserves it
-    //
-    // WARNING: Do NOT use ${dollar} for inline commands - it produces bare $
-    // which expands on the LOCAL machine (Dokploy container), not the compute node!
-
-    // workdir is used in INLINE commands - needs \\$ escaping for SSH context
-    const workdir = '\\$HOME/.rstudio-slurm/workdir';
-
-    // dollar is used in BASE64-ENCODED scripts only - see warning above
-    const dollar = '$';
-
-    // Use base64 encoding for ALL config files to avoid escaping issues
-
+    // Config files (base64 encoded for clean embedding)
     const dbConf = `provider=sqlite
 directory=/var/lib/rstudio-server
 `;
@@ -311,45 +314,37 @@ www-root-path=/rstudio-direct
     const rserverConfBase64 = Buffer.from(rserverConf).toString('base64');
 
     // rstudio-prefs.json - global defaults from config
-    // See config/index.js for settings (HPC-friendly, fonts, terminal)
     const rstudioPrefs = JSON.stringify(rstudioDefaults);
     const rstudioPrefsBase64 = Buffer.from(rstudioPrefs).toString('base64');
 
     // Use releaseVersion for R_LIBS_USER path (e.g., bioc-3.22)
     const biocVersion = releaseVersion;
+
+    // rsession wrapper script
     const rsessionScript = `#!/bin/sh
-exec 2>>${dollar}HOME/.rstudio-slurm/rsession.log
+exec 2>>$HOME/.rstudio-slurm/rsession.log
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
 export OMP_NUM_THREADS=${cpus}
+export MKL_NUM_THREADS=${cpus}
+export OPENBLAS_NUM_THREADS=${cpus}
+export NUMEXPR_NUM_THREADS=${cpus}
+export MC_CORES=${cpus}
+export BIOCPARALLEL_WORKER_NUMBER=${cpus}
 export R_LIBS_SITE=${releasePaths.rLibsSite}
-export R_LIBS_USER=${dollar}HOME/R/bioc-${biocVersion}
+export R_LIBS_USER=$HOME/R/bioc-${biocVersion}
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
-exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
+exec /usr/lib/rstudio-server/bin/rsession "$@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
-    // Port finder script - finds available port and writes to ~/.rstudio-slurm/port
-    // Handles port collisions when multiple users land on the same compute node
-    const portFile = '\\$HOME/.rstudio-slurm/port';
+    // Port finder script
+    const portFile = '$HOME/.rstudio-slurm/port';
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
-    // IMPORTANT: Do NOT use quotes around base64 strings!
-    // The sbatch --wrap='...' uses single quotes, so any single quotes inside
-    // would break shell parsing. Base64 is alphanumeric + /+= so no quotes needed.
-    const setup = [
-      `mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server`,
-      `echo ${dbConfBase64} | base64 -d > ${workdir}/database.conf`,
-      `echo ${rserverConfBase64} | base64 -d > ${workdir}/rserver.conf`,
-      `echo ${rstudioPrefsBase64} | base64 -d > ${workdir}/rstudio-prefs.json`,
-      `echo ${rsessionBase64} | base64 -d > ${workdir}/rsession.sh && chmod +x ${workdir}/rsession.sh`,
-      // Find available port and export as IDE_PORT
-      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
-    ].join(' && ');
-
-    // Build singularity bind paths for RStudio
+    // Build bind paths
     const rstudioBinds = [
       `${workdir}/run:/run`,
       `${workdir}/tmp:/tmp`,
@@ -361,109 +356,131 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       this.cluster.bindPaths,
     ].join(',');
 
-    // Build rserver command - uses IDE_PORT from port finder
-    // Use auth-none=1 mode like jupyter-rsession-proxy - no login required
-    // See: https://github.com/jupyterhub/jupyter-rsession-proxy
-    // --secure-cookie-key-file must be unique per session to avoid conflicts
-    // --www-frame-origin=same allows iframe embedding from same origin
-    // --www-verify-user-agent=0 relaxes browser agent checks
-    const envSetup = [
-      'export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0',
-    ].join(' && ');
-
-    // Python site-packages env (null if not configured for this cluster)
-    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
-
-    const singularityCmd = [
-      `${this.cluster.singularityBin} exec --cleanenv`,
+    // Build singularity env args (filter out empty strings)
+    const singularityEnvArgs = [
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
-      pythonEnvArg,
-      '--env USER=\\$(whoami)',  // Required for auth-none - user-id cookie needs username
-      `-B ${rstudioBinds}`,
-      `${releasePaths.singularityImage}`,
-      `rserver`,
-      '--www-address=0.0.0.0',
-      `--www-port=\\$IDE_PORT`,
-      `--server-user=\\$(whoami)`,
-      '--auth-none=1',
-      '--www-frame-origin=same',
-      '--www-verify-user-agent=0',
-      `--secure-cookie-key-file=${workdir}/secure-cookie-key`,
-      '--rsession-path=/etc/rstudio/rsession.sh',
-    ].filter(Boolean).join(' ');
+      pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
+      '--env USER=$(whoami)',
+    ].filter(Boolean).join(' \\\n  ');
 
-    const rserverCmd = `${envSetup} && ${singularityCmd}`;
+    return `#!/bin/bash
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.rstudio-slurm/job.err
+set -ex
 
-    return `${setup} && ${rserverCmd}`;
+# Setup directories
+mkdir -p ${workdir}/run ${workdir}/tmp ${workdir}/var/lib/rstudio-server
+
+# Write config files
+echo ${dbConfBase64} | base64 -d > ${workdir}/database.conf
+echo ${rserverConfBase64} | base64 -d > ${workdir}/rserver.conf
+echo ${rstudioPrefsBase64} | base64 -d > ${workdir}/rstudio-prefs.json
+echo ${rsessionBase64} | base64 -d > ${workdir}/rsession.sh
+chmod +x ${workdir}/rsession.sh
+
+# Find available port and export as IDE_PORT
+eval $(echo ${portFinderBase64} | base64 -d | sh -s)
+
+# Set RStudio session timeout
+export SINGULARITYENV_RSTUDIO_SESSION_TIMEOUT=0
+
+# Start RStudio server
+exec ${this.cluster.singularityBin} exec --cleanenv \\
+  ${singularityEnvArgs} \\
+  -B ${rstudioBinds} \\
+  ${releasePaths.singularityImage} \\
+  rserver \\
+    --www-address=0.0.0.0 \\
+    --www-port=$IDE_PORT \\
+    --server-user=$(whoami) \\
+    --auth-none=1 \\
+    --www-frame-origin=same \\
+    --www-verify-user-agent=0 \\
+    --secure-cookie-key-file=${workdir}/secure-cookie-key \\
+    --rsession-path=/etc/rstudio/rsession.sh
+`;
   }
 
   /**
-   * Build sbatch wrap command for JupyterLab
+   * Build job script for JupyterLab
    * Uses shared Python site-packages (mirrors R_LIBS_SITE pattern)
    * @param {Object} options - Options including gpu type, token, and release version
    * @param {string} options.gpu - GPU type ('none', 'a100', 'v100')
    * @param {string} options.token - Authentication token
    * @param {string} options.releaseVersion - Bioconductor release version (e.g., '3.22')
-   * @returns {string} sbatch wrap command
+   * @param {number} options.cpus - Number of CPUs for parallel processing
+   * @returns {string} Shell script content
    */
-  buildJupyterWrap(options = {}) {
-    const { gpu = 'none', token, releaseVersion = defaultReleaseVersion } = options;
+  buildJupyterScript(options = {}) {
+    const { gpu = 'none', token, releaseVersion = defaultReleaseVersion, cpus = 1 } = options;
     const ideConfig = ides.jupyter;
-    const workdir = '\\$HOME/.jupyter-slurm';
+    const workdir = '$HOME/.jupyter-slurm';
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
 
-    // Port finder script - finds available port and writes to ~/.jupyter-slurm/port
-    // Handles port collisions when multiple users land on the same compute node
-    const portFile = '\\$HOME/.jupyter-slurm/port';
+    // Port finder script
+    const portFile = '$HOME/.jupyter-slurm/port';
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
-    const setup = [
-      `mkdir -p ${workdir}`,
-      `mkdir -p ${workdir}/runtime`,
-      // Find available port and export as IDE_PORT
-      `eval \\$(echo ${portFinderBase64} | base64 -d | sh -s)`,
-    ].join(' && ');
-
     // GPU passthrough flag (--nv enables NVIDIA GPU access in container)
-    const nvFlag = gpu !== 'none' ? '--nv' : null;
+    const nvFlag = gpu !== 'none' ? '--nv' : '';
 
-    // Token env var for authentication (null if no token = disable auth)
-    const tokenEnv = token ? `--env JUPYTER_TOKEN=${token}` : null;
-    const tokenArg = token ? null : `--ServerApp.token=''`;
+    // Token handling
+    const tokenArg = token ? '' : "--ServerApp.token=''";
 
-    // Python site-packages env (null if not configured for this cluster)
-    const pythonEnvArg = pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : null;
-
-    // Singularity command - uses IDE_PORT from port finder
-    const singularityCmd = [
-      this.cluster.singularityBin,
-      'exec',
+    // Build singularity args (filter out empty strings)
+    // Set parallel processing env vars to match SLURM allocation
+    const singularityArgs = [
       nvFlag,
-      `--env TERM=xterm-256color`,
-      tokenEnv,
-      pythonEnvArg,
+      '--env TERM=xterm-256color',
+      token ? `--env JUPYTER_TOKEN=${token}` : '',
+      pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
-      `-B ${this.cluster.bindPaths}`,
-      releasePaths.singularityImage,
-      `jupyter lab`,
-      `--ip=0.0.0.0`,
-      `--port=\\$IDE_PORT`,
-      `--no-browser`,
-      tokenArg,
-      `--ServerApp.password=''`,
-      `--ServerApp.root_dir=\\$HOME`,
-      `--ServerApp.base_url=/jupyter-direct`,
-      `--ServerApp.allow_remote_access=True`,
-    ].filter(Boolean).join(' ');
+      `--env OMP_NUM_THREADS=${cpus}`,
+      `--env MKL_NUM_THREADS=${cpus}`,
+      `--env OPENBLAS_NUM_THREADS=${cpus}`,
+      `--env NUMEXPR_NUM_THREADS=${cpus}`,
+      `--env MC_CORES=${cpus}`,
+      `--env BIOCPARALLEL_WORKER_NUMBER=${cpus}`,
+    ].filter(Boolean).join(' \\\n  ');
 
-    return `${setup} && ${singularityCmd}`;
+    // Build jupyter args (filter out empty strings)
+    const jupyterArgs = [
+      '--ip=0.0.0.0',
+      '--port=$IDE_PORT',
+      '--no-browser',
+      tokenArg,
+      "--ServerApp.password=''",
+      '--ServerApp.root_dir=$HOME',
+      '--ServerApp.base_url=/jupyter-direct',
+      '--ServerApp.allow_remote_access=True',
+    ].filter(Boolean).join(' \\\n    ');
+
+    return `#!/bin/bash
+# Redirect stderr to log file immediately for debugging
+exec 2>$HOME/.jupyter-slurm/job.err
+set -ex
+
+# Setup directories
+mkdir -p ${workdir}/runtime
+
+# Find available port and export as IDE_PORT
+eval $(echo ${portFinderBase64} | base64 -d | sh -s)
+
+# Start JupyterLab
+exec ${this.cluster.singularityBin} exec \\
+  ${singularityArgs} \\
+  -B ${this.cluster.bindPaths} \\
+  ${releasePaths.singularityImage} \\
+  jupyter lab \\
+    ${jupyterArgs}
+`;
   }
 
   /**
-   * Submit a new SLURM job for an IDE
+   * Submit a new SLURM job for an IDE using heredoc
    * @param {string} cpus - Number of CPUs
    * @param {string} mem - Memory (e.g., "40G")
    * @param {string} time - Walltime (e.g., "12:00:00")
@@ -490,7 +507,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
 
     // GPU handling (Gemini only)
     let partition = this.cluster.partition;
-    let gresArg = null;
+    let gresArg = '';
 
     if (gpu) {
       const clusterGpu = gpuConfig[this.clusterName];
@@ -502,28 +519,28 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       gresArg = `--gres=${gpuOpts.gres}`;
     }
 
-    // Logs written to /tmp on compute node - node name available in server logs
-    // To locate logs if needed: ssh <node> cat /tmp/hpc-vscode_<jobid>.log
+    // Logs written to /tmp on compute node
     const logDir = '/tmp';
 
-    // Build IDE-specific wrap command (pass releaseVersion for release-specific paths)
-    let wrapCmd;
+    // Build IDE-specific script (pass releaseVersion and cpus for release-specific paths and parallelism)
+    let script;
     switch (ide) {
       case 'vscode':
-        wrapCmd = this.buildVscodeWrap({ token, releaseVersion });
+        script = this.buildVscodeScript({ token, releaseVersion, cpus });
         break;
       case 'rstudio':
-        wrapCmd = this.buildRstudioWrap(cpus, { releaseVersion });
+        script = this.buildRstudioScript(cpus, { releaseVersion });
         break;
       case 'jupyter':
-        wrapCmd = this.buildJupyterWrap({ gpu, token, releaseVersion });
+        script = this.buildJupyterScript({ gpu, token, releaseVersion, cpus });
         break;
       default:
         throw new Error(`Unknown IDE: ${ide}`);
     }
 
-    const submitCmd = [
-      'sbatch',
+    // Submit using heredoc - no escaping nightmares!
+    // The <<'SLURM_SCRIPT' (quoted) prevents any expansion until the script runs
+    const sbatchArgs = [
       `--job-name=${ideConfig.jobName}`,
       '--nodes=1',
       `--cpus-per-task=${cpus}`,
@@ -533,8 +550,13 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       `--time=${time}`,
       `--output=${logDir}/${ideConfig.jobName}_%j.log`,
       `--error=${logDir}/${ideConfig.jobName}_%j.err`,
-      `--wrap='${wrapCmd}'`,
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean).join(' \\\n  ');
+
+    const submitCmd = `sbatch \\
+  ${sbatchArgs} \\
+  <<'SLURM_SCRIPT'
+${script}
+SLURM_SCRIPT`;
 
     const output = await this.sshExec(submitCmd);
     const match = output.match(/Submitted batch job (\d+)/);
@@ -622,7 +644,7 @@ exec /usr/lib/rstudio-server/bin/rsession "${dollar}@"
       throw new Error(`Unknown IDE: ${ide}`);
     }
 
-    // Port file paths match those in build*Wrap methods
+    // Port file paths match those in build*Script methods
     const portFiles = {
       vscode: '~/.vscode-slurm/port',
       rstudio: '~/.rstudio-slurm/port',
