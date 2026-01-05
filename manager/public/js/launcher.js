@@ -492,21 +492,11 @@ function renderHealthBars(hpc) {
 
   const bars = [];
 
+  // Order: CPU, GPU, Memory, Nodes
+
   // CPU bar
   if (health.cpus) {
     bars.push(renderSingleBar('cpu', health.cpus.percent, 'CPUs', `${health.cpus.used}/${health.cpus.total} allocated`));
-  }
-
-  // Memory bar
-  if (health.memory) {
-    bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
-  }
-
-  // Nodes bar (show % busy) - uses pre-calculated percentage from backend
-  if (health.nodes && health.nodes.total > 0) {
-    const nodePercent = health.nodes.percent || 0;
-    const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
-    bars.push(renderSingleBar('layers', nodePercent, 'Nodes', nodeDetail));
   }
 
   // GPU bar (if available) - uses pre-calculated percentage from backend
@@ -518,6 +508,18 @@ function renderHealthBars(hpc) {
       gpuDetails.push(`${type.toUpperCase()}: ${data.busy || 0}/${typeGpuCount}`);
     }
     bars.push(renderSingleBar('gpu', health.gpus.percent, 'GPUs', gpuDetails.join(', ')));
+  }
+
+  // Memory bar
+  if (health.memory) {
+    bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
+  }
+
+  // Nodes bar (show % busy) - uses 'server' icon to match floating menu
+  if (health.nodes && health.nodes.total > 0) {
+    const nodePercent = health.nodes.percent || 0;
+    const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
+    bars.push(renderSingleBar('server', nodePercent, 'Nodes', nodeDetail));
   }
 
   return `<div class="health-indicators">${bars.join('')}</div>`;

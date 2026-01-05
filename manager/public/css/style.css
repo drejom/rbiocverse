@@ -863,12 +863,11 @@ h1 {
    Cluster Health Indicator Bars
    ============================================ */
 
-/* Container for health bars - positioned in cluster header */
+/* Container for health bars - positioned next to cluster name */
 .health-indicators {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  margin-left: 12px;
 }
 
 /* Single health indicator (icon + bar) */
@@ -930,26 +929,37 @@ h1 {
   opacity: 1;
 }
 
-/* Cluster header layout update for health bars */
-.cluster-header-right {
+/* Cluster header layout - health bars left, status right */
+.cluster-header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
-/* Responsive: wrap health bars on small screens */
+.cluster-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Responsive: stack on small screens */
 @media (max-width: 640px) {
   .cluster-header {
     flex-wrap: wrap;
   }
 
-  .cluster-header-right {
+  .cluster-header-left {
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .cluster-status {
     margin-left: 0;
     margin-top: 8px;
-    justify-content: flex-start;
   }
 
   .health-indicators {
