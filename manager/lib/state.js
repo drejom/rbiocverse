@@ -437,6 +437,12 @@ class StateManager {
     try {
       const changed = await this.refreshAllSessions();
 
+      // Refresh cluster health (throttled - only when interval >= 60s)
+      const currentInterval = this.getOptimalPollInterval();
+      if (currentInterval >= POLLING_CONFIG.INTERVALS_MS.MODERATE) {
+        await this.refreshClusterHealth();
+      }
+
       if (changed) {
         this.consecutiveUnchangedPolls = 0;
         log.debugFor('state', 'Poll detected changes, resetting backoff');
@@ -594,6 +600,144 @@ class StateManager {
       consecutiveUnchangedPolls: this.consecutiveUnchangedPolls,
       currentInterval: this.getOptimalPollInterval(),
     };
+  }
+
+  // ============================================
+  // Cluster Health Methods
+  // ============================================
+
+  /**
+   * Refresh cluster health for all clusters
+   * Called from poll() when interval is >= 60s to avoid excessive SSH calls
+   */
+  async refreshClusterHealth() {
+    if (!this.hpcServiceFactory) return;
+
+    const now = Date.now();
+
+    // Initialize clusterHealth if needed
+    if (!this.state.clusterHealth) {
+      this.state.clusterHealth = {};
+    }
+
+    // Refresh health for each cluster
+    const clusters = ['gemini', 'apollo'];
+    for (const hpc of clusters) {
+      try {
+        const hpcService = this.hpcServiceFactory(hpc);
+        const health = await hpcService.getClusterHealth();
+
+        // Initialize cluster health if needed
+        if (!this.state.clusterHealth[hpc]) {
+          this.state.clusterHealth[hpc] = { current: null, history: [] };
+        }
+
+        // Update current health
+        this.state.clusterHealth[hpc].current = health;
+
+        // Append to history (only if online)
+        if (health.online) {
+          this.state.clusterHealth[hpc].history.push({
+            timestamp: now,
+            cpus: health.cpus.percent,
+            memory: health.memory.percent,
+            nodes: health.nodes.total > 0
+              ? Math.round((health.nodes.busy / health.nodes.total) * 100)
+              : 0,
+            gpus: health.gpus ? this.calcGpuPercent(health.gpus) : null,
+          });
+
+          // Rollover old entries to archive files (keeps state.json small)
+          await this.rolloverHealthHistory(hpc);
+        }
+
+        log.debugFor('state', `Cluster health refreshed: ${hpc}`, {
+          cpus: health.cpus?.percent,
+          memory: health.memory?.percent,
+          nodes: health.nodes,
+        });
+      } catch (e) {
+        // Mark cluster as offline
+        if (!this.state.clusterHealth[hpc]) {
+          this.state.clusterHealth[hpc] = { current: null, history: [] };
+        }
+        this.state.clusterHealth[hpc].current = {
+          online: false,
+          error: e.message,
+          lastChecked: now,
+        };
+        log.warn('Failed to refresh cluster health', { hpc, error: e.message });
+      }
+    }
+  }
+
+  /**
+   * Calculate overall GPU usage percentage
+   * @param {Object} gpus - GPU data { v100: { idle, busy }, ... }
+   * @returns {number} Percentage of GPUs in use
+   */
+  calcGpuPercent(gpus) {
+    let totalGpus = 0;
+    let busyGpus = 0;
+    for (const gpu of Object.values(gpus)) {
+      totalGpus += (gpu.idle || 0) + (gpu.busy || 0);
+      busyGpus += gpu.busy || 0;
+    }
+    return totalGpus > 0 ? Math.round((busyGpus / totalGpus) * 100) : 0;
+  }
+
+  /**
+   * Roll over history entries older than 24h to dated archive files
+   * Keeps state.json lightweight while preserving historical data
+   * @param {string} hpc - Cluster name
+   */
+  async rolloverHealthHistory(hpc) {
+    const history = this.state.clusterHealth[hpc]?.history || [];
+    const cutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+
+    // Find entries to archive (older than 24h)
+    const toArchive = history.filter(e => e.timestamp < cutoff);
+    if (toArchive.length === 0) return;
+
+    // Group by date (YYYY-MM-DD)
+    const byDate = {};
+    for (const entry of toArchive) {
+      const date = new Date(entry.timestamp).toISOString().split('T')[0];
+      if (!byDate[date]) byDate[date] = [];
+      byDate[date].push(entry);
+    }
+
+    // Write each date's entries to archive file
+    const archiveDir = path.join(path.dirname(this.stateFile), 'health-history');
+    await fs.mkdir(archiveDir, { recursive: true });
+
+    for (const [date, entries] of Object.entries(byDate)) {
+      const archiveFile = path.join(archiveDir, `${hpc}-${date}.json`);
+
+      // Merge with existing archive if present
+      let existing = { cluster: hpc, date, entries: [] };
+      try {
+        const data = await fs.readFile(archiveFile, 'utf8');
+        existing = JSON.parse(data);
+      } catch (e) {
+        // File doesn't exist yet - that's fine
+      }
+
+      existing.entries = [...existing.entries, ...entries];
+      await fs.writeFile(archiveFile, JSON.stringify(existing, null, 2));
+      log.state(`Archived ${entries.length} health entries`, { hpc, date });
+    }
+
+    // Remove archived entries from state
+    this.state.clusterHealth[hpc].history = history.filter(e => e.timestamp >= cutoff);
+  }
+
+  /**
+   * Get cluster health data for API responses
+   * @returns {Object} Cluster health data
+   */
+  getClusterHealth() {
+    return this.state.clusterHealth || {};
   }
 }
 

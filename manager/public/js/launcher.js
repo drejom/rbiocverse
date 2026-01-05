@@ -24,6 +24,9 @@ let defaultReleaseVersion = null;  // Set from server in fetchStatus()
 // GPU config from server (which clusters support GPUs)
 let gpuConfig = {};
 
+// Cluster health data from server
+let clusterHealth = {};
+
 // Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
 let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
@@ -443,6 +446,98 @@ function selectIde(hpc, ide) {
   }
 }
 
+// ============================================
+// Cluster Health Bar Rendering
+// ============================================
+
+/**
+ * Render health indicator bars for a cluster
+ * Shows CPU, Memory, Nodes, and GPU (if available) usage
+ * @param {string} hpc - Cluster name
+ * @returns {string} HTML for health bars
+ */
+function renderHealthBars(hpc) {
+  const health = clusterHealth[hpc]?.current;
+
+  // Cluster offline or no data yet
+  if (!health || !health.online) {
+    return `
+      <div class="health-indicators offline">
+        <span class="health-indicator offline" title="Cluster offline or loading...">
+          <i data-lucide="wifi-off" class="icon-xs"></i>
+        </span>
+      </div>
+    `;
+  }
+
+  const bars = [];
+
+  // CPU bar
+  if (health.cpus) {
+    bars.push(renderSingleBar('cpu', health.cpus.percent, 'CPUs', `${health.cpus.used}/${health.cpus.total} allocated`));
+  }
+
+  // Memory bar
+  if (health.memory) {
+    bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
+  }
+
+  // Nodes bar (show % busy)
+  if (health.nodes && health.nodes.total > 0) {
+    const nodePercent = Math.round((health.nodes.busy / health.nodes.total) * 100);
+    const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
+    bars.push(renderSingleBar('layers', nodePercent, 'Nodes', nodeDetail));
+  }
+
+  // GPU bar (if available) - uses dedicated 'gpu' icon
+  if (health.gpus) {
+    let totalGpus = 0;
+    let busyGpus = 0;
+    const gpuDetails = [];
+    for (const [type, data] of Object.entries(health.gpus)) {
+      const typeTotal = (data.idle || 0) + (data.busy || 0);
+      totalGpus += typeTotal;
+      busyGpus += data.busy || 0;
+      gpuDetails.push(`${type.toUpperCase()}: ${data.busy}/${typeTotal}`);
+    }
+    if (totalGpus > 0) {
+      const gpuPercent = Math.round((busyGpus / totalGpus) * 100);
+      bars.push(renderSingleBar('gpu', gpuPercent, 'GPUs', gpuDetails.join(', ')));
+    }
+  }
+
+  return `<div class="health-indicators">${bars.join('')}</div>`;
+}
+
+/**
+ * Render a single health indicator bar
+ * @param {string} icon - Lucide icon name
+ * @param {number} percent - Usage percentage (0-100)
+ * @param {string} label - Resource label
+ * @param {string} detail - Tooltip detail text
+ * @returns {string} HTML for single bar
+ */
+function renderSingleBar(icon, percent, label, detail) {
+  // Determine color level based on usage
+  let level = 'low';
+  if (percent >= 85) {
+    level = 'high';
+  } else if (percent >= 60) {
+    level = 'medium';
+  }
+
+  const tooltip = `${label}: ${percent}% used${detail ? ` (${detail})` : ''}`;
+
+  return `
+    <span class="health-indicator" title="${tooltip}">
+      <i data-lucide="${icon}" class="icon-xs"></i>
+      <div class="health-bar">
+        <div class="health-bar-fill ${level}" style="width: ${percent}%"></div>
+      </div>
+    </span>
+  `;
+}
+
 /**
  * Update a single cluster card
  */
@@ -509,6 +604,13 @@ function updateClusterCard(hpc, ideStatuses) {
   });
 
   content.innerHTML = html;
+
+  // Update health bars in header
+  const healthContainer = document.getElementById(`${hpc}-health`);
+  if (healthContainer) {
+    healthContainer.innerHTML = renderHealthBars(hpc);
+  }
+
   lucide.createIcons();
 }
 
@@ -545,6 +647,11 @@ async function fetchStatus(forceRefresh = false) {
     // Store GPU config
     if (data.gpuConfig) {
       gpuConfig = data.gpuConfig;
+    }
+
+    // Store cluster health data
+    if (data.clusterHealth) {
+      clusterHealth = data.clusterHealth;
     }
 
     // Track cache info

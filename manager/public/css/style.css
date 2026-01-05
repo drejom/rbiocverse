@@ -838,3 +838,81 @@ h1 {
   height: 12px;
   margin-right: 0;
 }
+
+/* ============================================
+   Cluster Health Indicator Bars
+   ============================================ */
+
+/* Container for health bars - positioned in cluster header */
+.health-indicators {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: 12px;
+}
+
+/* Single health indicator (icon + bar) */
+.health-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.health-indicator .icon-xs {
+  opacity: 0.6;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* Health bar container */
+.health-bar {
+  width: 40px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Health bar fill */
+.health-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+/* Green - low usage (<60%) */
+.health-bar-fill.low {
+  background: #4ade80;
+}
+
+/* Orange - moderate usage (60-85%) */
+.health-bar-fill.medium {
+  background: #fbbf24;
+}
+
+/* Red - high usage (>85%) */
+.health-bar-fill.high {
+  background: #ef4444;
+}
+
+/* Offline state */
+.health-indicators.offline {
+  opacity: 0.5;
+}
+
+.health-indicator.offline .health-bar {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.health-indicator.offline .icon-xs {
+  color: #ef4444;
+  opacity: 1;
+}
+
+/* Cluster header layout update for health bars */
+.cluster-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
