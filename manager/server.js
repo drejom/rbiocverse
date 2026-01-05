@@ -136,6 +136,8 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
     path: proxyReq.path,
     hasValidCookie,
     hasCookie: !!cookieToken,
+    hasSessionToken: !!sessionToken,
+    isRootPath,
   });
 });
 
@@ -407,16 +409,22 @@ jupyterProxy.on('proxyReq', (proxyReq, req, res) => {
     proxyReq.path = req.originalUrl.replace(/^\/jupyter/, '/jupyter-direct');
   }
 
-  log.debugFor('jupyter', 'proxyReq', { method: req.method, url: req.url, path: proxyReq.path });
-
   // JupyterLab uses query param ?token=TOKEN for authentication
   // Inject token if we have one and it's not already in the URL
   const token = getSessionToken('jupyter');
-  if (token && !proxyReq.path.includes('token=')) {
+  const hasTokenInUrl = proxyReq.path.includes('token=');
+  if (token && !hasTokenInUrl) {
     const separator = proxyReq.path.includes('?') ? '&' : '?';
     proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
-    log.debugFor('jupyter', 'injected token into request', { path: proxyReq.path });
   }
+
+  log.debugFor('jupyter', 'proxyReq', {
+    method: req.method,
+    url: req.url,
+    path: proxyReq.path,
+    hasSessionToken: !!token,
+    tokenInjected: !!(token && !hasTokenInUrl),
+  });
 });
 
 jupyterProxy.on('proxyRes', (proxyRes, req, res) => {
