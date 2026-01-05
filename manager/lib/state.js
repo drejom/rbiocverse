@@ -407,10 +407,22 @@ class StateManager {
     this.hpcServiceFactory = hpcServiceFactory;
     log.state('Starting background polling');
 
-    // Fetch cluster health immediately on startup (don't wait for first poll)
-    this.refreshClusterHealth().catch(e => {
-      log.warn('Initial cluster health fetch failed', { error: e.message });
-    });
+    // Check if we have fresh cluster health data (< 30 min old)
+    // If so, skip the initial SSH call - we'll refresh on next poll anyway
+    const HEALTH_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    const hasFreshHealth = this.state.clusterHealth &&
+      Object.values(this.state.clusterHealth).some(h =>
+        h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < HEALTH_CACHE_TTL_MS
+      );
+
+    if (hasFreshHealth) {
+      log.state('Using cached cluster health data (< 30 min old)');
+    } else {
+      // Fetch cluster health immediately on startup
+      this.refreshClusterHealth().catch(e => {
+        log.warn('Initial cluster health fetch failed', { error: e.message });
+      });
+    }
 
     this.schedulePoll();
   }
