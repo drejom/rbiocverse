@@ -7,6 +7,23 @@
 // Supported HPC clusters - add new clusters here
 const CLUSTER_NAMES = ['gemini', 'apollo'];
 
+// Health bar color thresholds
+const HEALTH_THRESHOLD_HIGH = 85;
+const HEALTH_THRESHOLD_MEDIUM = 60;
+
+/**
+ * Escape HTML special characters for safe attribute values
+ */
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // Default configuration - will be overwritten by server config
 let defaultConfig = {
   cpus: '2',
@@ -485,28 +502,22 @@ function renderHealthBars(hpc) {
     bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
   }
 
-  // Nodes bar (show % busy)
+  // Nodes bar (show % busy) - uses pre-calculated percentage from backend
   if (health.nodes && health.nodes.total > 0) {
-    const nodePercent = Math.round((health.nodes.busy / health.nodes.total) * 100);
+    const nodePercent = health.nodes.percent || 0;
     const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
     bars.push(renderSingleBar('layers', nodePercent, 'Nodes', nodeDetail));
   }
 
-  // GPU bar (if available) - uses dedicated 'gpu' icon
-  if (health.gpus) {
-    let totalGpus = 0;
-    let busyGpus = 0;
+  // GPU bar (if available) - uses pre-calculated percentage from backend
+  if (health.gpus && typeof health.gpus.percent !== 'undefined') {
     const gpuDetails = [];
     for (const [type, data] of Object.entries(health.gpus)) {
-      const typeTotal = (data.idle || 0) + (data.busy || 0);
-      totalGpus += typeTotal;
-      busyGpus += data.busy || 0;
-      gpuDetails.push(`${type.toUpperCase()}: ${data.busy}/${typeTotal}`);
+      if (type === 'percent') continue; // Skip the overall percentage property
+      const typeGpuCount = data.total || ((data.idle || 0) + (data.busy || 0));
+      gpuDetails.push(`${type.toUpperCase()}: ${data.busy || 0}/${typeGpuCount}`);
     }
-    if (totalGpus > 0) {
-      const gpuPercent = Math.round((busyGpus / totalGpus) * 100);
-      bars.push(renderSingleBar('gpu', gpuPercent, 'GPUs', gpuDetails.join(', ')));
-    }
+    bars.push(renderSingleBar('gpu', health.gpus.percent, 'GPUs', gpuDetails.join(', ')));
   }
 
   return `<div class="health-indicators">${bars.join('')}</div>`;
@@ -521,21 +532,31 @@ function renderHealthBars(hpc) {
  * @returns {string} HTML for single bar
  */
 function renderSingleBar(icon, percent, label, detail) {
-  // Determine color level based on usage
+  // Normalize percent to a finite number between 0 and 100
+  let safePercent = Number(percent);
+  if (!Number.isFinite(safePercent)) {
+    safePercent = 0;
+  }
+  safePercent = Math.min(100, Math.max(0, safePercent));
+
+  // Determine color level based on usage thresholds
   let level = 'low';
-  if (percent >= 85) {
+  if (safePercent >= HEALTH_THRESHOLD_HIGH) {
     level = 'high';
-  } else if (percent >= 60) {
+  } else if (safePercent >= HEALTH_THRESHOLD_MEDIUM) {
     level = 'medium';
   }
 
-  const tooltip = `${label}: ${percent}% used${detail ? ` (${detail})` : ''}`;
+  // Escape HTML for safe attribute values
+  const safeLabel = escapeHtml(label);
+  const safeDetail = escapeHtml(detail);
+  const tooltip = `${safeLabel}: ${safePercent}% used${safeDetail ? ` (${safeDetail})` : ''}`;
 
   return `
     <span class="health-indicator" title="${tooltip}">
       <i data-lucide="${icon}" class="icon-xs"></i>
       <div class="health-bar">
-        <div class="health-bar-fill ${level}" style="width: ${percent}%"></div>
+        <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
       </div>
     </span>
   `;

@@ -492,9 +492,11 @@ fi
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
 # Start JupyterLab
+# Bind overrides.json into container's app settings directory
 exec ${this.cluster.singularityBin} exec \\
   ${singularityArgs} \\
   -B ${this.cluster.bindPaths} \\
+  -B ${workdir}/lab/settings/overrides.json:/usr/local/share/jupyter/lab/settings/overrides.json \\
   ${releasePaths.singularityImage} \\
   jupyter lab \\
     ${jupyterArgs}
@@ -815,7 +817,16 @@ SLURM_SCRIPT`;
   /**
    * Get cluster health status including CPU, memory, node, and GPU usage
    * Uses single SSH call for efficiency
-   * @returns {Promise<Object>} Cluster health data
+   *
+   * @returns {Promise<Object>} Cluster health data:
+   *   - online {boolean} - Whether cluster responded
+   *   - cpus {{ used, idle, total, percent }} - CPU allocation
+   *   - memory {{ used, total, unit, percent }} - Memory in GB
+   *   - nodes {{ idle, busy, down, total, percent }} - Node counts by state
+   *   - gpus {Object|null} - GPU data by type, with overall percent
+   *   - pendingJobs {number} - Jobs in queue
+   *   - lastChecked {number} - Timestamp
+   *   - error {string} - Error message if offline
    */
   async getClusterHealth() {
     // Single SSH call to get all health info
@@ -876,17 +887,22 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
     if (sections.CPUS && sections.CPUS[0]) {
       const cpuParts = sections.CPUS[0].split('/');
       if (cpuParts.length === 4) {
-        const [allocated, idle, other, total] = cpuParts.map(Number);
-        cpus = {
-          used: allocated,
-          idle: idle,
-          total: total,
-          percent: total > 0 ? Math.round((allocated / total) * 100) : 0,
-        };
+        const cpuNumbers = cpuParts.map(part => Number(part.trim()));
+        // Validate all parsed values are finite numbers
+        if (cpuNumbers.every(Number.isFinite)) {
+          const [allocated, idle, , total] = cpuNumbers;
+          cpus = {
+            used: allocated,
+            idle: idle,
+            total: total,
+            percent: total > 0 ? Math.round((allocated / total) * 100) : 0,
+          };
+        }
       }
     }
 
     // Parse nodes by state
+    // Known SLURM states: idle, mix, alloc, down, drain, draining, drained, resv, maint, comp
     const nodes = { idle: 0, busy: 0, down: 0, total: 0 };
     if (sections.NODES) {
       for (const line of sections.NODES) {
@@ -897,12 +913,13 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
           nodes.total += count;
           if (state === 'idle') {
             nodes.idle += count;
-          } else if (state === 'mix' || state === 'alloc' || state === 'allocated') {
+          } else if (state === 'mix' || state === 'alloc') {
             nodes.busy += count;
-          } else if (state === 'down' || state === 'drain' || state === 'drained' || state.includes('down') || state.includes('drain')) {
+          } else if (state.includes('down') || state.includes('drain')) {
             nodes.down += count;
           } else {
-            // Unknown state - count as busy
+            // Unknown/other states (resv, maint, comp, etc.) - count as busy
+            log.debugFor('hpc', `Unknown node state '${state}' (${count} nodes), counting as busy`);
             nodes.busy += count;
           }
         }
@@ -942,6 +959,7 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
     }
 
     // Parse GPUs (if available)
+    // Note: GPUs on down/drained nodes are excluded from counts
     let gpus = null;
     if (sections.GRES && sections.GRES[0] !== 'none') {
       gpus = {};
@@ -950,14 +968,20 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
         const match = line.match(/gpu:(\w+):(\d+)\s+(\d+)\s+(\w+)/i);
         if (match) {
           const [, gpuType, gpusPerNode, nodeCount, state] = match;
+          const stateLower = state.toLowerCase();
+          // Skip GPUs on down/drained nodes - they're not available
+          if (stateLower.includes('down') || stateLower.includes('drain')) {
+            continue;
+          }
           const totalGpus = parseInt(gpusPerNode, 10) * parseInt(nodeCount, 10);
           if (!gpus[gpuType]) {
             gpus[gpuType] = { idle: 0, busy: 0, total: 0 };
           }
           gpus[gpuType].total += totalGpus;
-          if (state === 'idle') {
+          if (stateLower === 'idle') {
             gpus[gpuType].idle += totalGpus;
           } else {
+            // mix, alloc, allocated = busy
             gpus[gpuType].busy += totalGpus;
           }
         }
@@ -966,6 +990,20 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
       if (Object.keys(gpus).length === 0) {
         gpus = null;
       }
+    }
+
+    // Calculate node usage percentage
+    nodes.percent = nodes.total > 0 ? Math.round((nodes.busy / nodes.total) * 100) : 0;
+
+    // Calculate GPU usage percentage (if GPUs present)
+    if (gpus) {
+      let totalGpus = 0;
+      let busyGpus = 0;
+      for (const gpu of Object.values(gpus)) {
+        totalGpus += gpu.total || 0;
+        busyGpus += gpu.busy || 0;
+      }
+      gpus.percent = totalGpus > 0 ? Math.round((busyGpus / totalGpus) * 100) : 0;
     }
 
     return {
