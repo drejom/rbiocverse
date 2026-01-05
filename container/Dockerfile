@@ -202,7 +202,6 @@ COPY config/jupyter_lab_config.py /etc/jupyter/
 COPY rbiocverse/ /usr/local/share/rbiocverse/
 COPY scripts/install.R /usr/local/share/rbiocverse/scripts/
 COPY scripts/migrate-packages.R /usr/local/share/rbiocverse/scripts/
-COPY scripts/keyring-setup.sh /usr/local/share/rbiocverse/scripts/
 
 # Default user (matches Bioconductor base image)
 USER rstudio
