@@ -1131,7 +1131,7 @@ let tickInterval = null;
  * Backend handles adaptive polling with backoff - frontend just reads cached state.
  * We use a simple fixed interval since /api/status returns instantly from memory.
  */
-const POLL_INTERVAL_MS = 5000; // 5 seconds - backend caches, this is cheap
+const POLL_INTERVAL_MS = 2000; // 2 seconds - backend caches, this is cheap
 
 // Debug logging - set to true via browser console: window.POLLING_DEBUG = true
 const DEBUG = () => window.POLLING_DEBUG || false;
