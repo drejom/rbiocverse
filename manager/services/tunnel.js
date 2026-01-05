@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const net = require('net');
+const http = require('http');
 const { config, clusters, ides } = require('../config');
 const { log } = require('../lib/logger');
 
@@ -55,14 +56,73 @@ class TunnelService {
   }
 
   /**
+   * Check if IDE is actually responding (not just port open)
+   * Makes HTTP request to verify the IDE server is ready
+   * @param {number} port - Port to check
+   * @param {number} timeout - Timeout in milliseconds
+   * @returns {Promise<boolean>} True if IDE responds
+   */
+  checkIdeReady(port, timeout = 2000) {
+    return new Promise((resolve) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/',
+        method: 'GET',
+        timeout,
+      }, (res) => {
+        // Any HTTP response means the IDE is ready (even redirects/errors)
+        // Consume response to prevent resource leak
+        res.resume();
+        resolve(true);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+
+      req.on('error', () => {
+        resolve(false);
+      });
+
+      req.end();
+    });
+  }
+
+  /**
+   * Wait for IDE to be ready after tunnel establishes
+   * @param {number} port - Port to check
+   * @param {string} ide - IDE type for logging
+   * @param {string} hpcName - HPC name for logging
+   * @param {number} maxAttempts - Maximum attempts (default 15 = ~30s)
+   * @returns {Promise<boolean>} True if IDE became ready
+   */
+  async waitForIdeReady(port, ide, hpcName, maxAttempts = 15) {
+    for (let i = 0; i < maxAttempts; i++) {
+      const ready = await this.checkIdeReady(port);
+      log.debugFor('tunnel', `IDE ready check`, { port, ide, hpc: hpcName, attempt: i + 1, ready });
+      if (ready) {
+        log.tunnel(`IDE ready`, { hpc: hpcName, ide, port, attempts: i + 1 });
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    log.tunnel(`IDE not ready after ${maxAttempts} attempts`, { hpc: hpcName, ide, port });
+    return false;
+  }
+
+  /**
    * Start SSH tunnel to compute node for a specific IDE
    * @param {string} hpcName - HPC cluster name
    * @param {string} node - Compute node name
    * @param {string} ide - IDE type ('vscode', 'rstudio')
    * @param {Function} onExit - Optional callback when tunnel exits
+   * @param {Object} options - Additional options
+   * @param {number} options.remotePort - Remote port (from port file), defaults to IDE config port
    * @returns {Promise<Object>} Tunnel process
    */
-  async start(hpcName, node, ide = 'vscode', onExit = null) {
+  async start(hpcName, node, ide = 'vscode', onExit = null, options = {}) {
     const cluster = clusters[hpcName];
     if (!cluster) {
       throw new Error(`Unknown cluster: ${hpcName}`);
@@ -74,12 +134,26 @@ class TunnelService {
     }
 
     const sessionKey = this.getSessionKey(hpcName, ide);
-    const port = ideConfig.port;
+    // Use dynamic remote port if provided, otherwise default port
+    // Local port always uses default (UI expects fixed ports)
+    const localPort = ideConfig.port;
+    const remotePort = options.remotePort || ideConfig.port;
+
+    // Stop any existing tunnel using this port (same IDE type, any cluster)
+    // This prevents "Address in use" errors when switching between clusters
+    const stoppedTunnel = this.stopByIde(ide);
+
+    // Brief delay for OS to release the port after tunnel termination
+    if (stoppedTunnel) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
 
     // Build port forwarding arguments
-    const portForwards = [`-L`, `${port}:${node}:${port}`];
+    // Maps local default port to remote dynamic port: localhost:8000 -> node:8001
+    const portForwards = [`-L`, `${localPort}:${node}:${remotePort}`];
 
     // Add additional ports (Live Server, React dev server, etc.) - only for VS Code
+    // These always use same port on both ends (no dynamic assignment for dev servers)
     if (ide === 'vscode') {
       for (const extraPort of config.additionalPorts) {
         portForwards.push('-L', `${extraPort}:${node}:${extraPort}`);
@@ -87,9 +161,11 @@ class TunnelService {
     }
 
     const allPorts = ide === 'vscode'
-      ? [port, ...config.additionalPorts].join(', ')
-      : port.toString();
-    log.tunnel(`Starting: localhost:{${allPorts}} -> ${node}:{${allPorts}}`, { hpc: hpcName, ide, host: cluster.host });
+      ? [localPort, ...config.additionalPorts].join(', ')
+      : localPort.toString();
+    const remoteInfo = remotePort !== localPort ? ` (remote: ${remotePort})` : '';
+    log.tunnel(`Starting: localhost:{${allPorts}} -> ${node}:{${allPorts}}${remoteInfo}`, { hpc: hpcName, ide, host: cluster.host });
+    log.debugFor('tunnel', 'spawn args', { portForwards, host: cluster.host, localPort, remotePort });
 
     const tunnel = spawn('ssh', [
       '-o', 'StrictHostKeyChecking=no',
@@ -100,10 +176,18 @@ class TunnelService {
       `${config.hpcUser}@${cluster.host}`
     ]);
 
-    // Log SSH errors
+    // Log SSH tunnel messages
+    // "Connection refused" on additional ports (Live Server, etc.) is expected when not running
     tunnel.stderr.on('data', (data) => {
       const line = data.toString().trim();
-      if (line) log.ssh(line, { hpc: hpcName, ide });
+      if (!line) return;
+
+      // Expected message when dev server isn't running - use separate component
+      if (line.includes('Connection refused') || line.includes('open failed')) {
+        log.debugFor('liveserver', line, { hpc: hpcName, ide });
+      } else {
+        log.ssh(line, { hpc: hpcName, ide });
+      }
     });
 
     tunnel.on('error', (err) => {
@@ -119,7 +203,7 @@ class TunnelService {
       }
     });
 
-    // Wait for tunnel to establish (check port becomes available)
+    // Wait for tunnel to establish (check local port becomes available)
     for (let i = 0; i < 30; i++) {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -128,12 +212,20 @@ class TunnelService {
         throw new Error(`Tunnel exited with code ${tunnel.exitCode}`);
       }
 
-      // Check if port is open (debug level to avoid poll noise)
-      const portOpen = await this.checkPort(port);
-      log.portCheck(port, portOpen, { hpc: hpcName, ide, attempt: i + 1 });
+      // Check if local port is open (debug level to avoid poll noise)
+      const portOpen = await this.checkPort(localPort);
+      log.portCheck(localPort, portOpen, { hpc: hpcName, ide, attempt: i + 1 });
       if (portOpen) {
-        log.tunnel(`Established on port ${port}`, { hpc: hpcName, ide });
+        log.tunnel(`Established on port ${localPort}`, { hpc: hpcName, ide });
         this.tunnels.set(sessionKey, tunnel);
+
+        // Wait for IDE to actually be ready (responds to HTTP)
+        // This prevents ECONNRESET errors when IDE is still starting
+        const ideReady = await this.waitForIdeReady(localPort, ide, hpcName);
+        if (!ideReady) {
+          log.tunnel(`Warning: IDE may not be fully ready`, { hpc: hpcName, ide });
+        }
+
         return tunnel;
       }
     }
@@ -166,6 +258,25 @@ class TunnelService {
         }
       }
     }
+  }
+
+  /**
+   * Stop all tunnels for a specific IDE type (across all clusters)
+   * Used to free the local port before starting a new tunnel
+   * @param {string} ide - IDE type ('vscode', 'rstudio')
+   * @returns {boolean} True if any tunnel was stopped
+   */
+  stopByIde(ide) {
+    let stopped = false;
+    for (const [key, tunnel] of this.tunnels.entries()) {
+      if (key.endsWith(`-${ide}`)) {
+        log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
+        tunnel.kill();
+        this.tunnels.delete(key);
+        stopped = true;
+      }
+    }
+    return stopped;
   }
 
   /**

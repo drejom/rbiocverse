@@ -112,6 +112,35 @@ describe('Configuration', () => {
     });
   });
 
+  describe('sessionIdleTimeout', () => {
+    it('should default to 0 (disabled)', () => {
+      delete process.env.SESSION_IDLE_TIMEOUT;
+
+      delete require.cache[require.resolve('../../config')];
+      const { config } = require('../../config');
+
+      expect(config.sessionIdleTimeout).to.equal(0);
+    });
+
+    it('should parse timeout from environment variable', () => {
+      process.env.SESSION_IDLE_TIMEOUT = '120';
+
+      delete require.cache[require.resolve('../../config')];
+      const { config } = require('../../config');
+
+      expect(config.sessionIdleTimeout).to.equal(120);
+    });
+
+    it('should default to 0 for non-numeric values', () => {
+      process.env.SESSION_IDLE_TIMEOUT = 'invalid';
+
+      delete require.cache[require.resolve('../../config')];
+      const { config } = require('../../config');
+
+      expect(config.sessionIdleTimeout).to.equal(0);
+    });
+  });
+
   describe('clusters object', () => {
     it('should contain gemini configuration', () => {
       const { clusters } = require('../../config');
@@ -210,16 +239,67 @@ describe('Configuration', () => {
       expect(Object.keys(clusters)).to.have.lengthOf(2);
     });
 
-    it('should export valid ides structure', () => {
+    it('should export valid ides structure with all three IDEs', () => {
       const { ides } = require('../../config');
 
       expect(ides).to.be.an('object');
       expect(ides).to.have.property('vscode');
       expect(ides).to.have.property('rstudio');
+      expect(ides).to.have.property('jupyter');
+
+      // VS Code
       expect(ides.vscode).to.have.property('port');
       expect(ides.vscode).to.have.property('jobName');
+      expect(ides.vscode).to.have.property('proxyPath');
+
+      // RStudio
       expect(ides.rstudio).to.have.property('port');
       expect(ides.rstudio).to.have.property('jobName');
+      expect(ides.rstudio).to.have.property('proxyPath');
+
+      // Jupyter
+      expect(ides.jupyter).to.have.property('port');
+      expect(ides.jupyter).to.have.property('jobName');
+      expect(ides.jupyter).to.have.property('proxyPath');
+      expect(ides.jupyter.port).to.equal(8888);
+      expect(ides.jupyter.jobName).to.equal('hpc-jupyter');
+      expect(ides.jupyter.proxyPath).to.equal('/jupyter/');
+    });
+
+    it('should export vscodeDefaults with font configuration', () => {
+      const { vscodeDefaults } = require('../../config');
+
+      expect(vscodeDefaults).to.be.an('object');
+      expect(vscodeDefaults).to.have.property('settings');
+      expect(vscodeDefaults.settings).to.have.property('terminal.integrated.fontFamily');
+      expect(vscodeDefaults.settings['terminal.integrated.fontFamily']).to.include('FiraCode Nerd Font');
+    });
+
+    it('should export rstudioDefaults with font configuration', () => {
+      const { rstudioDefaults } = require('../../config');
+
+      expect(rstudioDefaults).to.be.an('object');
+      expect(rstudioDefaults).to.have.property('browser_fixed_width_fonts');
+      expect(rstudioDefaults.browser_fixed_width_fonts).to.be.an('array');
+      expect(rstudioDefaults.browser_fixed_width_fonts[0]).to.equal('FiraCode Nerd Font');
+    });
+  });
+
+  describe('IDE port configuration', () => {
+    it('should have unique ports for each IDE', () => {
+      const { ides } = require('../../config');
+
+      const ports = Object.values(ides).map(ide => ide.port);
+      const uniquePorts = [...new Set(ports)];
+
+      expect(uniquePorts.length).to.equal(ports.length);
+    });
+
+    it('should have correct default ports', () => {
+      const { ides } = require('../../config');
+
+      expect(ides.vscode.port).to.equal(8000);
+      expect(ides.rstudio.port).to.equal(8787);
     });
   });
 });

@@ -21,7 +21,10 @@
 
     <div id="gemini-card" class="cluster-card">
       <div class="cluster-header">
-        <span class="cluster-name">Gemini</span>
+        <div class="cluster-header-left">
+          <span class="cluster-name">Gemini</span>
+          <div id="gemini-health"></div>
+        </div>
         <div class="cluster-status">
           <span class="status-dot" id="gemini-dot"></span>
           <span id="gemini-status-text">Loading...</span>
@@ -32,7 +35,10 @@
 
     <div id="apollo-card" class="cluster-card">
       <div class="cluster-header">
-        <span class="cluster-name">Apollo</span>
+        <div class="cluster-header-left">
+          <span class="cluster-name">Apollo</span>
+          <div id="apollo-health"></div>
+        </div>
         <div class="cluster-status">
           <span class="status-dot" id="apollo-dot"></span>
           <span id="apollo-status-text">Loading...</span>
@@ -44,11 +50,23 @@
 
   <div id="loading-overlay" class="loading-overlay" style="display:none;">
     <div class="loading-content">
-      <div class="spinner"></div>
-      <div id="loading-text">Connecting...</div>
-      <button id="cancel-launch-btn" class="btn btn-cancel" style="display:none;">
-        <i data-lucide="x" class="lucide"></i> Cancel
-      </button>
+      <div class="progress-container">
+        <div class="progress-header" id="progress-header">Launching...</div>
+        <div class="progress-step" id="progress-step">Connecting...</div>
+        <div class="progress-bar">
+          <div class="progress-bar-estimate" id="progress-estimate" style="width: 0%"></div>
+          <div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="progress-error" id="progress-error" style="display:none;"></div>
+      </div>
+      <div class="launch-actions" id="launch-actions" style="display:none; margin-top: 20px;">
+        <button id="back-to-menu-btn" class="btn btn-secondary">
+          <i data-lucide="arrow-left" class="lucide"></i> Back to Menu
+        </button>
+        <button id="cancel-stop-btn" class="btn btn-cancel">
+          <i data-lucide="square" class="lucide"></i> Stop Job
+        </button>
+      </div>
     </div>
   </div>
 

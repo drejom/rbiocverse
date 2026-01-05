@@ -40,28 +40,55 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.6; }
     }
-    @keyframes pulse-kill {
+    @keyframes pulse-stop {
       0%, 100% { opacity: 1; background: #ef4444; }
       50% { opacity: 0.7; background: #dc2626; }
+    }
+    /* Stop progress bar */
+    .stop-progress {
+      margin: 8px 0;
+    }
+    .stop-progress-text {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 6px;
+    }
+    .stop-progress-bar {
+      height: 3px;
+      background: #374151;
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .stop-progress-fill {
+      height: 100%;
+      width: 30%;
+      background: #ef4444;
+      position: absolute;
+      animation: stop-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes stop-indeterminate {
+      0% { left: -30%; }
+      100% { left: 100%; }
     }
     #panel {
       display: none;
       position: absolute;
       top: 50px;
       right: 0;
-      width: 240px;
+      width: 220px;
       background: rgba(30,30,40,0.98);
       border: 1px solid rgba(255,255,255,0.2);
       border-radius: 12px;
-      padding: 15px;
+      padding: 12px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       color: #fff;
     }
     #panel.open { display: block; }
     .cluster-name {
       font-weight: 600;
-      font-size: 1.1rem;
-      margin-bottom: 4px;
+      font-size: 1rem;
+      margin-bottom: 2px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -72,15 +99,15 @@
       border-radius: 50%;
       background: #4ade80;
     }
-    .cluster-name .dot.killing {
+    .cluster-name .dot.stopping {
       background: #ef4444;
-      animation: pulse-kill 0.5s infinite;
+      animation: pulse-stop 0.5s infinite;
     }
     .ide-badge {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 500;
       color: rgba(255,255,255,0.6);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -89,12 +116,12 @@
     .time-pie {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
+      gap: 6px;
+      margin-bottom: 4px;
     }
     .time-pie svg {
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
     }
     .time-pie-bg {
       fill: rgba(255,255,255,0.1);
@@ -107,26 +134,33 @@
     .time-pie-fill.warning { fill: #fbbf24; }
     .time-pie-fill.critical { fill: #ef4444; }
     .time-pie-text {
-      font-size: 1.3rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #4ade80;
     }
     .time-pie-text.warning { color: #fbbf24; }
     .time-pie-text.critical { color: #ef4444; }
     .resources {
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       color: rgba(255,255,255,0.6);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
+    }
+    .session-details {
+      display: flex;
+      gap: 0.8em;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4px;
     }
     .node {
-      font-size: 0.8rem;
+      font-size: 0.7rem;
       color: rgba(255,255,255,0.5);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .actions {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
     .actions button {
       width: 100%;
@@ -149,6 +183,11 @@
       color: #4ade80;
     }
     .actions button.live-server:hover { background: rgba(74,222,128,0.2); }
+    .actions button.shiny-server {
+      border-color: rgba(59,130,246,0.5);
+      color: #60a5fa;
+    }
+    .actions button.shiny-server:hover { background: rgba(59,130,246,0.2); }
     .actions button:disabled {
       opacity: 0.4;
       cursor: not-allowed;
@@ -249,6 +288,21 @@
     </div>
   </div>
 
+  <!-- Shiny Server Modal -->
+  <div id="shiny-modal" class="modal-overlay">
+    <div class="modal">
+      <h3><i data-lucide="sparkles" style="width:18px;height:18px;"></i> Shiny App</h3>
+      <div class="modal-actions">
+        <button onclick="copyShinyUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+        <button class="primary" onclick="openShinyServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      </div>
+      <div id="shiny-copy-feedback" class="copy-feedback">Copied!</div>
+      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
+        Run shiny::runApp(port=3838)
+      </div>
+    </div>
+  </div>
+
   <script>
     const toggle = document.getElementById('toggle');
     const panel = document.getElementById('panel');
@@ -258,8 +312,9 @@
     let activeSession = null;  // { hpc, ide }
     let availableIdes = {};    // IDE info from server
     let liveServerAvailable = false;
+    let shinyServerAvailable = false;
     let currentStatus = null;
-    let isKilling = false;     // Prevent UI updates during kill
+    let isStopping = false;     // Prevent UI updates during stop
 
     // Drag functionality
     let isDragging = false;
@@ -362,10 +417,15 @@
     }
 
     function render() {
-      if (isKilling) return;  // Don't update UI during kill
+      if (isStopping) return;  // Don't update UI during stop
       const content = document.getElementById('content');
       if (!activeSession) {
-        content.innerHTML = '<div style="color:rgba(255,255,255,0.5)">No active session</div>';
+        content.innerHTML =
+          '<div style="color:rgba(255,255,255,0.5);margin-bottom:12px;">No active session</div>' +
+          '<div class="actions">' +
+          '<button onclick="goToMenu()"><i data-lucide="home" class="lucide"></i> Main Menu</button>' +
+          '</div>';
+        lucide.createIcons();
         return;
       }
 
@@ -378,19 +438,37 @@
       else if (countdown < 1800) toggle.classList.add('warning');
       if (open) toggle.classList.add('open');
 
-      // Only show Live Server for VS Code
-      const showLiveServer = ide === 'vscode';
-      const liveServerBtn = showLiveServer
+      // Only show Live Server and Shiny for VS Code
+      const showDevServers = ide === 'vscode';
+      const liveServerBtn = showDevServers
         ? (liveServerAvailable
             ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
             : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>')
         : '';
+      const shinyServerBtn = showDevServers
+        ? (shinyServerAvailable
+            ? '<button class="shiny-server" onclick="showShinyModal()"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>'
+            : '<button class="shiny-server" disabled title="Run shiny::runApp(port=3838)"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>')
+        : '';
 
       let resourcesHtml = '';
       let nodeText = '';
+      let sessionDetails = '';
       if (currentStatus) {
         resourcesHtml = '<i data-lucide="cpu" class="resource-icon"></i> ' + (currentStatus.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (currentStatus.memory || '?');
         nodeText = '<i data-lucide="server" class="resource-icon"></i> ' + (currentStatus.node || '');
+
+        // Build session details line (GPU, Release)
+        const detailParts = [];
+        if (currentStatus.gpu) {
+          detailParts.push('<span><i data-lucide="zap" class="resource-icon"></i> ' + currentStatus.gpu.toUpperCase() + '</span>');
+        }
+        if (currentStatus.releaseVersion) {
+          detailParts.push('<span><i data-lucide="package" class="resource-icon"></i> Bioc ' + currentStatus.releaseVersion + '</span>');
+        }
+        if (detailParts.length > 0) {
+          sessionDetails = '<div class="session-details">' + detailParts.join('') + '</div>';
+        }
       }
 
       content.innerHTML =
@@ -398,27 +476,38 @@
         '<div class="ide-badge"><i class="' + ideInfo.icon + ' resource-icon"></i> ' + ideInfo.name + '</div>' +
         renderTimePie(countdown || 0, walltime || countdown || 1) +
         '<div class="resources">' + resourcesHtml + '</div>' +
+        sessionDetails +
         '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
         liveServerBtn +
+        shinyServerBtn +
         '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
-        '<button class="danger" onclick="killJob()"><i data-lucide="square" class="lucide"></i> Kill Job</button>' +
+        '<button class="danger" onclick="stopJob()"><i data-lucide="square" class="lucide"></i> Stop</button>' +
         '</div>';
 
       lucide.createIcons();
     }
 
-    async function checkLiveServer() {
+    async function checkDevServers() {
       // Only check if VS Code is active
       if (!activeSession || activeSession.ide !== 'vscode') {
         liveServerAvailable = false;
+        shinyServerAvailable = false;
         return;
       }
       try {
-        const res = await fetch('/live/', { method: 'HEAD' });
-        liveServerAvailable = res.ok;
+        const res = await fetch('/api/dev-servers');
+        if (res.ok) {
+          const data = await res.json();
+          liveServerAvailable = data.liveServer || false;
+          shinyServerAvailable = data.shiny || false;
+        } else {
+          liveServerAvailable = false;
+          shinyServerAvailable = false;
+        }
       } catch (e) {
         liveServerAvailable = false;
+        shinyServerAvailable = false;
       }
       render();
     }
@@ -501,45 +590,78 @@
       window.top.location.href = '/?menu=1';
     }
 
-    async function killJob() {
-      // Guard against race conditions - prevent multiple simultaneous kills
-      if (isKilling) return;
+    async function stopJob() {
+      // Guard against race conditions - prevent multiple simultaneous stops
+      if (isStopping) return;
       if (!activeSession) return;
       const { hpc, ide } = activeSession;
       const ideInfo = availableIdes[ide] || { name: ide };
 
-      if (!confirm('Kill ' + ideInfo.name + ' on ' + hpc + '?')) return;
-      console.log('[Menu] Kill job requested:', hpc, ide);
+      if (!confirm('Stop ' + ideInfo.name + ' on ' + hpc + '?')) return;
+      console.log('[Menu] Stop job requested:', hpc, ide);
 
-      // Prevent UI updates during kill
-      isKilling = true;
+      // Prevent UI updates during stop
+      isStopping = true;
 
-      // Update button text to "Killing..."
-      const btn = document.querySelector('button.danger');
-      if (btn) {
-        btn.innerHTML = '<i data-lucide="loader" class="lucide"></i> Killing...';
-        btn.disabled = true;
-        lucide.createIcons();
+      // Replace actions with progress indicator
+      const actionsEl = document.querySelector('.actions');
+      if (actionsEl) {
+        actionsEl.innerHTML =
+          '<div class="stop-progress">' +
+          '<div class="stop-progress-text">Stopping job...</div>' +
+          '<div class="stop-progress-bar"><div class="stop-progress-fill"></div></div>' +
+          '</div>';
       }
 
-      // Pulse the status dot red while killing
+      // Pulse the status dot red while stopping
       const dot = document.querySelector('.cluster-name .dot');
-      if (dot) dot.classList.add('killing');
-      try {
-        const resp = await fetch('/api/stop/' + hpc + '/' + ide, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({cancelJob: true})
-        });
-        if (!resp.ok) {
-          const data = await resp.json();
-          alert('Failed: ' + (data.error || 'Unknown error'));
+      if (dot) dot.classList.add('stopping');
+
+      // Use SSE for progress (even though it's indeterminate, keeps connection alive)
+      const eventSource = new EventSource('/api/stop/' + hpc + '/' + ide + '/stream');
+
+      // Fallback timeout - if SSE hangs, redirect after 15s
+      const fallbackTimeout = setTimeout(function() {
+        if (isStopping) {
+          console.log('[Menu] Stop timeout, redirecting');
+          isStopping = false;
+          eventSource.close();
+          window.top.location.href = '/?menu=1';
         }
-      } catch(e) {
-        console.error('Kill error:', e);
-        alert('Failed to kill job: ' + e.message);
-      }
-      window.top.location.href = '/?menu=1';
+      }, 15000);
+
+      eventSource.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[Menu] Stop SSE event:', data);
+
+          if (data.type === 'progress') {
+            const textEl = document.querySelector('.stop-progress-text');
+            if (textEl) textEl.textContent = data.message;
+          }
+
+          if (data.type === 'complete' || data.type === 'error') {
+            clearTimeout(fallbackTimeout);
+            isStopping = false;
+            eventSource.close();
+            if (data.type === 'error') {
+              alert('Failed: ' + (data.message || 'Unknown error'));
+            }
+            window.top.location.href = '/?menu=1';
+          }
+        } catch(e) {
+          console.error('[Menu] Stop SSE parse error:', e);
+        }
+      };
+
+      eventSource.onerror = function() {
+        console.error('[Menu] Stop SSE connection error');
+        clearTimeout(fallbackTimeout);
+        isStopping = false;
+        eventSource.close();
+        // Fallback to direct navigation
+        window.top.location.href = '/?menu=1';
+      };
     }
 
     // Live Server Modal functions
@@ -579,11 +701,48 @@
       if (e.target === this) hideLiveModal();
     });
 
+    // Shiny Server Modal functions
+    function getShinyUrl() {
+      return window.location.origin + '/shiny/';
+    }
+
+    function showShinyModal() {
+      console.log('[Menu] Shiny modal opened');
+      document.getElementById('shiny-modal').classList.add('show');
+      lucide.createIcons();
+    }
+
+    function hideShinyModal() {
+      document.getElementById('shiny-modal').classList.remove('show');
+      document.getElementById('shiny-copy-feedback').classList.remove('show');
+    }
+
+    function copyShinyUrl() {
+      const url = getShinyUrl();
+      console.log('[Menu] Copying Shiny URL:', url);
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('shiny-copy-feedback').classList.add('show');
+        setTimeout(() => {
+          document.getElementById('shiny-copy-feedback').classList.remove('show');
+        }, 2000);
+      });
+    }
+
+    function openShinyServer() {
+      console.log('[Menu] Opening Shiny in new tab');
+      window.open('/shiny/', '_blank');
+      hideShinyModal();
+    }
+
+    document.getElementById('shiny-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideShinyModal();
+    });
+
     // Initialize
     fetchStatus();
-    checkLiveServer();
+    checkDevServers();
     setInterval(fetchStatus, 60000);
-    setInterval(checkLiveServer, 10000);
+    setInterval(checkDevServers, 10000);
     setInterval(tickCountdown, 1000);
     lucide.createIcons();
   </script>

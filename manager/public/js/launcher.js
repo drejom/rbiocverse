@@ -7,6 +7,23 @@
 // Supported HPC clusters - add new clusters here
 const CLUSTER_NAMES = ['gemini', 'apollo'];
 
+// Health bar color thresholds
+const HEALTH_THRESHOLD_HIGH = 85;
+const HEALTH_THRESHOLD_MEDIUM = 60;
+
+/**
+ * Escape HTML special characters for safe attribute values
+ */
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // Default configuration - will be overwritten by server config
 let defaultConfig = {
   cpus: '2',
@@ -17,9 +34,21 @@ let defaultConfig = {
 // Available IDEs from server
 let availableIdes = {};
 
-// Selected IDE per cluster (for launch form)
+// Available releases from server
+let availableReleases = {};
+let defaultReleaseVersion = null;  // Set from server in fetchStatus()
+
+// GPU config from server (which clusters support GPUs)
+let gpuConfig = {};
+
+// Cluster health data from server
+let clusterHealth = {};
+
+// Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
 let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
+let selectedReleaseVersion = Object.fromEntries(CLUSTER_NAMES.map(c => [c, null]));  // Set from server
+let selectedGpu = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '']));  // '' = no GPU
 
 // Cluster status keyed by hpc (contains ides)
 // Initialized dynamically from CLUSTER_NAMES
@@ -33,8 +62,25 @@ let lastStatusUpdate = null;
 let statusCacheTtl = 120;
 
 // Launch cancellation tracking
-let currentLaunch = null; // { hpc, ide, abortController }
+let currentLaunch = null; // { hpc, ide, eventSource }
 let launchCancelled = false;
+
+// Track which IDE sessions are being stopped (to prevent UI updates)
+let stoppingJobs = {};
+
+// Cached DOM elements for progress UI (initialized after DOMContentLoaded)
+let progressElements = null;
+
+// Step estimate widths (slightly ahead of fill to show uncertainty band)
+// Based on timing analysis: CV ~22-24% for submit/wait steps
+const STEP_ESTIMATES = {
+  connecting: 10,    // 5% fill + buffer
+  submitting: 40,    // 30% fill + buffer
+  submitted: 45,     // 35% fill + buffer
+  waiting: 70,       // 60% fill + buffer
+  starting: 75,      // 65% fill + buffer
+  establishing: 100, // Tunnel + IDE ready (dynamic ~2-5s)
+};
 
 /**
  * Get session key for countdown/walltime tracking
@@ -91,20 +137,157 @@ function renderTimePie(remaining, total, hpc, ide) {
 }
 
 /**
+ * Get releases available for a specific cluster
+ * Filters out releases that don't have paths for the cluster
+ * @param {string} hpc - Cluster name (e.g., 'gemini', 'apollo')
+ * @returns {Object} Filtered releases object
+ */
+function getReleasesForCluster(hpc) {
+  const filtered = {};
+  for (const [version, info] of Object.entries(availableReleases)) {
+    // Only include releases that have paths for this cluster
+    if (info.clusters && info.clusters.includes(hpc)) {
+      filtered[version] = info;
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Get IDEs available for the selected release
+ * @param {string} releaseVersion - Release version (e.g., '3.22')
+ * @returns {string[]} List of IDE names available for this release
+ */
+function getIdesForRelease(releaseVersion) {
+  const releaseConfig = availableReleases[releaseVersion];
+  // Return empty array for unknown releases to surface config errors
+  return releaseConfig && Array.isArray(releaseConfig.ides) ? releaseConfig.ides : [];
+}
+
+/**
+ * Render release selector with Bioconductor logo
+ * Clean Apple-like design with minimal version display
+ * @param {string} hpc - Cluster name
+ */
+function renderReleaseSelector(hpc) {
+  const clusterReleases = getReleasesForCluster(hpc);
+  const options = Object.entries(clusterReleases).map(([version, info]) => {
+    const selected = selectedReleaseVersion[hpc] === version ? 'selected' : '';
+    // Show only version number in dropdown (e.g., "3.22" not "Bioconductor 3.22")
+    return `<option value="${version}" ${selected}>${version}</option>`;
+  }).join('');
+
+  return `
+    <div class="release-selector">
+      <div class="release-brand">
+        <img src="/images/bioconductor-logo.svg" alt="Bioconductor" class="bioc-logo" onerror="this.style.display='none'">
+        <span class="release-label">Bioconductor</span>
+      </div>
+      <select id="${hpc}-release" class="release-dropdown" onchange="onReleaseChange('${hpc}')">
+        ${options}
+      </select>
+    </div>
+  `;
+}
+
+/**
+ * Render GPU toggle selector
+ * Clean toggle buttons for GPU selection (Apple-like segmented control)
+ * @param {string} hpc - Cluster name
+ */
+function renderGpuSelector(hpc) {
+  // Only show GPU selector for clusters with GPU support
+  const clusterGpuConfig = gpuConfig[hpc];
+  if (!clusterGpuConfig) return '';
+
+  // Build toggle buttons (CPU, then each GPU type)
+  const gpuTypes = Object.keys(clusterGpuConfig);
+  const noneSelected = !selectedGpu[hpc] ? 'selected' : '';
+
+  const buttons = [
+    `<button type="button" class="gpu-btn ${noneSelected}" data-gpu="" onclick="selectGpu('${hpc}', '')">
+      <i data-lucide="cpu" class="icon-xs"></i> CPU
+    </button>`,
+    ...gpuTypes.map(type => {
+      const selected = selectedGpu[hpc] === type ? 'selected' : '';
+      return `<button type="button" class="gpu-btn ${selected}" data-gpu="${type}" onclick="selectGpu('${hpc}', '${type}')">
+        <i data-lucide="gpu" class="icon-xs"></i> ${type.toUpperCase()}
+      </button>`;
+    })
+  ].join('');
+
+  return `
+    <div class="gpu-selector">
+      <label class="gpu-label"><i data-lucide="zap" class="icon-sm"></i>Accelerator</label>
+      <div class="gpu-toggle" id="${hpc}-gpu-toggle">
+        ${buttons}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Handle GPU selection via toggle buttons
+ * @param {string} hpc - Cluster name
+ * @param {string} gpu - GPU type ('' for CPU only)
+ */
+function selectGpu(hpc, gpu) {
+  selectedGpu[hpc] = gpu;
+  // Update toggle button states
+  const toggle = document.getElementById(hpc + '-gpu-toggle');
+  if (toggle) {
+    toggle.querySelectorAll('.gpu-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.gpu === gpu);
+    });
+  }
+}
+
+/**
+ * Handle release change - filter available IDEs
+ * @param {string} hpc - Cluster name
+ */
+function onReleaseChange(hpc) {
+  const select = document.getElementById(hpc + '-release');
+  const newReleaseVersion = select.value;
+  selectedReleaseVersion[hpc] = newReleaseVersion;
+
+  // Check if current IDE is available in new release
+  const availableForRelease = getIdesForRelease(newReleaseVersion);
+  if (!availableForRelease.includes(selectedIde[hpc]) && availableForRelease.length > 0) {
+    // Auto-select first available IDE for this release
+    selectedIde[hpc] = availableForRelease[0];
+  }
+
+  // Re-render the cluster card to update IDE buttons
+  const ideStatuses = clusterStatus[hpc] || {};
+  updateClusterCard(hpc, ideStatuses);
+}
+
+/**
  * Render IDE selector buttons
  * @param {string} hpc - Cluster name
  * @param {string[]} runningIdeNames - List of IDE names that are already running
  */
 function renderIdeSelector(hpc, runningIdeNames = []) {
+  const releaseVersion = selectedReleaseVersion[hpc];
+  const idesForRelease = getIdesForRelease(releaseVersion);
+
   const buttons = Object.entries(availableIdes).map(([ide, info]) => {
     const isRunning = runningIdeNames.includes(ide);
+    const isAvailable = idesForRelease.includes(ide);
     const selected = selectedIde[hpc] === ide ? 'selected' : '';
-    const disabled = isRunning ? 'disabled' : '';
-    const title = isRunning ? `${info.name} is already running` : `Launch ${info.name}`;
+    const disabled = isRunning || !isAvailable ? 'disabled' : '';
+
+    let title = `Launch ${info.name}`;
+    if (isRunning) {
+      title = `${info.name} is already running`;
+    } else if (!isAvailable) {
+      title = `${info.name} not available on ${availableReleases[releaseVersion]?.name || releaseVersion}`;
+    }
 
     return `
       <button class="ide-btn ${selected} ${disabled}" data-ide="${ide}"
-        onclick="${isRunning ? '' : `selectIde('${hpc}', '${ide}')`}"
+        onclick="${isRunning || !isAvailable ? '' : `selectIde('${hpc}', '${ide}')`}"
         ${disabled} title="${title}">
         <i class="${info.icon} icon-sm"></i>
         <span>${info.name}</span>
@@ -119,40 +302,44 @@ function renderIdeSelector(hpc, runningIdeNames = []) {
  * Render idle state with IDE selector and launch form
  */
 function renderIdleContent(hpc, runningIdes) {
-  // If there are running IDEs, show them first, then offer to launch another
+  // If there are running IDEs, show them in a green-bordered container
   let runningSection = '';
   if (runningIdes.length > 0) {
-    runningSection = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
+    const sessions = runningIdes.map(({ ide, status }) => renderRunningIdeSection(hpc, ide, status)).join('');
+    runningSection = `<div class="running-sessions">${sessions}</div>`;
   }
 
-  // Determine which IDEs are available to launch
+  // Determine which IDEs are available to launch (not running, available for release)
   const runningIdeNames = runningIdes.map(r => r.ide);
-  const idleIdes = Object.keys(availableIdes).filter(ide => !runningIdeNames.includes(ide));
+  const idesForRelease = getIdesForRelease(selectedReleaseVersion[hpc]);
+  const idleIdes = idesForRelease.filter(ide => !runningIdeNames.includes(ide));
 
   let launchSection = '';
   if (idleIdes.length > 0) {
-    // Auto-select first idle IDE if current selection is running
-    if (runningIdeNames.includes(selectedIde[hpc])) {
+    // Auto-select first idle IDE if current selection is running or unavailable
+    if (runningIdeNames.includes(selectedIde[hpc]) || !idesForRelease.includes(selectedIde[hpc])) {
       selectedIde[hpc] = idleIdes[0];
     }
 
     launchSection = `
       <div class="launch-section">
         ${runningIdes.length > 0 ? '<div class="section-divider">Launch another IDE</div>' : ''}
+        ${renderReleaseSelector(hpc)}
         ${renderIdeSelector(hpc, runningIdeNames)}
         <div class="launch-form">
-          <div class="form-input">
+          <div class="form-input input-cpus">
             <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
             <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
           </div>
-          <div class="form-input">
+          <div class="form-input input-mem">
             <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
             <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
           </div>
-          <div class="form-input">
+          <div class="form-input input-time">
             <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
             <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
           </div>
+          ${renderGpuSelector(hpc)}
         </div>
         <div class="btn-group">
           <button class="btn btn-primary" onclick="launch('${hpc}')">
@@ -166,20 +353,22 @@ function renderIdleContent(hpc, runningIdes) {
   if (runningIdes.length === 0) {
     return `
       <div class="cluster-info">No active sessions</div>
+      ${renderReleaseSelector(hpc)}
       ${renderIdeSelector(hpc)}
       <div class="launch-form">
-        <div class="form-input">
+        <div class="form-input input-cpus">
           <label><i data-lucide="cpu" class="icon-sm"></i>CPUs</label>
           <input type="number" id="${hpc}-cpus" value="${defaultConfig.cpus}" min="1" max="64">
         </div>
-        <div class="form-input">
+        <div class="form-input input-mem">
           <label><i data-lucide="memory-stick" class="icon-sm"></i>Memory</label>
           <input type="text" id="${hpc}-mem" value="${defaultConfig.mem}">
         </div>
-        <div class="form-input">
+        <div class="form-input input-time">
           <label><i data-lucide="timer" class="icon-sm"></i>Time</label>
           <input type="text" id="${hpc}-time" value="${defaultConfig.time}">
         </div>
+        ${renderGpuSelector(hpc)}
       </div>
       <div class="btn-group">
         <button class="btn btn-primary" onclick="launch('${hpc}')">
@@ -212,14 +401,16 @@ function renderRunningIdeSection(hpc, ide, status) {
         <div class="resources-inline">
           <span><i data-lucide="cpu" class="icon-xs"></i>${status.cpus || '?'}</span>
           <span><i data-lucide="memory-stick" class="icon-xs"></i>${status.memory || '?'}</span>
+          ${status.gpu ? `<span><i data-lucide="zap" class="icon-xs"></i>${status.gpu.toUpperCase()}</span>` : ''}
+          ${status.releaseVersion ? `<span><i data-lucide="package" class="icon-xs"></i>${status.releaseVersion}</span>` : ''}
         </div>
       </div>
       <div class="btn-group btn-group-sm">
         <button class="btn btn-success btn-sm" onclick="connect('${hpc}', '${ide}')">
           <i data-lucide="plug" class="icon-sm"></i> Connect
         </button>
-        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
-          <i data-lucide="square" class="icon-sm"></i> Kill
+        <button class="btn btn-danger btn-sm" onclick="stopJob('${hpc}', '${ide}')">
+          <i data-lucide="square" class="icon-sm"></i> Stop
         </button>
       </div>
     </div>
@@ -245,7 +436,7 @@ function renderPendingIdeSection(hpc, ide, status) {
       <div class="cluster-info">Waiting for resources...</div>
       ${estStart}
       <div class="btn-group btn-group-sm">
-        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
+        <button class="btn btn-danger btn-sm" onclick="stopJob('${hpc}', '${ide}')">
           <i data-lucide="x" class="icon-sm"></i> Cancel
         </button>
       </div>
@@ -275,10 +466,112 @@ function selectIde(hpc, ide) {
   }
 }
 
+// ============================================
+// Cluster Health Bar Rendering
+// ============================================
+
+/**
+ * Render health indicator bars for a cluster
+ * Shows CPU, Memory, Nodes, and GPU (if available) usage
+ * @param {string} hpc - Cluster name
+ * @returns {string} HTML for health bars
+ */
+function renderHealthBars(hpc) {
+  const health = clusterHealth[hpc]?.current;
+
+  // Cluster offline or no data yet
+  if (!health || !health.online) {
+    return `
+      <div class="health-indicators offline">
+        <span class="health-indicator offline" title="Cluster offline or loading...">
+          <i data-lucide="wifi-off" class="icon-xs"></i>
+        </span>
+      </div>
+    `;
+  }
+
+  const bars = [];
+
+  // Order: CPU, GPU, Memory, Nodes
+
+  // CPU bar
+  if (health.cpus) {
+    bars.push(renderSingleBar('cpu', health.cpus.percent, 'CPUs', `${health.cpus.used}/${health.cpus.total} allocated`));
+  }
+
+  // GPU bar (if available) - uses pre-calculated percentage from backend
+  if (health.gpus && typeof health.gpus.percent !== 'undefined') {
+    const gpuDetails = [];
+    for (const [type, data] of Object.entries(health.gpus)) {
+      if (type === 'percent') continue; // Skip the overall percentage property
+      const typeGpuCount = data.total || ((data.idle || 0) + (data.busy || 0));
+      gpuDetails.push(`${type.toUpperCase()}: ${data.busy || 0}/${typeGpuCount}`);
+    }
+    bars.push(renderSingleBar('gpu', health.gpus.percent, 'GPUs', gpuDetails.join(', ')));
+  }
+
+  // Memory bar
+  if (health.memory) {
+    bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
+  }
+
+  // Nodes bar (show % busy) - uses 'server' icon to match floating menu
+  if (health.nodes && health.nodes.total > 0) {
+    const nodePercent = health.nodes.percent || 0;
+    const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
+    bars.push(renderSingleBar('server', nodePercent, 'Nodes', nodeDetail));
+  }
+
+  return `<div class="health-indicators">${bars.join('')}</div>`;
+}
+
+/**
+ * Render a single health indicator bar
+ * @param {string} icon - Lucide icon name
+ * @param {number} percent - Usage percentage (0-100)
+ * @param {string} label - Resource label
+ * @param {string} detail - Tooltip detail text
+ * @returns {string} HTML for single bar
+ */
+function renderSingleBar(icon, percent, label, detail) {
+  // Normalize percent to a finite number between 0 and 100
+  let safePercent = Number(percent);
+  if (!Number.isFinite(safePercent)) {
+    safePercent = 0;
+  }
+  safePercent = Math.min(100, Math.max(0, safePercent));
+
+  // Determine color level based on usage thresholds
+  let level = 'low';
+  if (safePercent >= HEALTH_THRESHOLD_HIGH) {
+    level = 'high';
+  } else if (safePercent >= HEALTH_THRESHOLD_MEDIUM) {
+    level = 'medium';
+  }
+
+  // Escape HTML for safe attribute values
+  const safeLabel = escapeHtml(label);
+  const safeDetail = escapeHtml(detail);
+  const tooltip = `${safeLabel}: ${safePercent}% used${safeDetail ? ` (${safeDetail})` : ''}`;
+
+  return `
+    <span class="health-indicator" title="${tooltip}">
+      <i data-lucide="${icon}" class="icon-xs"></i>
+      <div class="health-bar">
+        <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
+      </div>
+    </span>
+  `;
+}
+
 /**
  * Update a single cluster card
  */
 function updateClusterCard(hpc, ideStatuses) {
+  // Skip UI updates for this cluster if any IDE is being stopped
+  const hasStoppingJob = Object.keys(stoppingJobs).some(key => key.startsWith(hpc + '-'));
+  if (hasStoppingJob) return;
+
   const card = document.getElementById(hpc + '-card');
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
@@ -341,50 +634,20 @@ function updateClusterCard(hpc, ideStatuses) {
   });
 
   content.innerHTML = html;
+
+  // Update health bars in header
+  const healthContainer = document.getElementById(`${hpc}-health`);
+  if (healthContainer) {
+    healthContainer.innerHTML = renderHealthBars(hpc);
+  }
+
   lucide.createIcons();
 }
 
-/**
- * Detect if cluster status has changed (for exponential backoff reset)
- *
- * Detects the following changes:
- * - Job status changes (pending/running/idle)
- * - Job ID changes (new job started)
- * - IDE additions (new IDE appears in status)
- * - IDE removals (IDE disappears from status, e.g., job completed)
- * - Time bucket changes (remaining time crosses 5-minute boundary)
- *
- * @param {Object} newStatus - New cluster status object
- * @returns {boolean} True if status has changed
- */
-function hasStatusChanged(newStatus) {
-  if (!lastClusterStatusSnapshot) return true;
-
-  // Create comparable snapshots (job IDs and states)
-  const createSnapshot = (status) => {
-    const snapshot = {};
-    for (const [cluster, ides] of Object.entries(status)) {
-      snapshot[cluster] = {};
-      for (const [ide, ideStatus] of Object.entries(ides || {})) {
-        snapshot[cluster][ide] = {
-          status: ideStatus.status,
-          jobId: ideStatus.jobId,
-          // Bucket remaining time into 5-minute intervals; changes across bucket boundaries reset backoff
-          timeLeftBucket: Math.floor((ideStatus.timeLeftSeconds || 0) / POLLING_CONFIG.TIME_BUCKET_SECONDS)
-        };
-      }
-    }
-    return JSON.stringify(snapshot);
-  };
-
-  const oldSnapshot = createSnapshot(lastClusterStatusSnapshot);
-  const newSnapshot = createSnapshot(newStatus);
-
-  return oldSnapshot !== newSnapshot;
-}
 
 /**
  * Fetch status from server
+ * Backend handles adaptive polling - this just reads cached state
  */
 async function fetchStatus(forceRefresh = false) {
   try {
@@ -397,6 +660,30 @@ async function fetchStatus(forceRefresh = false) {
       availableIdes = data.ides;
     }
 
+    // Store available releases
+    if (data.releases) {
+      availableReleases = data.releases;
+    }
+    if (data.defaultReleaseVersion) {
+      defaultReleaseVersion = data.defaultReleaseVersion;
+      // Initialize selected release if not already set
+      for (const hpc of CLUSTER_NAMES) {
+        if (!selectedReleaseVersion[hpc]) {
+          selectedReleaseVersion[hpc] = defaultReleaseVersion;
+        }
+      }
+    }
+
+    // Store GPU config
+    if (data.gpuConfig) {
+      gpuConfig = data.gpuConfig;
+    }
+
+    // Store cluster health data
+    if (data.clusterHealth) {
+      clusterHealth = data.clusterHealth;
+    }
+
     // Track cache info
     if (data.cacheAge !== undefined) {
       lastStatusUpdate = new Date(Date.now() - (data.cacheAge * 1000));
@@ -407,46 +694,23 @@ async function fetchStatus(forceRefresh = false) {
       statusCacheTtl = data.cacheTtl;
     }
 
-    // Detect state changes for exponential backoff
-    // Build newClusterStatus dynamically from existing clusterStatus keys
-    const newClusterStatus = {};
+    // Update cluster status
     for (const cluster of Object.keys(clusterStatus)) {
-      newClusterStatus[cluster] = data[cluster] || {};
+      clusterStatus[cluster] = data[cluster] || {};
     }
-
-    if (hasStatusChanged(newClusterStatus)) {
-      // State changed - reset backoff
-      consecutiveUnchangedPolls = 0;
-      debugLog('State changed - backoff reset');
-    } else {
-      // No change - increment backoff counter
-      consecutiveUnchangedPolls++;
-      if (consecutiveUnchangedPolls >= POLLING_CONFIG.BACKOFF.START_THRESHOLD) {
-        debugLog(`No changes for ${consecutiveUnchangedPolls} polls - applying backoff`);
-      }
-    }
-
-    // Update cluster status for adaptive polling
-    for (const cluster of Object.keys(clusterStatus)) {
-      clusterStatus[cluster] = newClusterStatus[cluster];
-    }
-    lastClusterStatusSnapshot = newClusterStatus;
 
     // Update cluster cards with per-IDE status
     for (const cluster of Object.keys(clusterStatus)) {
       updateClusterCard(cluster, data[cluster]);
     }
     updateCacheIndicator();
-
-    // Adjust polling interval based on new status
-    startPolling();
   } catch (e) {
     console.error('Status fetch error:', e);
   }
 }
 
 /**
- * Force refresh status
+ * Force refresh status (bypasses cache)
  */
 let isRefreshing = false;
 
@@ -464,9 +728,6 @@ async function refreshStatus() {
   if (ageSpan) {
     ageSpan.innerHTML = '<em>Updating...</em>';
   }
-
-  // Reset backoff on manual refresh
-  consecutiveUnchangedPolls = 0;
 
   await fetchStatus(true);
 
@@ -562,99 +823,258 @@ function tickCountdowns() {
 }
 
 /**
- * Launch session with selected IDE
+ * Get cached progress UI elements (lazy initialization)
  */
-async function launch(hpc) {
-  const ide = selectedIde[hpc];
-  console.log('[Launcher] Launch requested:', hpc, ide);
+function getProgressElements() {
+  if (!progressElements) {
+    progressElements = {
+      header: document.getElementById('progress-header'),
+      step: document.getElementById('progress-step'),
+      fill: document.getElementById('progress-fill'),
+      estimate: document.getElementById('progress-estimate'),
+      error: document.getElementById('progress-error'),
+    };
+  }
+  return progressElements;
+}
 
-  const overlay = document.getElementById('loading-overlay');
-  const loadingText = document.getElementById('loading-text');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
-  const errorEl = document.getElementById('error');
+/**
+ * Update progress UI elements
+ */
+function updateProgress(progress, message, step, options = {}) {
+  const els = getProgressElements();
 
-  errorEl.style.display = 'none';
-  overlay.style.display = 'flex';
-  const ideName = availableIdes[ide]?.name || ide;
-  loadingText.textContent = `Submitting ${ideName} job to ${hpc}...`;
+  if (options.header) {
+    els.header.textContent = options.header;
+  }
 
-  // Show cancel button and track current launch
-  const abortController = new AbortController();
-  currentLaunch = { hpc, ide, abortController };
-  launchCancelled = false;
-  cancelBtn.style.display = 'inline-flex';
-  lucide.createIcons();
+  els.step.textContent = message;
 
-  try {
-    const cpus = document.getElementById(hpc + '-cpus').value;
-    const mem = document.getElementById(hpc + '-mem').value;
-    const time = document.getElementById(hpc + '-time').value;
+  // Update fill width
+  els.fill.style.width = progress + '%';
 
-    const res = await fetch('/api/launch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, ide, cpus, mem, time }),
-      signal: abortController.signal
-    });
+  // Update estimate band (slightly ahead to show uncertainty)
+  const estimateWidth = STEP_ESTIMATES[step] || progress + 5;
+  els.estimate.style.width = Math.min(100, estimateWidth) + '%';
 
-    if (!res.ok) {
-      const data = await res.json();
-      if (data.error && data.error.includes('already')) {
-        overlay.style.display = 'none';
-        cancelBtn.style.display = 'none';
-        currentLaunch = null;
-        if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
-          connect(hpc, ide);
-        }
-        return;
-      }
-      throw new Error(data.error || 'Launch failed');
-    }
+  // Handle special states
+  if (options.pending) {
+    els.fill.classList.add('pending');
+    els.estimate.classList.add('pending');
+  } else {
+    els.fill.classList.remove('pending');
+    els.estimate.classList.remove('pending');
+  }
 
-    // Redirect to IDE
-    currentLaunch = null;
-    cancelBtn.style.display = 'none';
-    const ideConfig = availableIdes[ide];
-    window.location.href = ideConfig?.proxyPath || '/code/';
-  } catch (e) {
-    // Don't show error if user cancelled
-    if (e.name === 'AbortError' || launchCancelled) {
-      console.log('[Launcher] Launch cancelled by user');
-      return;
-    }
-    overlay.style.display = 'none';
-    cancelBtn.style.display = 'none';
-    currentLaunch = null;
-    errorEl.textContent = e.message;
-    errorEl.style.display = 'block';
+  if (options.error) {
+    els.fill.classList.add('error');
+    els.error.textContent = options.error;
+    els.error.style.display = 'block';
+  } else {
+    els.fill.classList.remove('error');
+    els.error.style.display = 'none';
   }
 }
 
 /**
- * Cancel an in-progress launch
+ * Reset progress UI to initial state
  */
-async function cancelLaunch() {
-  if (!currentLaunch) return;
+function resetProgress() {
+  updateProgress(0, 'Connecting...', 'connecting', { header: 'Starting...' });
+  const els = getProgressElements();
+  els.fill.classList.remove('pending', 'error', 'indeterminate');
+  els.estimate.classList.remove('pending');
+}
 
-  const { hpc, ide, abortController } = currentLaunch;
+/**
+ * Setup SSE event handlers for launch/connect streams
+ * Shared between launch() and connect() to avoid code duplication
+ * @param {EventSource} eventSource - SSE connection
+ * @param {string} hpc - Cluster name
+ * @param {string} ide - IDE type
+ */
+function setupLaunchStreamHandlers(eventSource, hpc, ide) {
+  const overlay = document.getElementById('loading-overlay');
+  const launchActions = document.getElementById('launch-actions');
+  const errorEl = document.getElementById('error');
   const ideName = availableIdes[ide]?.name || ide;
-  console.log('[Launcher] Cancel requested:', hpc, ide);
+
+  eventSource.onmessage = function(event) {
+    if (launchCancelled) return;
+
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[Launcher] SSE event:', data);
+
+      switch (data.type) {
+        case 'progress':
+          updateProgress(data.progress, data.message, data.step);
+          break;
+
+        case 'pending-timeout':
+          // Job is pending - return to launcher showing pending state
+          console.log('[Launcher] Job pending, returning to launcher');
+          eventSource.close();
+          currentLaunch = null;
+          launchActions.style.display = 'none';
+          overlay.style.display = 'none';
+          // Refresh status to show pending job
+          fetchStatus(true);
+          break;
+
+        case 'complete':
+          console.log('[Launcher] Launch complete, redirecting');
+          eventSource.close();
+          currentLaunch = null;
+          launchActions.style.display = 'none';
+          window.location.href = data.redirectUrl || '/code/';
+          break;
+
+        case 'error':
+          console.error('[Launcher] Launch error:', data.message);
+          eventSource.close();
+          currentLaunch = null;
+          launchActions.style.display = 'none';
+
+          // Handle "already running" case
+          if (data.message && data.message.includes('already')) {
+            overlay.style.display = 'none';
+            if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
+              connect(hpc, ide);
+            }
+            return;
+          }
+
+          updateProgress(0, '', 'error', { error: data.message, header: 'Launch Failed' });
+          // Auto-hide after 5 seconds
+          setTimeout(() => {
+            if (overlay.style.display !== 'none') {
+              overlay.style.display = 'none';
+              errorEl.textContent = data.message;
+              errorEl.style.display = 'block';
+            }
+          }, 5000);
+          break;
+      }
+    } catch (e) {
+      console.error('[Launcher] Failed to parse SSE data:', e);
+    }
+  };
+
+  eventSource.onerror = function(event) {
+    if (launchCancelled) return;
+    console.error('[Launcher] SSE connection error');
+    eventSource.close();
+    currentLaunch = null;
+    launchActions.style.display = 'none';
+    overlay.style.display = 'none';
+    errorEl.textContent = 'Connection lost. Please try again.';
+    errorEl.style.display = 'block';
+  };
+}
+
+/**
+ * Launch session with selected IDE using SSE for real-time progress
+ */
+async function launch(hpc) {
+  const ide = selectedIde[hpc];
+  const releaseVersion = selectedReleaseVersion[hpc];
+  const gpu = selectedGpu[hpc] || '';
+  console.log('[Launcher] Launch requested:', hpc, ide, 'releaseVersion:', releaseVersion, 'gpu:', gpu || 'none');
+
+  const overlay = document.getElementById('loading-overlay');
+  const launchActions = document.getElementById('launch-actions');
+  const errorEl = document.getElementById('error');
+
+  errorEl.style.display = 'none';
+  overlay.style.display = 'flex';
+  resetProgress();
+
+  const ideName = availableIdes[ide]?.name || ide;
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Starting ${ideName}...` });
+
+  // Get form values
+  const cpus = document.getElementById(hpc + '-cpus').value;
+  const mem = document.getElementById(hpc + '-mem').value;
+  const time = document.getElementById(hpc + '-time').value;
+
+  // Build SSE URL with query params (include releaseVersion and gpu)
+  const params = new URLSearchParams({ cpus, mem, time, releaseVersion });
+  if (gpu) params.set('gpu', gpu);
+  const url = `/api/launch/${hpc}/${ide}/stream?${params}`;
+
+  // Create EventSource for SSE
+  const eventSource = new EventSource(url);
+  currentLaunch = { hpc, ide, eventSource };
+  launchCancelled = false;
+  launchActions.style.display = 'flex';
+  lucide.createIcons();
+
+  // Use shared SSE handlers
+  setupLaunchStreamHandlers(eventSource, hpc, ide);
+}
+
+/**
+ * Go back to menu without stopping the job
+ * Closes SSE connection and overlay, leaves any submitted job running
+ */
+function backToMenu() {
+  if (!currentLaunch) {
+    document.getElementById('loading-overlay').style.display = 'none';
+    return;
+  }
+
+  const { eventSource } = currentLaunch;
+  console.log('[Launcher] Back to menu requested, leaving job running');
 
   launchCancelled = true;
 
-  // Abort the fetch request
-  abortController.abort();
+  // Close the SSE connection
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  // Reset UI
+  const overlay = document.getElementById('loading-overlay');
+  const launchActions = document.getElementById('launch-actions');
+  overlay.style.display = 'none';
+  launchActions.style.display = 'none';
+  currentLaunch = null;
+
+  // Refresh status to show any submitted/pending job
+  fetchStatus(true);
+}
+
+/**
+ * Stop an in-progress launch and cancel any submitted job
+ */
+async function stopLaunch() {
+  if (!currentLaunch) return;
+
+  const { hpc, ide, eventSource } = currentLaunch;
+  const ideName = availableIdes[ide]?.name || ide;
+  console.log('[Launcher] Stop launch requested:', hpc, ide);
+
+  launchCancelled = true;
+
+  // Close the SSE connection
+  if (eventSource) {
+    eventSource.close();
+  }
 
   const overlay = document.getElementById('loading-overlay');
-  const loadingText = document.getElementById('loading-text');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const launchActions = document.getElementById('launch-actions');
+  const stopBtn = document.getElementById('cancel-stop-btn');
 
-  loadingText.textContent = `Cancelling ${ideName} on ${hpc}...`;
-  cancelBtn.disabled = true;
+  // Show stopping progress with indeterminate bar
+  updateProgress(0, 'Stopping job...', 'stopping', { header: `Stopping ${ideName}...` });
+  const fill = document.getElementById('progress-fill');
+  fill.classList.add('indeterminate');
+  stopBtn.disabled = true;
 
-  let cancelFailed = false;
+  let stopFailed = false;
   try {
-    // Cancel the job on the server
+    // Stop the job on the server
     const res = await fetch(`/api/stop/${hpc}/${ide}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -664,22 +1084,23 @@ async function cancelLaunch() {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Server returned ${res.status}`);
     }
-    console.log('[Launcher] Job cancelled successfully');
+    console.log('[Launcher] Job stopped successfully');
   } catch (e) {
-    console.error('[Launcher] Cancel error:', e);
-    cancelFailed = true;
+    console.error('[Launcher] Stop error:', e);
+    stopFailed = true;
   }
 
   // Reset UI
   overlay.style.display = 'none';
-  cancelBtn.style.display = 'none';
-  cancelBtn.disabled = false;
+  launchActions.style.display = 'none';
+  stopBtn.disabled = false;
+  fill.classList.remove('indeterminate');
   currentLaunch = null;
 
-  // Show error if cancellation failed
-  if (cancelFailed) {
+  // Show error if stop failed
+  if (stopFailed) {
     const errorEl = document.getElementById('error');
-    errorEl.textContent = `Warning: Could not confirm cancellation of ${ideName} on ${hpc}. The job may still be running.`;
+    errorEl.textContent = `Warning: Could not confirm stop of ${ideName} on ${hpc}. The job may still be running.`;
     errorEl.style.display = 'block';
   }
 
@@ -688,71 +1109,124 @@ async function cancelLaunch() {
 }
 
 /**
- * Connect to existing session
+ * Connect to existing session using SSE for real-time progress
+ * Uses same streaming endpoint as launch() - detects existing job and establishes tunnel
  */
 async function connect(hpc, ide) {
   console.log('[Launcher] Connect requested:', hpc, ide);
+
   const overlay = document.getElementById('loading-overlay');
+  const launchActions = document.getElementById('launch-actions');
+  const errorEl = document.getElementById('error');
+
+  errorEl.style.display = 'none';
   overlay.style.display = 'flex';
+  resetProgress();
+
   const ideName = availableIdes[ide]?.name || ide;
-  document.getElementById('loading-text').textContent = `Connecting to ${ideName} on ${hpc}...`;
+  updateProgress(0, 'Connecting...', 'connecting', { header: `Connecting to ${ideName}...` });
 
-  try {
-    const res = await fetch('/api/launch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hpc, ide })
-    });
+  // Use SSE stream for progress feedback (same endpoint as launch)
+  // Server detects existing job and just establishes tunnel
+  const url = `/api/launch/${hpc}/${ide}/stream`;
+  const eventSource = new EventSource(url);
+  currentLaunch = { hpc, ide, eventSource };
+  launchCancelled = false;
+  launchActions.style.display = 'flex';
+  lucide.createIcons();
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Connect failed');
-    }
-
-    const ideConfig = availableIdes[ide];
-    window.location.href = ideConfig?.proxyPath || '/code/';
-  } catch (e) {
-    overlay.style.display = 'none';
-    document.getElementById('error').textContent = e.message;
-    document.getElementById('error').style.display = 'block';
-  }
+  // Use shared SSE handlers
+  setupLaunchStreamHandlers(eventSource, hpc, ide);
 }
 
 /**
- * Kill job for specific IDE
+ * Stop job for specific IDE with SSE progress
  */
-async function killJob(hpc, ide) {
+async function stopJob(hpc, ide) {
   const ideName = availableIdes[ide]?.name || ide;
-  if (!confirm(`Kill ${ideName} on ${hpc}?`)) return;
-  console.log('[Launcher] Kill job requested:', hpc, ide);
-
-  // Show killing state on IDE section
   const key = getSessionKey(hpc, ide);
+
+  // Guard against double-stop
+  if (stoppingJobs[key]) return;
+  if (!confirm(`Stop ${ideName} on ${hpc}?`)) return;
+
+  console.log('[Launcher] Stop job requested:', hpc, ide);
+  stoppingJobs[key] = true;
+
+  // Show stopping state on cluster header
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
+  if (dot) dot.className = 'status-dot stopping';
+  if (statusText) statusText.textContent = 'Stopping...';
 
-  if (dot) dot.className = 'status-dot killing';
-  if (statusText) statusText.textContent = 'Killing job...';
-
-  try {
-    const resp = await fetch(`/api/stop/${hpc}/${ide}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cancelJob: true })
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      alert('Failed to kill job: ' + (data.error || 'Unknown error'));
+  // Replace the IDE session buttons with progress bar
+  const sessionEl = document.querySelector(`.ide-session.running:has([onclick*="stopJob('${hpc}', '${ide}')"])`);
+  if (sessionEl) {
+    const btnGroup = sessionEl.querySelector('.btn-group');
+    if (btnGroup) {
+      btnGroup.innerHTML = `
+        <div class="stop-progress">
+          <div class="stop-progress-text">Stopping job...</div>
+          <div class="stop-progress-bar"><div class="stop-progress-fill"></div></div>
+        </div>
+      `;
     }
-    // Clean up countdown
+  }
+
+  // Use SSE for progress
+  const eventSource = new EventSource(`/api/stop/${hpc}/${ide}/stream`);
+
+  // Fallback timeout - if SSE hangs, clean up after 15s
+  const fallbackTimeout = setTimeout(() => {
+    if (stoppingJobs[key]) {
+      console.log('[Launcher] Stop timeout, cleaning up');
+      delete stoppingJobs[key];
+      eventSource.close();
+      delete countdowns[key];
+      delete walltimes[key];
+      fetchStatus(true);
+    }
+  }, 15000);
+
+  eventSource.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[Launcher] Stop SSE event:', data);
+
+      if (data.type === 'progress') {
+        const textEl = sessionEl?.querySelector('.stop-progress-text');
+        if (textEl) textEl.textContent = data.message;
+      }
+
+      if (data.type === 'complete' || data.type === 'error') {
+        clearTimeout(fallbackTimeout);
+        delete stoppingJobs[key];
+        eventSource.close();
+
+        if (data.type === 'error') {
+          alert('Failed to stop job: ' + (data.message || 'Unknown error'));
+        }
+
+        // Clean up countdown and refresh status
+        delete countdowns[key];
+        delete walltimes[key];
+        fetchStatus(true);
+      }
+    } catch (e) {
+      console.error('[Launcher] Stop SSE parse error:', e);
+    }
+  };
+
+  eventSource.onerror = function() {
+    console.error('[Launcher] Stop SSE connection error');
+    clearTimeout(fallbackTimeout);
+    delete stoppingJobs[key];
+    eventSource.close();
+    // Clean up and refresh
     delete countdowns[key];
     delete walltimes[key];
-    setTimeout(fetchStatus, 1000);
-  } catch (e) {
-    console.error('Kill error:', e);
-    alert('Failed to kill job: ' + e.message);
-    fetchStatus();
-  }
+    fetchStatus(true);
+  };
 }
 
 /**
@@ -780,157 +1254,29 @@ function tick() {
 
 let statusInterval = null;
 let tickInterval = null;
-let currentPollInterval = 60000; // Start with 60s default
-let consecutiveUnchangedPolls = 0; // Track polls with no state changes for backoff
-let lastClusterStatusSnapshot = null; // Track previous state to detect changes
+
+/**
+ * Frontend polling configuration
+ *
+ * Backend handles adaptive polling with backoff - frontend just reads cached state.
+ * We use a simple fixed interval since /api/status returns instantly from memory.
+ */
+const POLL_INTERVAL_MS = 2000; // 2 seconds - backend caches, this is cheap
 
 // Debug logging - set to true via browser console: window.POLLING_DEBUG = true
 const DEBUG = () => window.POLLING_DEBUG || false;
 const debugLog = (...args) => DEBUG() && console.log('[Polling]', ...args);
 
-/**
- * Polling configuration - centralized constants for adaptive polling behavior
- */
-const POLLING_CONFIG = {
-  // Time thresholds (seconds) for determining polling frequency
-  THRESHOLDS_SECONDS: {
-    NEAR_EXPIRY: 600,       // 10 minutes - jobs about to expire
-    APPROACHING_END: 1800,  // 30 minutes - jobs approaching end
-    MODERATE: 3600,         // 1 hour - moderate time remaining
-    STABLE: 21600,          // 6 hours - long-running stable jobs
-  },
-  // Polling intervals (milliseconds) for each state
-  INTERVALS_MS: {
-    FREQUENT: 15000,        // 15s - for pending jobs or near expiry
-    MODERATE: 60000,        // 1m - for jobs approaching end (10-30min left)
-    RELAXED: 300000,        // 5m - for jobs with 30min-1hr left
-    INFREQUENT: 600000,     // 10m - for jobs with 1-6hr left
-    IDLE: 1800000,          // 30m - for very stable jobs (>6hr) or no sessions
-    MAX: 3600000,           // 1hr - absolute maximum interval
-  },
-  // Exponential backoff configuration
-  BACKOFF: {
-    START_THRESHOLD: 3,     // Apply backoff when reaching 3 unchanged polls (1.5x at 3, 2.25x at 4, 3.375x at 5+)
-    MULTIPLIER: 1.5,        // Multiply interval by 1.5x each time
-    MAX_EXPONENT: 3,        // Cap exponent at 3 (max multiplier: 1.5^3 = 3.375x)
-  },
-  // Time bucket size for change detection (seconds)
-  TIME_BUCKET_SECONDS: 300, // 5-minute buckets
-};
-
-/**
- * Determine optimal polling interval based on job time remaining and exponential backoff
- *
- * Time-based ramping (uses actual timeLeft from SLURM):
- * - Pending: 15s (waiting for node assignment)
- * - Running with <10min left: 15s (about to expire)
- * - Running with 10-30min left: 60s (approaching end)
- * - Running with 30min-1hr left: 300s (5 minutes)
- * - Running with 1-6hr left: 600s (10 minutes)
- * - Running with >6hr left: 1800s (30 minutes - very stable)
- * - No sessions: 1800s (30 minutes)
- *
- * Progressive exponential backoff (when no state changes):
- * - After 3 consecutive unchanged polls, apply progressive multiplier
- * - Multiplier increases: 1.5x after 3 polls, 2.25x after 4, 3.375x after 5+
- * - Maximum interval: 3600s (1 hour) for very stable long-running jobs
- * - Reset backoff on any state change (new job, status change, time bucket change)
- */
-function getOptimalPollInterval() {
-  const { THRESHOLDS_SECONDS, INTERVALS_MS, BACKOFF } = POLLING_CONFIG;
-
-  let hasPending = false;
-  let minTimeLeft = Infinity; // Track shortest time remaining across all jobs
-  let hasAnySessions = false;
-
-  // Check all clusters for job status (derived dynamically)
-  for (const cluster of Object.keys(clusterStatus)) {
-    const ideStatuses = clusterStatus[cluster] || {};
-    for (const status of Object.values(ideStatuses)) {
-      if (status.status === 'pending') {
-        hasPending = true;
-        hasAnySessions = true;
-      } else if (status.status === 'running') {
-        hasAnySessions = true;
-        // Track the job with least time remaining
-        const timeLeft = status.timeLeftSeconds || Infinity;
-        if (timeLeft < minTimeLeft) {
-          minTimeLeft = timeLeft;
-        }
-      }
-    }
-  }
-
-  // Pending jobs need frequent updates (waiting for node assignment)
-  if (hasPending) {
-    return INTERVALS_MS.FREQUENT;
-  }
-
-  // No sessions at all - very infrequent polling
-  if (!hasAnySessions) {
-    return INTERVALS_MS.IDLE;
-  }
-
-  // Determine base interval from time remaining
-  let baseInterval;
-  if (minTimeLeft < THRESHOLDS_SECONDS.NEAR_EXPIRY) {
-    baseInterval = INTERVALS_MS.FREQUENT;
-  } else if (minTimeLeft < THRESHOLDS_SECONDS.APPROACHING_END) {
-    baseInterval = INTERVALS_MS.MODERATE;
-  } else if (minTimeLeft < THRESHOLDS_SECONDS.MODERATE) {
-    baseInterval = INTERVALS_MS.RELAXED;
-  } else if (minTimeLeft < THRESHOLDS_SECONDS.STABLE) {
-    baseInterval = INTERVALS_MS.INFREQUENT;
-  } else {
-    baseInterval = INTERVALS_MS.IDLE;
-  }
-
-  // Apply progressive exponential backoff if no changes detected
-  // When reaching START_THRESHOLD unchanged polls, apply increasing multiplier:
-  // - At 3 polls: 1.5x, at 4 polls: 2.25x, at 5+ polls: 3.375x (capped)
-  if (consecutiveUnchangedPolls >= BACKOFF.START_THRESHOLD) {
-    const exponent = Math.min(
-      consecutiveUnchangedPolls - BACKOFF.START_THRESHOLD + 1,
-      BACKOFF.MAX_EXPONENT
-    );
-    const backoffMultiplier = Math.pow(BACKOFF.MULTIPLIER, exponent);
-    const backedOffInterval = baseInterval * backoffMultiplier;
-    return Math.min(backedOffInterval, INTERVALS_MS.MAX);
-  }
-
-  return baseInterval;
-}
-
 function startPolling() {
-  // Always start tick interval for countdowns
+  // Tick interval for countdown timers (every second)
   if (!tickInterval) {
     tickInterval = setInterval(tick, 1000);
   }
 
-  // Start or restart status polling with adaptive interval
-  const optimalInterval = getOptimalPollInterval();
-
-  const previousInterval = currentPollInterval;
-  const intervalDecreased = optimalInterval < currentPollInterval;
-
-  if (statusInterval && optimalInterval !== currentPollInterval) {
-    // Interval changed - restart with new interval
-    clearInterval(statusInterval);
-    statusInterval = null;
-    debugLog(`Interval adjusted: ${previousInterval}ms -> ${optimalInterval}ms`);
-  }
-
+  // Status polling (reads from backend cache - instant response)
   if (!statusInterval) {
-    currentPollInterval = optimalInterval;
-    statusInterval = setInterval(fetchStatus, currentPollInterval);
-    debugLog(`Started with ${Math.floor(currentPollInterval / 1000)}s interval`);
-
-    // If polling frequency increased (interval decreased), fetch immediately
-    // This ensures responsive updates when jobs transition to critical states
-    if (intervalDecreased) {
-      debugLog('Frequency increased - fetching immediately');
-      fetchStatus();
-    }
+    statusInterval = setInterval(fetchStatus, POLL_INTERVAL_MS);
+    debugLog(`Started with ${POLL_INTERVAL_MS / 1000}s interval (backend handles adaptive polling)`);
   }
 }
 
@@ -950,8 +1296,7 @@ function handleVisibilityChange() {
   if (document.hidden) {
     stopPolling();
   } else {
-    // Reset backoff when user returns to page
-    consecutiveUnchangedPolls = 0;
+    // Fetch immediately when tab becomes visible, then resume polling
     fetchStatus();
     startPolling();
   }
@@ -963,6 +1308,7 @@ document.addEventListener('DOMContentLoaded', function() {
   startPolling();
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // Attach cancel button event listener
-  document.getElementById('cancel-launch-btn').addEventListener('click', cancelLaunch);
+  // Attach launch action button listeners
+  document.getElementById('back-to-menu-btn').addEventListener('click', backToMenu);
+  document.getElementById('cancel-stop-btn').addEventListener('click', stopLaunch);
 });
