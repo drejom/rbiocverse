@@ -120,6 +120,65 @@ secret = test123
 
 VS Code is NOT writing to the gnome-keyring at all.
 
+## New Finding: serve-web DOES Have Secret Storage (PR #191538)
+
+**Update**: Further investigation revealed that serve-web actually **does** have a secret storage mechanism, added in [PR #191538](https://github.com/microsoft/vscode/pull/191538) (August 2023).
+
+### How serve-web Secret Storage Works
+
+The implementation uses a **two-part encryption key system**:
+
+1. **Client-side**: Stores an encryption key in browser localStorage
+2. **Server-side**: Maintains a key and issues an HTTP-only cookie to the client
+3. **Combined**: Client requests server to merge keys, then encrypts/decrypts secrets
+
+The key endpoint is `/_vscode-cli/mint-key`:
+- Called via POST with `credentials: 'include'`
+- Returns server key as ArrayBuffer
+- XORed with client's AES-GCM 256-bit key
+
+### Related Issue: server-base-path Bug (#212369)
+
+There was a bug where `SECRET_KEY_MINT_PATH` didn't honor `--server-base-path`:
+- We use `--server-base-path /vscode-direct`
+- The mint-key endpoint wasn't including this prefix
+- **Fixed in PR #214250** (June 2024, VS Code ~1.91)
+
+Our VS Code 1.107.1 should have this fix, but we need to verify:
+1. Is the `/_vscode-cli/mint-key` endpoint being called?
+2. Are the cookies (`vscode-secret-key-path`, `vscode-cli-secret-half`) being set?
+3. Is the proxy correctly passing these cookies?
+
+### Proxy Cookie Handling
+
+The manager's proxy (`server.js`) already handles VS Code secret cookies:
+
+```javascript
+// On 403, clears secret cookies
+res.setHeader('Set-Cookie', [
+  'vscode-tkn=; Path=/; Expires=...',
+  'vscode-secret-key-path=; Path=/; Expires=...',
+  'vscode-cli-secret-half=; Path=/; Expires=...',
+]);
+
+// Rewrites Set-Cookie headers for proxy
+proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
+  return cookie
+    .replace(/;\s*Domain=[^;]*/gi, '')
+    .replace(/;\s*Path=[^;]*/gi, '; Path=/');
+});
+```
+
+### Next Steps to Investigate
+
+1. Use browser DevTools to check:
+   - Network tab: Look for `mint-key` or `_vscode-cli` requests
+   - Application tab → Cookies: Check for `vscode-secret-key-path`
+
+2. Check if the mint-key endpoint is accessible through the proxy
+
+3. Verify cookie path/domain settings are correct for our setup
+
 ## Root Cause Analysis
 
 ### Architecture Difference: Desktop vs serve-web
@@ -257,6 +316,9 @@ To achieve persistent GitHub/Copilot authentication, we need to consider alterna
 - [VS Code Secret Storage Discussion #748](https://github.com/microsoft/vscode-discussions/discussions/748)
 - [VS Code Issue #187338: OS keyring not identified](https://github.com/microsoft/vscode/issues/187338)
 - [VS Code Issue #191861: Add --github-auth to serve-web](https://github.com/microsoft/vscode/issues/191861)
+- [VS Code Issue #212369: SECRET_KEY_MINT_PATH doesn't honor server-base-path](https://github.com/microsoft/vscode/issues/212369)
 - [VS Code Issue #228036: secrets.provider lost on reload](https://github.com/microsoft/vscode/issues/228036)
 - [VS Code Issue #238303: Settings not honored in serve-web](https://github.com/microsoft/vscode/issues/238303)
+- [VS Code PR #191538: Secret storage provider for serve-web](https://github.com/microsoft/vscode/pull/191538)
+- [VS Code PR #214250: Fix SECRET_KEY_MINT_PATH with server-base-path](https://github.com/microsoft/vscode/pull/214250)
 - [GNOME Keyring - ArchWiki](https://wiki.archlinux.org/title/GNOME/Keyring)
