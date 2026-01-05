@@ -40,34 +40,34 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.6; }
     }
-    @keyframes pulse-kill {
+    @keyframes pulse-stop {
       0%, 100% { opacity: 1; background: #ef4444; }
       50% { opacity: 0.7; background: #dc2626; }
     }
-    /* Kill progress bar */
-    .kill-progress {
+    /* Stop progress bar */
+    .stop-progress {
       margin: 8px 0;
     }
-    .kill-progress-text {
+    .stop-progress-text {
       font-size: 0.8rem;
       color: rgba(255,255,255,0.7);
       margin-bottom: 6px;
     }
-    .kill-progress-bar {
+    .stop-progress-bar {
       height: 3px;
       background: #374151;
       border-radius: 2px;
       overflow: hidden;
       position: relative;
     }
-    .kill-progress-fill {
+    .stop-progress-fill {
       height: 100%;
       width: 30%;
       background: #ef4444;
       position: absolute;
-      animation: kill-indeterminate 1.2s ease-in-out infinite;
+      animation: stop-indeterminate 1.2s ease-in-out infinite;
     }
-    @keyframes kill-indeterminate {
+    @keyframes stop-indeterminate {
       0% { left: -30%; }
       100% { left: 100%; }
     }
@@ -99,9 +99,9 @@
       border-radius: 50%;
       background: #4ade80;
     }
-    .cluster-name .dot.killing {
+    .cluster-name .dot.stopping {
       background: #ef4444;
-      animation: pulse-kill 0.5s infinite;
+      animation: pulse-stop 0.5s infinite;
     }
     .ide-badge {
       font-size: 0.7rem;
@@ -314,7 +314,7 @@
     let liveServerAvailable = false;
     let shinyServerAvailable = false;
     let currentStatus = null;
-    let isKilling = false;     // Prevent UI updates during kill
+    let isStopping = false;     // Prevent UI updates during stop
 
     // Drag functionality
     let isDragging = false;
@@ -417,7 +417,7 @@
     }
 
     function render() {
-      if (isKilling) return;  // Don't update UI during kill
+      if (isStopping) return;  // Don't update UI during stop
       const content = document.getElementById('content');
       if (!activeSession) {
         content.innerHTML =
@@ -482,7 +482,7 @@
         liveServerBtn +
         shinyServerBtn +
         '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
-        '<button class="danger" onclick="killJob()"><i data-lucide="square" class="lucide"></i> Kill Job</button>' +
+        '<button class="danger" onclick="stopJob()"><i data-lucide="square" class="lucide"></i> Stop</button>' +
         '</div>';
 
       lucide.createIcons();
@@ -590,41 +590,41 @@
       window.top.location.href = '/?menu=1';
     }
 
-    async function killJob() {
-      // Guard against race conditions - prevent multiple simultaneous kills
-      if (isKilling) return;
+    async function stopJob() {
+      // Guard against race conditions - prevent multiple simultaneous stops
+      if (isStopping) return;
       if (!activeSession) return;
       const { hpc, ide } = activeSession;
       const ideInfo = availableIdes[ide] || { name: ide };
 
-      if (!confirm('Kill ' + ideInfo.name + ' on ' + hpc + '?')) return;
-      console.log('[Menu] Kill job requested:', hpc, ide);
+      if (!confirm('Stop ' + ideInfo.name + ' on ' + hpc + '?')) return;
+      console.log('[Menu] Stop job requested:', hpc, ide);
 
-      // Prevent UI updates during kill
-      isKilling = true;
+      // Prevent UI updates during stop
+      isStopping = true;
 
       // Replace actions with progress indicator
       const actionsEl = document.querySelector('.actions');
       if (actionsEl) {
         actionsEl.innerHTML =
-          '<div class="kill-progress">' +
-          '<div class="kill-progress-text">Cancelling job...</div>' +
-          '<div class="kill-progress-bar"><div class="kill-progress-fill"></div></div>' +
+          '<div class="stop-progress">' +
+          '<div class="stop-progress-text">Stopping job...</div>' +
+          '<div class="stop-progress-bar"><div class="stop-progress-fill"></div></div>' +
           '</div>';
       }
 
-      // Pulse the status dot red while killing
+      // Pulse the status dot red while stopping
       const dot = document.querySelector('.cluster-name .dot');
-      if (dot) dot.classList.add('killing');
+      if (dot) dot.classList.add('stopping');
 
       // Use SSE for progress (even though it's indeterminate, keeps connection alive)
       const eventSource = new EventSource('/api/stop/' + hpc + '/' + ide + '/stream');
 
       // Fallback timeout - if SSE hangs, redirect after 15s
       const fallbackTimeout = setTimeout(function() {
-        if (isKilling) {
-          console.log('[Menu] Kill timeout, redirecting');
-          isKilling = false;
+        if (isStopping) {
+          console.log('[Menu] Stop timeout, redirecting');
+          isStopping = false;
           eventSource.close();
           window.top.location.href = '/?menu=1';
         }
@@ -633,16 +633,16 @@
       eventSource.onmessage = function(event) {
         try {
           const data = JSON.parse(event.data);
-          console.log('[Menu] Kill SSE event:', data);
+          console.log('[Menu] Stop SSE event:', data);
 
           if (data.type === 'progress') {
-            const textEl = document.querySelector('.kill-progress-text');
+            const textEl = document.querySelector('.stop-progress-text');
             if (textEl) textEl.textContent = data.message;
           }
 
           if (data.type === 'complete' || data.type === 'error') {
             clearTimeout(fallbackTimeout);
-            isKilling = false;
+            isStopping = false;
             eventSource.close();
             if (data.type === 'error') {
               alert('Failed: ' + (data.message || 'Unknown error'));
@@ -650,14 +650,14 @@
             window.top.location.href = '/?menu=1';
           }
         } catch(e) {
-          console.error('[Menu] Kill SSE parse error:', e);
+          console.error('[Menu] Stop SSE parse error:', e);
         }
       };
 
       eventSource.onerror = function() {
-        console.error('[Menu] Kill SSE connection error');
+        console.error('[Menu] Stop SSE connection error');
         clearTimeout(fallbackTimeout);
-        isKilling = false;
+        isStopping = false;
         eventSource.close();
         // Fallback to direct navigation
         window.top.location.href = '/?menu=1';
