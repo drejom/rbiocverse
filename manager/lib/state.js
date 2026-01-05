@@ -115,6 +115,9 @@ class StateManager {
     this.healthPollTimer = null;
     this.lastHealthPollTime = null;
 
+    // Global polling control flag
+    this.pollingStopped = false;
+
     this.hpcServiceFactory = null; // Function: (hpc) => HpcService instance
   }
 
@@ -241,6 +244,7 @@ class StateManager {
       // Create a clean copy without non-serializable fields
       const cleanState = {
         activeSession: this.state.activeSession,
+        clusterHealth: this.state.clusterHealth || {},
         sessions: {},
       };
 
@@ -803,6 +807,9 @@ class StateManager {
 
     // Wait for all health checks to complete
     await Promise.all(healthPromises);
+
+    // Persist cluster health to disk
+    await this.save();
   }
 
   /**
