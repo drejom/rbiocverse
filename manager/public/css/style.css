@@ -217,7 +217,7 @@ h1 {
 .launch-form {
   display: flex;
   gap: 10px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: flex-end;
   margin-top: 12px;
 }
@@ -479,12 +479,14 @@ h1 {
 /* IDE Selector */
 .ide-selector {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .ide-btn {
   flex: 1;
+  min-width: 90px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -740,6 +742,7 @@ h1 {
 /* Release Selector - Apple-like design */
 .release-selector {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
@@ -817,11 +820,12 @@ h1 {
 
 .gpu-toggle {
   display: flex;
+  flex-wrap: wrap;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   padding: 2px;
   gap: 1px;
-  height: 36px;
+  min-height: 36px;
 }
 
 .gpu-btn {
@@ -866,6 +870,7 @@ h1 {
 /* Container for health bars - positioned next to cluster name */
 .health-indicators {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
@@ -931,14 +936,7 @@ h1 {
 
 /* Queue wait indicator */
 .queue-indicator {
-  min-width: 70px;
-}
-
-.queue-wait-label {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  margin-left: 4px;
-  white-space: nowrap;
+  min-width: 50px;
 }
 
 /* Cluster header layout - health bars left, status right */

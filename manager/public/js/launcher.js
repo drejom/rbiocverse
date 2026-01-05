@@ -644,7 +644,6 @@ function renderQueueBar(percent, label, detail, waitStr) {
       <div class="health-bar">
         <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
       </div>
-      <span class="queue-wait-label">${waitStr}</span>
     </span>
   `;
 }
