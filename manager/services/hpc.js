@@ -295,6 +295,8 @@ set -ex
 
 # Setup directories
 mkdir -p ${machineSettingsDir} ${extensionsDir}
+# Create writable /run directory for VS Code sockets (serve-web needs this for secret storage)
+mkdir -p $HOME/.vscode-slurm/run
 
 # Write Machine settings
 echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json
@@ -309,6 +311,7 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 # Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
+  -B $HOME/.vscode-slurm/run:/run \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
   code serve-web \\
