@@ -257,6 +257,7 @@ fi
       '--env TERM=xterm-256color',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
+      '--env RETICULATE_PYTHON=/usr/local/bin/python3',
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
@@ -350,6 +351,8 @@ export R_LIBS_SITE=${releasePaths.rLibsSite}
 export R_LIBS_USER=$HOME/R/bioc-${biocVersion}
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
+# Set reticulate Python to container's Python (prevents stale virtualenv issues)
+export RETICULATE_PYTHON=/usr/local/bin/python3
 exec /usr/lib/rstudio-server/bin/rsession "$@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
@@ -454,6 +457,7 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       token ? `--env JUPYTER_TOKEN=${token}` : '',
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
+      '--env RETICULATE_PYTHON=/usr/local/bin/python3',
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
       `--env OMP_NUM_THREADS=${cpus}`,
