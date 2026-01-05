@@ -332,17 +332,36 @@ class StateManager {
 
   /**
    * Create a new session with optional initial properties
+   * Throws if session already exists (use getOrCreateSession for get-or-create pattern)
    * @param {string} hpc - Cluster name (gemini, apollo)
    * @param {string} ide - IDE type (vscode, jupyter, rstudio)
    * @param {Object} initialProperties - Optional initial values to merge
    * @returns {Promise<Object>} The created session
+   * @throws {Error} If session already exists
    */
   async createSession(hpc, ide, initialProperties = {}) {
     const sessionKey = `${hpc}-${ide}`;
+    if (this.state.sessions[sessionKey]) {
+      throw new Error(`Session already exists: ${sessionKey}`);
+    }
     const newSession = createIdleSession(ide);
     this.state.sessions[sessionKey] = Object.assign(newSession, initialProperties);
     await this.save();
     return this.state.sessions[sessionKey];
+  }
+
+  /**
+   * Get session, or create one if it doesn't exist
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @returns {Promise<Object>} The existing or newly created session
+   */
+  async getOrCreateSession(hpc, ide) {
+    const session = this.getSession(hpc, ide);
+    if (session) {
+      return session;
+    }
+    return this.createSession(hpc, ide);
   }
 
   /**

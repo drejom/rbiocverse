@@ -368,10 +368,7 @@ function createApiRouter(stateManager) {
 
     try {
       // Get or create session
-      let session = stateManager.getSession(hpc, ide);
-      if (!session) {
-        session = await stateManager.createSession(hpc, ide);
-      }
+      const session = await stateManager.getOrCreateSession(hpc, ide);
 
       // If already running, just switch to this session (reconnect)
       if (session.status === 'running') {
@@ -595,10 +592,7 @@ function createApiRouter(stateManager) {
 
     try {
       // Get or create session
-      let session = stateManager.getSession(hpc, ide);
-      if (!session) {
-        session = await stateManager.createSession(hpc, ide);
-      }
+      const session = await stateManager.getOrCreateSession(hpc, ide);
 
       // If already running, just switch to this session (reconnect tunnel)
       if (session.status === 'running') {

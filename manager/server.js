@@ -11,7 +11,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const httpProxy = require('http-proxy');
-const { StateManager, createIdleSession } = require('./lib/state');
+const { StateManager } = require('./lib/state');
 const { config, ides } = require('./config');
 const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
@@ -674,11 +674,8 @@ stateManager.load().then(() => {
           try {
             const hpcService = new HpcService(hpc);
             await hpcService.cancelJob(session.jobId);
-            // Reset session to idle state
-            state.sessions[sessionKey] = createIdleSession(ide);
-            if (state.activeSession?.hpc === hpc && state.activeSession?.ide === session.ide) {
-              state.activeSession = null;
-            }
+            // Clear session using StateManager API
+            await stateManager.clearSession(hpc, ide);
             log.info(`Idle session ${sessionKey} cancelled successfully`);
           } catch (err) {
             log.error(`Failed to cancel idle session ${sessionKey}`, { error: err.message });
