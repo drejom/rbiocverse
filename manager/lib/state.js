@@ -356,15 +356,6 @@ class StateManager {
   }
 
   /**
-   * Get session by composite key
-   * @param {string} sessionKey - Composite key (e.g., "gemini-vscode")
-   * @returns {Object|null} Session or null
-   */
-  getSessionByKey(sessionKey) {
-    return this.state.sessions[sessionKey] || null;
-  }
-
-  /**
    * Update session and persist
    * @param {string} hpc - Cluster name
    * @param {string} ide - IDE type
@@ -384,19 +375,6 @@ class StateManager {
   }
 
   /**
-   * Update session by composite key and persist
-   * @param {string} sessionKey - Composite key
-   * @param {Object} updates - Fields to update
-   */
-  async updateSessionByKey(sessionKey, updates) {
-    if (!this.state.sessions[sessionKey]) {
-      this.state.sessions[sessionKey] = {};
-    }
-    Object.assign(this.state.sessions[sessionKey], updates);
-    await this.save();
-  }
-
-  /**
    * Clear (delete) session and persist
    * @param {string} hpc - Cluster name
    * @param {string} ide - IDE type
@@ -404,20 +382,6 @@ class StateManager {
   async clearSession(hpc, ide) {
     const sessionKey = `${hpc}-${ide}`;
     this._clearActiveSessionIfMatches(hpc, ide);
-    delete this.state.sessions[sessionKey];
-    await this.save();
-  }
-
-  /**
-   * Clear session by composite key and persist
-   * @param {string} sessionKey - Composite key
-   */
-  async clearSessionByKey(sessionKey) {
-    const session = this.state.sessions[sessionKey];
-    if (session) {
-      const [hpc] = sessionKey.split('-');
-      this._clearActiveSessionIfMatches(hpc, session.ide);
-    }
     delete this.state.sessions[sessionKey];
     await this.save();
   }
@@ -1021,4 +985,4 @@ class StateManager {
   }
 }
 
-module.exports = { StateManager, createIdleSession, POLLING_CONFIG };
+module.exports = { StateManager, POLLING_CONFIG };
