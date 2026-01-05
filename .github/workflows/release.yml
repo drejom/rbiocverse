@@ -1,0 +1,132 @@
+name: Release to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes (optional, auto-generated if empty)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate version format
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Version must be in format X.Y.Z (e.g., 1.0.0)"
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "Error: Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Create release PR
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get commits between main and dev for changelog
+          CHANGELOG=$(git log main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
+
+          # Create PR body
+          PR_BODY="## Release v${{ inputs.version }}
+
+          ### Changes
+          ${CHANGELOG}
+
+          ### Release Notes
+          ${{ inputs.release_notes || 'See changes above.' }}
+
+          ---
+          *This PR was automatically created by the release workflow.*"
+
+          # Create PR from dev to main
+          PR_URL=$(gh pr create \
+            --base main \
+            --head dev \
+            --title "Release v${{ inputs.version }}" \
+            --body "${PR_BODY}" \
+            2>&1) || true
+
+          # Check if PR already exists
+          if echo "$PR_URL" | grep -q "already exists"; then
+            PR_URL=$(gh pr list --base main --head dev --json url -q '.[0].url')
+            echo "Using existing PR: $PR_URL"
+          fi
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get PR number
+          PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Error: No PR found"
+            exit 1
+          fi
+
+          # Merge the PR
+          gh pr merge $PR_NUMBER --merge --delete-branch=false
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Checkout main after merge
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          # Create tag
+          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+          # Generate release notes
+          if [ -n "${{ inputs.release_notes }}" ]; then
+            NOTES="${{ inputs.release_notes }}"
+          else
+            NOTES=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" --no-merges 2>/dev/null || git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          # Create GitHub release
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
+            --notes "${NOTES}" \
+            --target main
+
+      - name: Summary
+        run: |
+          echo "## Release Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** v${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** [v${{ inputs.version }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ inputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dokploy will auto-deploy from the \`main\` branch webhook." >> $GITHUB_STEP_SUMMARY
