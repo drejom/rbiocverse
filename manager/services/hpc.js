@@ -280,9 +280,6 @@ fi
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env RETICULATE_PYTHON=/usr/local/bin/python3',
-      '--env VSCODE_KEYRING_PASS=hpc-code-server',
-      // Tell VS Code to use gnome-libsecret for credential storage (issue #28)
-      '--env GNOME_DESKTOP_SESSION_ID=this-triggers-gnome-keyring',
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
       `--env OPENBLAS_NUM_THREADS=${cpus}`,
@@ -308,28 +305,19 @@ echo ${bootstrapBase64} | base64 -d | sh
 # Find available port and export as IDE_PORT
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
-# Setup keyring for persistent Copilot auth (issue #28)
-# Use our own directories to avoid interfering with host environment
-export XDG_RUNTIME_DIR=$HOME/.vscode-slurm/xdg-runtime
-export XDG_DATA_HOME=$HOME/.vscode-slurm/xdg-data
-mkdir -p "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME/keyrings"
-chmod 700 "$XDG_RUNTIME_DIR"
-
 # Start VS Code server
 # Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
-  --env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \\
-  --env XDG_DATA_HOME=$XDG_DATA_HOME \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
-  sh -c 'eval "$(dbus-launch --sh-syntax)" && echo -n "$VSCODE_KEYRING_PASS" | gnome-keyring-daemon --unlock --components=secrets && export GNOME_KEYRING_CONTROL=$XDG_RUNTIME_DIR/keyring && exec code serve-web \\
+  code serve-web \\
     --host 0.0.0.0 \\
     --port $IDE_PORT \\
     ${tokenArg} \\
     --accept-server-license-terms \\
     --server-base-path /vscode-direct \\
-    --server-data-dir ${dataDir}'
+    --server-data-dir ${dataDir}
 `;
   }
 
