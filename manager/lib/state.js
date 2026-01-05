@@ -406,6 +406,12 @@ class StateManager {
   startPolling(hpcServiceFactory) {
     this.hpcServiceFactory = hpcServiceFactory;
     log.state('Starting background polling');
+
+    // Fetch cluster health immediately on startup (don't wait for first poll)
+    this.refreshClusterHealth().catch(e => {
+      log.warn('Initial cluster health fetch failed', { error: e.message });
+    });
+
     this.schedulePoll();
   }
 
