@@ -352,16 +352,30 @@ class StateManager {
 
   /**
    * Get session, or create one if it doesn't exist
+   * Handles race condition where concurrent callers may try to create simultaneously
    * @param {string} hpc - Cluster name
    * @param {string} ide - IDE type
    * @returns {Promise<Object>} The existing or newly created session
    */
   async getOrCreateSession(hpc, ide) {
-    const session = this.getSession(hpc, ide);
-    if (session) {
-      return session;
+    const existing = this.getSession(hpc, ide);
+    if (existing) {
+      return existing;
     }
-    return this.createSession(hpc, ide);
+
+    try {
+      // Attempt to create the session. This may race with another caller.
+      return await this.createSession(hpc, ide);
+    } catch (err) {
+      // If another concurrent caller created the session first, gracefully return it.
+      if (err && typeof err.message === 'string' && err.message.includes('Session already exists')) {
+        const session = this.getSession(hpc, ide);
+        if (session) {
+          return session;
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -379,7 +393,7 @@ class StateManager {
    * @param {string} hpc - Cluster name
    * @param {string} ide - IDE type
    * @param {Object} updates - Fields to update
-   * @returns {Object} Updated session
+   * @returns {Promise<Object>} Updated session
    * @throws {Error} If session doesn't exist
    */
   async updateSession(hpc, ide, updates) {
@@ -400,6 +414,11 @@ class StateManager {
    */
   async clearSession(hpc, ide) {
     const sessionKey = `${hpc}-${ide}`;
+    const session = this.state.sessions[sessionKey];
+    if (!session) {
+      log.warn(`clearSession called for non-existent session: ${sessionKey}`);
+      return;
+    }
     this._clearActiveSessionIfMatches(hpc, ide);
     delete this.state.sessions[sessionKey];
     await this.save();
@@ -418,13 +437,11 @@ class StateManager {
    * @returns {Object} Active sessions keyed by sessionKey
    */
   getActiveSessions() {
-    const active = {};
-    for (const [key, session] of Object.entries(this.state.sessions)) {
-      if (session && (session.status === 'running' || session.status === 'pending')) {
-        active[key] = session;
-      }
-    }
-    return active;
+    return Object.fromEntries(
+      Object.entries(this.state.sessions).filter(
+        ([, session]) => session && (session.status === 'running' || session.status === 'pending')
+      )
+    );
   }
 
   /**

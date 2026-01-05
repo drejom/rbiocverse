@@ -418,48 +418,51 @@ function createApiRouter(stateManager) {
 
       const hpcService = new HpcService(hpc);
 
+      // Use local variables to collect job data (avoid mutating session directly)
+      let jobId, token, node;
+
       // Check for existing job for this IDE
-      let jobInfo = await hpcService.getJobInfo(ide);
+      const jobInfo = await hpcService.getJobInfo(ide);
 
       if (!jobInfo) {
         // Submit new job
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
         const result = await hpcService.submitJob(cpus, mem, time, ide);
-        session.jobId = result.jobId;
-        session.token = result.token;  // Auth token for VS Code/Jupyter
-        log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
+        jobId = result.jobId;
+        token = result.token;  // Auth token for VS Code/Jupyter
+        log.job(`Submitted`, { hpc, ide, jobId });
       } else {
-        session.jobId = jobInfo.jobId;
-        session.node = jobInfo.node;
-        log.job(`Found existing job`, { hpc, ide, jobId: session.jobId });
+        jobId = jobInfo.jobId;
+        node = jobInfo.node;
+        log.job(`Found existing job`, { hpc, ide, jobId });
       }
 
       // Wait for job to get a node
-      log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
-      const waitResult = await hpcService.waitForNode(session.jobId, ide);
+      log.job('Waiting for node assignment...', { hpc, ide, jobId });
+      const waitResult = await hpcService.waitForNode(jobId, ide);
       if (waitResult.pending) {
         throw new Error('Timeout waiting for node assignment');
       }
-      session.node = waitResult.node;
-      log.job(`Running on node`, { hpc, ide, node: session.node });
+      node = waitResult.node;
+      log.job(`Running on node`, { hpc, ide, node });
 
       // Start tunnel - it will verify IDE is responding before returning
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
-        // Tunnel exit callback
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
+        // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
-        if (session.status === 'running') {
-          session.status = 'idle';
+        const currentSession = stateManager.getSession(hpc, ide);
+        if (currentSession?.status === 'running') {
+          stateManager.updateSession(hpc, ide, { status: 'idle', tunnelProcess: null });
         }
-        session.tunnelProcess = null;
       });
 
       await stateManager.updateSession(hpc, ide, {
         status: 'running',
-        jobId: session.jobId,
-        token: session.token,
-        node: session.node,
-        tunnelProcess: session.tunnelProcess,
+        jobId,
+        token,
+        node,
+        tunnelProcess,
         startedAt: new Date().toISOString(),
       });
       await stateManager.setActiveSession(hpc, ide);
@@ -476,8 +479,8 @@ function createApiRouter(stateManager) {
 
       res.json({
         status: 'running',
-        jobId: session.jobId,
-        node: session.node,
+        jobId,
+        node,
         hpc,
         ide,
         clusterStatus,
@@ -655,33 +658,36 @@ function createApiRouter(stateManager) {
 
       const hpcService = new HpcService(hpc);
 
+      // Use local variables to collect job data (avoid mutating session directly)
+      let jobId, token, node;
+      const jobReleaseVersion = releaseVersion;
+      const jobGpu = gpu || null;
+
       // Check for existing job for this IDE
-      let jobInfo = await hpcService.getJobInfo(ide);
+      const jobInfo = await hpcService.getJobInfo(ide);
 
       // Helper to wait for node assignment (avoids duplication)
-      const handleWaitForNode = async () => {
-        const waitResult = await hpcService.waitForNode(session.jobId, ide, {
+      const handleWaitForNode = async (currentJobId) => {
+        const waitResult = await hpcService.waitForNode(currentJobId, ide, {
           maxAttempts: 6,
           returnPendingOnTimeout: true,
         });
 
         if (waitResult.pending) {
-          session.status = 'pending';
-          await stateManager.save();
+          await stateManager.updateSession(hpc, ide, { status: 'pending', jobId: currentJobId });
           stateManager.releaseLock(lockName);
 
           res.write(`data: ${JSON.stringify({
             type: 'pending-timeout',
-            jobId: session.jobId,
+            jobId: currentJobId,
             message: 'Job queued, check back soon',
           })}\n\n`);
           res.end();
-          return false; // Response ended
+          return { success: false };
         }
 
-        session.node = waitResult.node;
-        sendProgress('starting', `Running on ${session.node}`, { node: session.node });
-        return true; // Success
+        sendProgress('starting', `Running on ${waitResult.node}`, { node: waitResult.node });
+        return { success: true, node: waitResult.node };
       };
 
       if (!jobInfo) {
@@ -691,64 +697,67 @@ function createApiRouter(stateManager) {
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu: gpu || 'none', releaseVersion });
 
         const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu, releaseVersion });
-        session.jobId = result.jobId;
-        session.token = result.token;  // Auth token for VS Code/Jupyter
-        session.releaseVersion = releaseVersion;  // Store release with session
-        session.gpu = gpu || null;                // Store GPU with session
+        jobId = result.jobId;
+        token = result.token;
 
-        sendProgress('submitted', `Job ${session.jobId} submitted`, { jobId: session.jobId });
-        log.job(`Submitted`, { hpc, ide, jobId: session.jobId });
+        sendProgress('submitted', `Job ${jobId} submitted`, { jobId });
+        log.job(`Submitted`, { hpc, ide, jobId });
 
         // Wait for node assignment
         sendProgress('waiting', 'Waiting for resources...');
-        log.job('Waiting for node assignment...', { hpc, ide, jobId: session.jobId });
+        log.job('Waiting for node assignment...', { hpc, ide, jobId });
 
-        if (!(await handleWaitForNode())) {
+        const waitResult = await handleWaitForNode(jobId);
+        if (!waitResult.success) {
           return;
         }
+        node = waitResult.node;
       } else {
         // Found existing job - connect to it
-        session.jobId = jobInfo.jobId;
-        session.node = jobInfo.node;
+        jobId = jobInfo.jobId;
+        node = jobInfo.node;
 
         if (jobInfo.node) {
           // Job is running - skip straight to connecting
-          sendProgress('starting', `Connecting to running job on ${session.node}`, { jobId: session.jobId, node: session.node });
-          log.job(`Found running job`, { hpc, ide, jobId: session.jobId, node: session.node });
+          sendProgress('starting', `Connecting to running job on ${node}`, { jobId, node });
+          log.job(`Found running job`, { hpc, ide, jobId, node });
         } else {
           // Job is pending - wait for node
-          sendProgress('submitted', `Found job ${session.jobId}`, { jobId: session.jobId });
+          sendProgress('submitted', `Found job ${jobId}`, { jobId });
           sendProgress('waiting', 'Waiting for resources...');
-          log.job(`Found pending job`, { hpc, ide, jobId: session.jobId });
+          log.job(`Found pending job`, { hpc, ide, jobId });
 
-          if (!(await handleWaitForNode())) {
+          const waitResult = await handleWaitForNode(jobId);
+          if (!waitResult.success) {
             return;
           }
+          node = waitResult.node;
         }
       }
-      log.job(`Running on node`, { hpc, ide, node: session.node });
+      log.job(`Running on node`, { hpc, ide, node });
 
       // Step 6: Establishing tunnel and waiting for IDE
       sendProgress('establishing', 'Almost ready...');
 
       // Start tunnel and wait for it to establish
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
+        // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
-        if (session.status === 'running') {
-          session.status = 'idle';
+        const currentSession = stateManager.getSession(hpc, ide);
+        if (currentSession?.status === 'running') {
+          stateManager.updateSession(hpc, ide, { status: 'idle', tunnelProcess: null });
         }
-        session.tunnelProcess = null;
       });
 
       await stateManager.updateSession(hpc, ide, {
         status: 'running',
-        jobId: session.jobId,
-        token: session.token,
-        node: session.node,
-        releaseVersion: session.releaseVersion,
-        gpu: session.gpu,
-        tunnelProcess: session.tunnelProcess,
+        jobId,
+        token,
+        node,
+        releaseVersion: jobReleaseVersion,
+        gpu: jobGpu,
+        tunnelProcess,
         startedAt: new Date().toISOString(),
       });
       await stateManager.setActiveSession(hpc, ide);
@@ -759,8 +768,8 @@ function createApiRouter(stateManager) {
       const ideConfig = ides[ide];
       sendComplete({
         status: 'running',
-        jobId: session.jobId,
-        node: session.node,
+        jobId,
+        node,
         hpc,
         ide,
         redirectUrl: ideConfig?.proxyPath || '/code/',
