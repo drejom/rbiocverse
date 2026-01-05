@@ -17,6 +17,7 @@ const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
+const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
 
 const app = express();
 // NOTE: Do NOT use express.json() globally - it consumes request body streams
@@ -80,13 +81,6 @@ vscodeProxy.on('error', (err, req, res) => {
   }
 });
 
-// Extract token value from vscode-tkn cookie
-function getCookieToken(cookieHeader) {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(/vscode-tkn=([^;]+)/);
-  return match ? match[1] : null;
-}
-
 // Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
 // Rewrite path and inject connection token for VS Code authentication
 vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
@@ -115,9 +109,7 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   // Re-authenticate if:
   // 1. No cookie at all, or
   // 2. Cookie token doesn't match session token (stale cookie from old session)
-  // Strip query string for root path check (URL may have ?t=timestamp)
-  const pathWithoutQuery = targetPath.split('?')[0];
-  const isRootPath = pathWithoutQuery === '/vscode-direct' || pathWithoutQuery === '/vscode-direct/';
+  const isRootPath = isVscodeRootPath(targetPath);
   if (!hasValidCookie && sessionToken && isRootPath) {
     // Initial page load or stale cookie - use root auth flow to get fresh cookie
     proxyReq.path = `/?tkn=${sessionToken}`;
