@@ -929,6 +929,18 @@ h1 {
   opacity: 1;
 }
 
+/* Queue wait indicator */
+.queue-indicator {
+  min-width: 70px;
+}
+
+.queue-wait-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 /* Cluster header layout - health bars left, status right */
 .cluster-header-left {
   display: flex;

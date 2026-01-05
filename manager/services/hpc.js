@@ -817,6 +817,8 @@ SLURM_SCRIPT`;
     // %m = total memory per node
     // %D = node count
     // %t = state (idle, mix, alloc, down, drain)
+    // %S = estimated start time (N/A for dependent/unschedulable jobs)
+    // %P = partition name
     const cmd = `
 echo "===CPUS===" && \
 sinfo -h -o '%C' 2>/dev/null && \
@@ -827,7 +829,9 @@ sinfo -h -N -o '%m %e' 2>/dev/null && \
 echo "===PENDING===" && \
 squeue -h -t PD 2>/dev/null | wc -l && \
 echo "===GRES===" && \
-sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
+sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none" && \
+echo "===QUEUEWAIT===" && \
+squeue -h -t PD --start -o '%P %S' 2>/dev/null | grep -v N/A
 `;
 
     try {
@@ -988,6 +992,41 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
       gpus.percent = totalGpus > 0 ? Math.round((busyGpus / totalGpus) * 100) : 0;
     }
 
+    // Parse queue wait times per partition
+    // Format: "partition YYYY-MM-DDTHH:MM:SS" (one per line, N/A already filtered)
+    const queueWait = {};
+    const now = Date.now();
+    if (sections.QUEUEWAIT) {
+      // Group start times by partition
+      const partitionTimes = {};
+      for (const line of sections.QUEUEWAIT) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 2) {
+          const partition = parts[0].toLowerCase().replace('*', ''); // Remove default marker
+          const startTimeStr = parts[1];
+          const startTime = new Date(startTimeStr).getTime();
+          if (!isNaN(startTime) && startTime > now) {
+            if (!partitionTimes[partition]) {
+              partitionTimes[partition] = [];
+            }
+            partitionTimes[partition].push(startTime - now);
+          }
+        }
+      }
+      // Calculate median wait time per partition
+      for (const [partition, waitTimes] of Object.entries(partitionTimes)) {
+        waitTimes.sort((a, b) => a - b);
+        const median = waitTimes[Math.floor(waitTimes.length / 2)];
+        const medianMinutes = Math.round(median / 60000);
+        queueWait[partition] = {
+          medianMinutes,
+          schedulableJobs: waitTimes.length,
+          // Percentage for bar: 0-1440 min (24hr) = 0-100%
+          percent: Math.min(100, Math.round((medianMinutes / 1440) * 100)),
+        };
+      }
+    }
+
     return {
       online: true,
       cpus,
@@ -995,6 +1034,7 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
       nodes,
       gpus,
       pendingJobs,
+      queueWait,
       lastChecked: Date.now(),
     };
   }

@@ -240,6 +240,12 @@ function selectGpu(hpc, gpu) {
       btn.classList.toggle('selected', btn.dataset.gpu === gpu);
     });
   }
+  // Re-render health bars to update queue wait for selected partition
+  const healthContainer = document.getElementById(`${hpc}-health`);
+  if (healthContainer) {
+    healthContainer.innerHTML = renderHealthBars(hpc);
+    lucide.createIcons();
+  }
 }
 
 /**
@@ -522,6 +528,31 @@ function renderHealthBars(hpc) {
     bars.push(renderSingleBar('server', nodePercent, 'Nodes', nodeDetail));
   }
 
+  // Queue wait bar (rightmost) - changes based on GPU selection
+  if (health.queueWait) {
+    const gpu = selectedGpu[hpc] || '';
+    // Map GPU selection to partition name
+    let partition;
+    if (gpu === 'a100') {
+      partition = 'gpu-a100';
+    } else if (gpu === 'v100') {
+      partition = 'gpu-v100';
+    } else {
+      // Default: compute (Gemini) or all (Apollo)
+      partition = health.queueWait['compute'] ? 'compute' : 'all';
+    }
+
+    const queueData = health.queueWait[partition];
+    if (queueData) {
+      const waitStr = formatWaitTime(queueData.medianMinutes);
+      const detail = `~${waitStr} median wait (${queueData.schedulableJobs} schedulable jobs)`;
+      bars.push(renderQueueBar(queueData.percent, 'Queue', detail, waitStr));
+    } else {
+      // No data for this partition - show empty/unknown
+      bars.push(renderQueueBar(0, 'Queue', 'No queue data available', '?'));
+    }
+  }
+
   return `<div class="health-indicators">${bars.join('')}</div>`;
 }
 
@@ -560,6 +591,60 @@ function renderSingleBar(icon, percent, label, detail) {
       <div class="health-bar">
         <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
       </div>
+    </span>
+  `;
+}
+
+/**
+ * Format wait time in minutes to human-readable string
+ * @param {number} minutes - Wait time in minutes
+ * @returns {string} Formatted string (e.g., "45m", "2h", "1d 4h")
+ */
+function formatWaitTime(minutes) {
+  if (!minutes || minutes <= 0) return '<5m';
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+}
+
+/**
+ * Render queue wait indicator bar
+ * @param {number} percent - Wait percentage (0-100, where 100 = 24hr+)
+ * @param {string} label - Label for tooltip
+ * @param {string} detail - Tooltip detail text
+ * @param {string} waitStr - Wait time string to display
+ * @returns {string} HTML for queue bar
+ */
+function renderQueueBar(percent, label, detail, waitStr) {
+  let safePercent = Number(percent);
+  if (!Number.isFinite(safePercent)) safePercent = 0;
+  safePercent = Math.min(100, Math.max(0, safePercent));
+
+  // Color: low wait = green, high wait = red (inverted from usage bars)
+  let level = 'low';
+  if (safePercent >= 50) {  // >12hr wait
+    level = 'high';
+  } else if (safePercent >= 17) {  // >4hr wait
+    level = 'medium';
+  }
+
+  const safeLabel = escapeHtml(label);
+  const safeDetail = escapeHtml(detail);
+  const tooltip = `${safeLabel}: ${safeDetail}`;
+
+  return `
+    <span class="health-indicator queue-indicator" title="${tooltip}">
+      <i data-lucide="clock" class="icon-xs"></i>
+      <div class="health-bar">
+        <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
+      </div>
+      <span class="queue-wait-label">${waitStr}</span>
     </span>
   `;
 }
