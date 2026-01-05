@@ -312,6 +312,7 @@ describe('HpcService', () => {
         state: 'RUNNING',
         node: 'node01',
         timeLeft: '11:30:00',
+        timeLeftSeconds: 41400, // 11:30:00 = 11*3600 + 30*60 = 41400
         timeLimit: '12:00:00',
         cpus: '4',
         memory: '40000M',
@@ -323,6 +324,7 @@ describe('HpcService', () => {
         state: 'PENDING',
         node: null,
         timeLeft: null,
+        timeLeftSeconds: null, // INVALID -> null
         timeLimit: '8:00:00',
         cpus: '2',
         memory: '20000M',

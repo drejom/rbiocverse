@@ -172,12 +172,18 @@ class HpcService {
       const ide = Object.keys(ides).find(k => ides[k].jobName === jobName);
       if (!ide) continue;
 
+      // Parse timeLeft to seconds for adaptive polling
+      const parsedTimeLeft = (timeLeft && timeLeft !== 'INVALID' && timeLeft !== 'UNLIMITED')
+        ? this.parseTimeToSeconds(timeLeft)
+        : null;
+
       results[ide] = {
         jobId,
         ide,
         state: jobState,
         node: node === '(null)' ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
+        timeLeftSeconds: parsedTimeLeft,
         timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
@@ -652,43 +658,6 @@ SLURM_SCRIPT`;
       return output.length > 0;
     } catch (e) {
       return false;
-    }
-  }
-
-  /**
-   * Get detailed status of a specific job by ID
-   * Used by StateManager for background polling
-   * @param {string} jobId - Job ID to query
-   * @returns {Promise<Object|null>} Job status object or null if not found
-   */
-  async getJobStatus(jobId) {
-    try {
-      const output = await this.sshExec(
-        `squeue -j ${jobId} -h -O JobID,State,NodeList,TimeLeft,TimeLimit 2>/dev/null`
-      );
-
-      if (!output || !output.trim()) return null;
-
-      const parts = output.trim().split(/\s+/);
-      const [id, state, node, timeLeft, timeLimit] = parts;
-
-      // Parse timeLeft to seconds
-      let timeLeftSeconds = null;
-      if (timeLeft && timeLeft !== 'INVALID' && timeLeft !== 'UNLIMITED') {
-        timeLeftSeconds = this.parseTimeToSeconds(timeLeft);
-      }
-
-      return {
-        jobId: id,
-        state: state, // PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT
-        node: node === '(null)' ? null : node,
-        timeLeft,
-        timeLimit,
-        timeLeftSeconds,
-      };
-    } catch (e) {
-      log.warn('Failed to get job status', { jobId, error: e.message });
-      return null;
     }
   }
 

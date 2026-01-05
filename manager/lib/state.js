@@ -19,31 +19,44 @@ const { clusters } = require('../config');
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Polling configuration for adaptive backend polling
- * Migrated from frontend launcher.js for efficiency
+ * Polling configuration
+ *
+ * Two independent polling loops:
+ * 1. Job polling (adaptive) - checks job status, interval varies by job state
+ * 2. Health polling (fixed) - checks cluster health every 30 minutes
+ *
+ * Job polling uses batch queries: 1 SSH call per cluster (parallel) via getAllJobs()
+ * This scales well regardless of number of active sessions.
  */
 const POLLING_CONFIG = {
-  // Time thresholds (seconds) for determining polling frequency
-  THRESHOLDS_SECONDS: {
-    NEAR_EXPIRY: 600, // 10 min - jobs about to expire
-    APPROACHING_END: 1800, // 30 min - jobs approaching end
-    MODERATE: 3600, // 1 hr - moderate time remaining
-    STABLE: 21600, // 6 hr - long-running stable jobs
+  // Job polling: adaptive based on job state
+  JOB_POLLING: {
+    // Time thresholds (seconds) for determining polling frequency
+    THRESHOLDS_SECONDS: {
+      NEAR_EXPIRY: 600, // 10 min - jobs about to expire
+      APPROACHING_END: 1800, // 30 min - jobs approaching end
+      MODERATE: 3600, // 1 hr - moderate time remaining
+      STABLE: 21600, // 6 hr - long-running stable jobs
+    },
+    // Polling intervals (milliseconds) for each state
+    INTERVALS_MS: {
+      FREQUENT: 15000, // 15s - for pending jobs or near expiry
+      MODERATE: 60000, // 1m - for jobs approaching end
+      RELAXED: 300000, // 5m - for jobs with 30min-1hr left
+      INFREQUENT: 600000, // 10m - for jobs with 1-6hr left
+      IDLE: 1800000, // 30m - for very stable jobs or no sessions
+      MAX: 3600000, // 1hr - absolute maximum interval
+    },
+    // Exponential backoff configuration
+    BACKOFF: {
+      START_THRESHOLD: 3, // Apply backoff after 3 unchanged polls
+      MULTIPLIER: 1.5, // Multiply interval by 1.5x each time
+      MAX_EXPONENT: 3, // Cap exponent at 3 (max multiplier: 3.375x)
+    },
   },
-  // Polling intervals (milliseconds) for each state
-  INTERVALS_MS: {
-    FREQUENT: 15000, // 15s - for pending jobs or near expiry
-    MODERATE: 60000, // 1m - for jobs approaching end
-    RELAXED: 300000, // 5m - for jobs with 30min-1hr left
-    INFREQUENT: 600000, // 10m - for jobs with 1-6hr left
-    IDLE: 1800000, // 30m - for very stable jobs or no sessions
-    MAX: 3600000, // 1hr - absolute maximum interval
-  },
-  // Exponential backoff configuration
-  BACKOFF: {
-    START_THRESHOLD: 3, // Apply backoff after 3 unchanged polls
-    MULTIPLIER: 1.5, // Multiply interval by 1.5x each time
-    MAX_EXPONENT: 3, // Cap exponent at 3 (max multiplier: 3.375x)
+  // Health polling: fixed interval (independent of job state)
+  HEALTH_POLLING: {
+    INTERVAL_MS: 30 * 60 * 1000, // 30 minutes
   },
 };
 
@@ -91,12 +104,17 @@ class StateManager {
     // Ready flag - set to true after load() completes
     this.ready = false;
 
-    // Polling state
-    this.pollTimer = null;
+    // Job polling state (adaptive)
+    this.jobPollTimer = null;
     this.consecutiveUnchangedPolls = 0;
     this.lastStateSnapshot = null;
-    this.lastPollTime = null;
-    this.nextPollTime = null;
+    this.lastJobPollTime = null;
+    this.nextJobPollTime = null;
+
+    // Health polling state (fixed interval)
+    this.healthPollTimer = null;
+    this.lastHealthPollTime = null;
+
     this.hpcServiceFactory = null; // Function: (hpc) => HpcService instance
   }
 
@@ -268,9 +286,7 @@ class StateManager {
 
     try {
       const hpcService = this.hpcServiceFactory(hpc);
-      const status = await hpcService.getJobStatus(jobId);
-      // Job exists if we got status and it's not in a terminal state
-      return status !== null && !['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT'].includes(status.state);
+      return await hpcService.checkJobExists(jobId);
     } catch (e) {
       log.warn('Failed to check job existence, assuming exists', { hpc, jobId, error: e.message });
       return true; // Safe fallback
@@ -400,135 +416,187 @@ class StateManager {
   // ============================================
 
   /**
-   * Start background polling for session status
+   * Start background polling for session status and cluster health
+   *
+   * Two independent polling loops:
+   * 1. Job polling (adaptive) - 1 SSH call per cluster via getAllJobs()
+   * 2. Health polling (fixed 30 min) - 1 SSH call per cluster via getClusterHealth()
+   *
    * @param {Function} hpcServiceFactory - Factory function: (hpc) => HpcService instance
    */
   startPolling(hpcServiceFactory) {
     this.hpcServiceFactory = hpcServiceFactory;
-    log.state('Starting background polling');
+    log.state('Starting background polling (jobs: adaptive, health: 30 min)');
 
-    // Check if we have fresh cluster health data (< 30 min old)
-    // If so, skip the initial SSH call - we'll refresh on next poll anyway
-    const HEALTH_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    // Start job polling immediately
+    this.scheduleJobPoll();
+
+    // Start health polling - check if we have fresh cached data first
+    const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
     const hasFreshHealth = this.state.clusterHealth &&
       Object.values(this.state.clusterHealth).some(h =>
-        h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < HEALTH_CACHE_TTL_MS
+        h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < INTERVAL_MS
       );
 
     if (hasFreshHealth) {
       log.state('Using cached cluster health data (< 30 min old)');
+      // Schedule next health poll after remaining TTL
+      const oldestCheck = Math.min(
+        ...Object.values(this.state.clusterHealth)
+          .filter(h => h?.current?.lastChecked)
+          .map(h => h.current.lastChecked)
+      );
+      const elapsed = Date.now() - oldestCheck;
+      const remaining = Math.max(INTERVAL_MS - elapsed, 1000);
+      this.healthPollTimer = setTimeout(() => this.healthPoll(), remaining);
     } else {
       // Fetch cluster health immediately on startup
-      this.refreshClusterHealth().catch(e => {
-        log.warn('Initial cluster health fetch failed', { error: e.message });
-      });
+      this.healthPoll();
     }
-
-    this.schedulePoll();
   }
 
   /**
-   * Stop background polling
+   * Stop background polling (both job and health)
    */
   stopPolling() {
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
+    if (this.jobPollTimer) {
+      clearTimeout(this.jobPollTimer);
+      this.jobPollTimer = null;
+    }
+    if (this.healthPollTimer) {
+      clearTimeout(this.healthPollTimer);
+      this.healthPollTimer = null;
     }
     log.state('Stopped background polling');
   }
 
   /**
-   * Schedule next poll with adaptive interval
+   * Schedule next job poll with adaptive interval
    */
-  schedulePoll() {
-    const interval = this.getOptimalPollInterval();
-    this.nextPollTime = Date.now() + interval;
-    this.pollTimer = setTimeout(() => this.poll(), interval);
-    log.debugFor('state', `Next poll in ${Math.round(interval / 1000)}s`);
+  scheduleJobPoll() {
+    const interval = this.getOptimalJobPollInterval();
+    this.nextJobPollTime = Date.now() + interval;
+    this.jobPollTimer = setTimeout(() => this.jobPoll(), interval);
+    log.debugFor('state', `Next job poll in ${Math.round(interval / 1000)}s`);
   }
 
   /**
-   * Execute a poll cycle
-   * Refreshes all running sessions and schedules next poll
+   * Execute a job poll cycle
+   * Uses batch queries: 1 SSH call per cluster (parallel) via getAllJobs()
    * Error-safe: always reschedules even if refresh fails
    */
-  async poll() {
-    this.lastPollTime = Date.now();
+  async jobPoll() {
+    this.lastJobPollTime = Date.now();
 
     try {
       const changed = await this.refreshAllSessions();
 
-      // Refresh cluster health (throttled - only when interval >= 60s)
-      const currentInterval = this.getOptimalPollInterval();
-      if (currentInterval >= POLLING_CONFIG.INTERVALS_MS.MODERATE) {
-        await this.refreshClusterHealth();
-      }
-
       if (changed) {
         this.consecutiveUnchangedPolls = 0;
-        log.debugFor('state', 'Poll detected changes, resetting backoff');
+        log.debugFor('state', 'Job poll detected changes, resetting backoff');
       } else {
         this.consecutiveUnchangedPolls++;
-        log.debugFor('state', `No changes for ${this.consecutiveUnchangedPolls} polls`);
+        log.debugFor('state', `No job changes for ${this.consecutiveUnchangedPolls} polls`);
       }
     } catch (e) {
-      // Ensure polling continues even if an error occurs
-      log.error('Poll cycle failed', { error: e.message });
+      log.error('Job poll cycle failed', { error: e.message });
     } finally {
-      this.schedulePoll();
+      this.scheduleJobPoll();
     }
   }
 
   /**
-   * Refresh all running sessions from SLURM
+   * Execute a health poll cycle (fixed 30-min interval)
+   * 1 SSH call per cluster (parallel) via getClusterHealth()
+   */
+  async healthPoll() {
+    this.lastHealthPollTime = Date.now();
+
+    try {
+      await this.refreshClusterHealth();
+    } catch (e) {
+      log.error('Health poll cycle failed', { error: e.message });
+    } finally {
+      // Always schedule next health poll at fixed interval
+      const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
+      this.healthPollTimer = setTimeout(() => this.healthPoll(), INTERVAL_MS);
+      log.debugFor('state', `Next health poll in ${Math.round(INTERVAL_MS / 60000)} min`);
+    }
+  }
+
+  /**
+   * Refresh all sessions from SLURM using batch queries
+   * 1 SSH call per cluster (parallel) via getAllJobs()
+   * Scales efficiently regardless of number of active sessions
+   *
    * @returns {Promise<boolean>} True if significant changes detected (for backoff reset)
    */
   async refreshAllSessions() {
     if (!this.hpcServiceFactory) return false;
 
-    let significantChange = false; // Status transitions, job disappearance
+    let significantChange = false;
     const snapshotBefore = JSON.stringify(this.state.sessions);
 
+    // Fetch all jobs from all clusters in parallel (1 SSH call per cluster)
+    const clusterNames = Object.keys(clusters);
+    const jobResults = await Promise.all(
+      clusterNames.map(async (hpc) => {
+        try {
+          const hpcService = this.hpcServiceFactory(hpc);
+          const jobs = await hpcService.getAllJobs();
+          return { hpc, jobs, error: null };
+        } catch (e) {
+          log.warn('Failed to fetch jobs from cluster', { hpc, error: e.message });
+          return { hpc, jobs: {}, error: e.message };
+        }
+      })
+    );
+
+    // Build a map of cluster -> ide -> jobInfo from batch results
+    const jobsByCluster = {};
+    for (const { hpc, jobs } of jobResults) {
+      jobsByCluster[hpc] = jobs;
+    }
+
+    // Update each session from batch results
     for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
       if (!session || !session.jobId) continue;
       if (session.status !== 'running' && session.status !== 'pending') continue;
 
-      try {
-        const [hpc] = sessionKey.split('-');
-        const hpcService = this.hpcServiceFactory(hpc);
-        const jobStatus = await hpcService.getJobStatus(session.jobId);
+      const [hpc, ide] = sessionKey.split('-');
+      const clusterJobs = jobsByCluster[hpc] || {};
+      const jobInfo = clusterJobs[ide];
 
-        if (!jobStatus) {
-          // Job no longer exists
-          log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
-          this._clearActiveSessionIfMatches(hpc, session.ide);
-          this.state.sessions[sessionKey] = null;
-          significantChange = true;
-          continue;
-        }
+      // Check if our job is still in the batch results
+      // Note: getAllJobs filters by job name, so if job ended, it won't appear
+      if (!jobInfo || jobInfo.jobId !== session.jobId) {
+        // Job no longer exists or is a different job
+        log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
+        this._clearActiveSessionIfMatches(hpc, ide);
+        this.state.sessions[sessionKey] = null;
+        significantChange = true;
+        continue;
+      }
 
-        // Update session with fresh data from SLURM
-        if (jobStatus.state === 'RUNNING' && session.status !== 'running') {
-          session.status = 'running';
-          session.node = jobStatus.node;
-          significantChange = true;
-        } else if (jobStatus.state === 'PENDING' && session.status !== 'pending') {
-          session.status = 'pending';
-          significantChange = true;
-        } else if (['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT'].includes(jobStatus.state)) {
-          log.state(`Job ${session.jobId} ended with ${jobStatus.state}`, { sessionKey });
-          this._clearActiveSessionIfMatches(hpc, session.ide);
-          this.state.sessions[sessionKey] = null;
-          significantChange = true;
-        }
+      // Update session with fresh data from SLURM
+      if (jobInfo.state === 'RUNNING' && session.status !== 'running') {
+        session.status = 'running';
+        session.node = jobInfo.node;
+        significantChange = true;
+      } else if (jobInfo.state === 'PENDING' && session.status !== 'pending') {
+        session.status = 'pending';
+        significantChange = true;
+      } else if (['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT'].includes(jobInfo.state)) {
+        log.state(`Job ${session.jobId} ended with ${jobInfo.state}`, { sessionKey });
+        this._clearActiveSessionIfMatches(hpc, ide);
+        this.state.sessions[sessionKey] = null;
+        significantChange = true;
+        continue;
+      }
 
-        // Update time remaining (not a significant change for backoff purposes)
-        if (jobStatus.timeLeftSeconds !== undefined) {
-          session.timeLeftSeconds = jobStatus.timeLeftSeconds;
-        }
-      } catch (e) {
-        log.warn('Failed to refresh session', { sessionKey, error: e.message });
+      // Update time remaining (not a significant change for backoff purposes)
+      if (jobInfo.timeLeftSeconds !== undefined) {
+        session.timeLeftSeconds = jobInfo.timeLeftSeconds;
       }
     }
 
@@ -548,11 +616,11 @@ class StateManager {
   }
 
   /**
-   * Calculate optimal polling interval based on session state and backoff
+   * Calculate optimal job polling interval based on session state and backoff
    * @returns {number} Interval in milliseconds
    */
-  getOptimalPollInterval() {
-    const { THRESHOLDS_SECONDS, INTERVALS_MS, BACKOFF } = POLLING_CONFIG;
+  getOptimalJobPollInterval() {
+    const { THRESHOLDS_SECONDS, INTERVALS_MS, BACKOFF } = POLLING_CONFIG.JOB_POLLING;
 
     let hasPending = false;
     let minTimeLeft = Infinity;
@@ -617,10 +685,16 @@ class StateManager {
    */
   getPollingInfo() {
     return {
-      lastPollTime: this.lastPollTime,
-      nextPollTime: this.nextPollTime,
-      consecutiveUnchangedPolls: this.consecutiveUnchangedPolls,
-      currentInterval: this.getOptimalPollInterval(),
+      jobPolling: {
+        lastPollTime: this.lastJobPollTime,
+        nextPollTime: this.nextJobPollTime,
+        consecutiveUnchangedPolls: this.consecutiveUnchangedPolls,
+        currentInterval: this.getOptimalJobPollInterval(),
+      },
+      healthPolling: {
+        lastPollTime: this.lastHealthPollTime,
+        interval: POLLING_CONFIG.HEALTH_POLLING.INTERVAL_MS,
+      },
     };
   }
 
@@ -630,8 +704,8 @@ class StateManager {
 
   /**
    * Refresh cluster health for all clusters
-   * Called from poll() when interval >= POLLING_CONFIG.INTERVALS_MS.MODERATE
-   * Polls clusters in parallel for efficiency
+   * Called from healthPoll() on fixed 30-min interval
+   * 1 SSH call per cluster (parallel) via getClusterHealth()
    */
   async refreshClusterHealth() {
     if (!this.hpcServiceFactory) return;
