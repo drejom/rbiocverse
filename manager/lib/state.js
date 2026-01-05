@@ -435,6 +435,7 @@ class StateManager {
    * @param {Function} hpcServiceFactory - Factory function: (hpc) => HpcService instance
    */
   startPolling(hpcServiceFactory) {
+    this.pollingStopped = false;
     this.hpcServiceFactory = hpcServiceFactory;
     log.state('Starting background polling (jobs: adaptive, health: 30 min)');
 
@@ -469,6 +470,7 @@ class StateManager {
    * Stop background polling (both job and health)
    */
   stopPolling() {
+    this.pollingStopped = true;
     if (this.jobPollTimer) {
       clearTimeout(this.jobPollTimer);
       this.jobPollTimer = null;
@@ -484,6 +486,7 @@ class StateManager {
    * Schedule next job poll with adaptive interval
    */
   scheduleJobPoll() {
+    if (this.pollingStopped) return;
     const interval = this.getOptimalJobPollInterval();
     this.nextJobPollTime = Date.now() + interval;
     this.jobPollTimer = setTimeout(() => this.jobPoll(), interval);
@@ -527,6 +530,7 @@ class StateManager {
     } catch (e) {
       log.error('Health poll cycle failed', { error: e.message });
     } finally {
+      if (this.pollingStopped) return;
       // Always schedule next health poll at fixed interval
       const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
       this.healthPollTimer = setTimeout(() => this.healthPoll(), INTERVAL_MS);
@@ -578,7 +582,7 @@ class StateManager {
       const jobInfo = clusterJobs[ide];
 
       // Check if our job is still in the batch results
-      // Note: getAllJobs filters by job name, so if job ended, it won't appear
+      // Note: getAllJobs filters by job name and states (R,PD only), so ended jobs won't appear
       if (!jobInfo || jobInfo.jobId !== session.jobId) {
         // Job no longer exists or is a different job
         log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
@@ -596,13 +600,9 @@ class StateManager {
       } else if (jobInfo.state === 'PENDING' && session.status !== 'pending') {
         session.status = 'pending';
         significantChange = true;
-      } else if (['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT'].includes(jobInfo.state)) {
-        log.state(`Job ${session.jobId} ended with ${jobInfo.state}`, { sessionKey });
-        this._clearActiveSessionIfMatches(hpc, ide);
-        this.state.sessions[sessionKey] = null;
-        significantChange = true;
-        continue;
       }
+      // Note: Terminal states (COMPLETED, FAILED, etc.) won't appear in getAllJobs
+      // results since it filters by --states=R,PD. Ended jobs are caught above.
 
       // Update time remaining (not a significant change for backoff purposes)
       if (jobInfo.timeLeftSeconds !== undefined) {
