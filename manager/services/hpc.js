@@ -281,6 +281,8 @@ fi
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env RETICULATE_PYTHON=/usr/local/bin/python3',
       '--env VSCODE_KEYRING_PASS=hpc-code-server',
+      // Tell VS Code to use gnome-libsecret for credential storage (issue #28)
+      '--env GNOME_DESKTOP_SESSION_ID=this-triggers-gnome-keyring',
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
       `--env OPENBLAS_NUM_THREADS=${cpus}`,
