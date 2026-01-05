@@ -119,6 +119,9 @@ class StateManager {
     this.pollingStopped = false;
 
     this.hpcServiceFactory = null; // Function: (hpc) => HpcService instance
+
+    // User's default SLURM account (fetched once on startup for fairshare queries)
+    this.userAccount = null;
   }
 
   /**
@@ -511,12 +514,27 @@ class StateManager {
    * 1. Job polling (adaptive) - 1 SSH call per cluster via getAllJobs()
    * 2. Health polling (fixed 30 min) - 1 SSH call per cluster via getClusterHealth()
    *
+   * On startup, fetches user's default SLURM account (once) for fairshare queries.
+   *
    * @param {Function} hpcServiceFactory - Factory function: (hpc) => HpcService instance
    */
-  startPolling(hpcServiceFactory) {
+  async startPolling(hpcServiceFactory) {
     this.pollingStopped = false;
     this.hpcServiceFactory = hpcServiceFactory;
     log.state('Starting background polling (jobs: adaptive, health: 30 min)');
+
+    // Fetch user's default account once on startup (for fairshare queries)
+    // Use first available cluster - account is typically the same across clusters
+    const clusterNames = Object.keys(clusters);
+    if (clusterNames.length > 0 && !this.userAccount) {
+      try {
+        const hpcService = hpcServiceFactory(clusterNames[0]);
+        this.userAccount = await hpcService.getUserDefaultAccount();
+        log.state('User account fetched for fairshare', { account: this.userAccount });
+      } catch (e) {
+        log.warn('Failed to fetch user default account', { error: e.message });
+      }
+    }
 
     // Start job polling immediately
     this.scheduleJobPoll();
@@ -822,10 +840,11 @@ class StateManager {
     }
 
     // Fetch health from all clusters in parallel
+    // Pass userAccount for fairshare query
     const healthPromises = clusterNames.map(async (hpc) => {
       try {
         const hpcService = this.hpcServiceFactory(hpc);
-        const health = await hpcService.getClusterHealth();
+        const health = await hpcService.getClusterHealth({ userAccount: this.userAccount });
 
         // Reset failure counter on success
         this.state.clusterHealth[hpc].consecutiveFailures = 0;
