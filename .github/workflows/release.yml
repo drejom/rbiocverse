@@ -45,13 +45,39 @@ jobs:
             exit 1
           fi
 
-      - name: Create release PR
+      - name: Check for changes
+        id: check-changes
+        run: |
+          # Check if dev has commits that main doesn't
+          COMMITS=$(git log origin/main..origin/dev --oneline | head -20)
+          if [ -z "$COMMITS" ]; then
+            echo "Error: No changes between main and dev. Nothing to release."
+            echo "If you just merged manually, dev and main are in sync."
+            exit 1
+          fi
+          echo "Changes to release:"
+          echo "$COMMITS"
+          echo "commit_count=$(git rev-list --count origin/main..origin/dev)" >> $GITHUB_OUTPUT
+
+      - name: Create or find release PR
         id: create-pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --base main --head dev --json number,url -q '.[0]')
+
+          if [ -n "$EXISTING_PR" ]; then
+            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
+            PR_URL=$(echo "$EXISTING_PR" | jq -r '.url')
+            echo "Using existing PR #$PR_NUMBER: $PR_URL"
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           # Get commits between main and dev for changelog
-          CHANGELOG=$(git log main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
+          CHANGELOG=$(git log origin/main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
 
           # Create PR body
           PR_BODY="## Release v${{ inputs.version }}
@@ -66,35 +92,48 @@ jobs:
           *This PR was automatically created by the release workflow.*"
 
           # Create PR from dev to main
-          PR_URL=$(gh pr create \
+          echo "Creating PR from dev to main..."
+          PR_OUTPUT=$(gh pr create \
             --base main \
             --head dev \
             --title "Release v${{ inputs.version }}" \
-            --body "${PR_BODY}" \
-            2>&1) || true
+            --body "${PR_BODY}" 2>&1)
+          PR_EXIT_CODE=$?
 
-          # Check if PR already exists
-          if echo "$PR_URL" | grep -q "already exists"; then
-            PR_URL=$(gh pr list --base main --head dev --json url -q '.[0].url')
-            echo "Using existing PR: $PR_URL"
+          echo "PR create output: $PR_OUTPUT"
+
+          if [ $PR_EXIT_CODE -ne 0 ]; then
+            echo "Error: Failed to create PR"
+            echo "$PR_OUTPUT"
+            exit 1
           fi
 
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          # Extract PR number from URL
+          PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
+          echo "Created PR #$PR_NUMBER"
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_url=$PR_OUTPUT" >> $GITHUB_OUTPUT
 
       - name: Merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get PR number
-          PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
 
           if [ -z "$PR_NUMBER" ]; then
-            echo "Error: No PR found"
+            # Fallback: try to find PR again
+            PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Error: No PR found to merge"
+            echo "Debug: Listing all open PRs..."
+            gh pr list --state open
             exit 1
           fi
 
-          # Merge the PR
-          gh pr merge $PR_NUMBER --merge --delete-branch=false
+          echo "Merging PR #$PR_NUMBER..."
+          gh pr merge "$PR_NUMBER" --merge --delete-branch=false
 
       - name: Create tag and release
         env:
