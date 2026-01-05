@@ -174,7 +174,7 @@ h1 {
   animation: pulse 1.5s infinite;
 }
 
-.status-dot.killing {
+.status-dot.stopping {
   background: #f87171;
   animation: pulse 0.5s infinite;
 }
@@ -364,9 +364,29 @@ h1 {
   margin-bottom: 15px;
 }
 
-/* Cancel button in loading overlay */
+/* Launch action buttons in loading overlay */
+.launch-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
 .btn-cancel {
-  margin-top: 20px;
   background: transparent;
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: #fca5a5;
@@ -837,4 +857,36 @@ h1 {
   width: 12px;
   height: 12px;
   margin-right: 0;
+}
+
+/* Stop Progress Bar (inline in IDE session) */
+.stop-progress {
+  margin: 8px 0;
+}
+
+.stop-progress-text {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 6px;
+}
+
+.stop-progress-bar {
+  height: 3px;
+  background: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stop-progress-fill {
+  height: 100%;
+  width: 30%;
+  background: #ef4444;
+  position: absolute;
+  animation: stop-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes stop-indeterminate {
+  0% { left: -30%; }
+  100% { left: 100%; }
 }

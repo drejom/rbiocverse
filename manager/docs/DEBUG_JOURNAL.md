@@ -39,7 +39,7 @@ This is expected - but rserver SHOULD see it since it's running inside Singulari
 4. **Various escaping combinations** - went in circles trying \\$@, \\\\$@, etc.
 
 ### Solved Issues
-- Base64 encoding bypasses ALL escaping issues (documented in docs/ESCAPING.md)
+- Base64 encoding bypasses ALL escaping issues (documented in ESCAPING.md)
 - All config files now use base64: database.conf, rserver.conf, rsession.sh
 
 ### Theories to Investigate Tomorrow
@@ -94,7 +94,7 @@ ssh g-c-1-7-30 'ls -la ~/.local/share/rstudio/ 2>/dev/null'
 
 ### Files Modified Today
 - `manager/services/hpc.js` - Changed to base64 encoding for all config files
-- `docs/ESCAPING.md` - Documented escaping tests and solution
+- `ESCAPING.md` - Documented escaping tests and solution
 - `manager/server.js` - Fixed healthcheck timing (server.listen inside stateManager.load)
 - `docker-compose.yml` - Added start_period: 60s to healthcheck
 
@@ -993,7 +993,7 @@ expanded on the Dokploy container (returning `apps`) instead of compute node.
 
 ### Two Escaping Contexts (Critical Lesson)
 
-Updated docs/ESCAPING.md to document both contexts:
+Updated ESCAPING.md to document both contexts:
 
 **Context 1: INLINE Commands** (setup array, singularity args)
 - Goes through: `ssh host "sbatch --wrap='...'"`
@@ -1037,3 +1037,40 @@ that required tracing through commit history to find. Each fix should be:
 1. Isolated and testable
 2. Empirically verified before deploy
 3. Documented with the escaping context used
+
+---
+
+## 2026-01-04: Local Development Testing
+
+### Running the Manager Locally
+
+The manager can be run locally with full cluster connectivity:
+
+```bash
+cd manager
+node server.js
+# Server starts on http://localhost:3000
+```
+
+**Requirements:**
+- SSH access to HPC clusters configured in `~/.ssh/config`
+- VPN connected (for COH network access)
+
+### Why This Works
+
+- SSH config has `gemini` and `apollo` host aliases configured
+- Local machine has same SSH keys as deployed container
+- Manager uses SSH to execute SLURM commands and establish tunnels
+
+### Use Cases
+
+1. **Test UI changes** - Frontend CSS/JS changes visible immediately
+2. **Test kill animations** - Requires running job to test SSE streaming
+3. **Debug launch flow** - See full console output from job submission
+4. **Test proxy behavior** - Direct access to RStudio/VS Code proxy routes
+
+### Caveats
+
+- Deployed container and local instance may conflict if both running
+- Tunnels established locally won't be available to deployed instance
+- Job state may desync between local/deployed instances

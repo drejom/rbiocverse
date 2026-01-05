@@ -45,6 +45,9 @@ let statusCacheTtl = 120;
 let currentLaunch = null; // { hpc, ide, eventSource }
 let launchCancelled = false;
 
+// Track which IDE sessions are being stopped (to prevent UI updates)
+let stoppingJobs = {};
+
 // Cached DOM elements for progress UI (initialized after DOMContentLoaded)
 let progressElements = null;
 
@@ -386,8 +389,8 @@ function renderRunningIdeSection(hpc, ide, status) {
         <button class="btn btn-success btn-sm" onclick="connect('${hpc}', '${ide}')">
           <i data-lucide="plug" class="icon-sm"></i> Connect
         </button>
-        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
-          <i data-lucide="square" class="icon-sm"></i> Kill
+        <button class="btn btn-danger btn-sm" onclick="stopJob('${hpc}', '${ide}')">
+          <i data-lucide="square" class="icon-sm"></i> Stop
         </button>
       </div>
     </div>
@@ -413,7 +416,7 @@ function renderPendingIdeSection(hpc, ide, status) {
       <div class="cluster-info">Waiting for resources...</div>
       ${estStart}
       <div class="btn-group btn-group-sm">
-        <button class="btn btn-danger btn-sm" onclick="killJob('${hpc}', '${ide}')">
+        <button class="btn btn-danger btn-sm" onclick="stopJob('${hpc}', '${ide}')">
           <i data-lucide="x" class="icon-sm"></i> Cancel
         </button>
       </div>
@@ -447,6 +450,10 @@ function selectIde(hpc, ide) {
  * Update a single cluster card
  */
 function updateClusterCard(hpc, ideStatuses) {
+  // Skip UI updates for this cluster if any IDE is being stopped
+  const hasStoppingJob = Object.keys(stoppingJobs).some(key => key.startsWith(hpc + '-'));
+  if (hasStoppingJob) return;
+
   const card = document.getElementById(hpc + '-card');
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
@@ -758,7 +765,7 @@ function resetProgress() {
  */
 function setupLaunchStreamHandlers(eventSource, hpc, ide) {
   const overlay = document.getElementById('loading-overlay');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const launchActions = document.getElementById('launch-actions');
   const errorEl = document.getElementById('error');
   const ideName = availableIdes[ide]?.name || ide;
 
@@ -779,7 +786,7 @@ function setupLaunchStreamHandlers(eventSource, hpc, ide) {
           console.log('[Launcher] Job pending, returning to launcher');
           eventSource.close();
           currentLaunch = null;
-          cancelBtn.style.display = 'none';
+          launchActions.style.display = 'none';
           overlay.style.display = 'none';
           // Refresh status to show pending job
           fetchStatus(true);
@@ -789,7 +796,7 @@ function setupLaunchStreamHandlers(eventSource, hpc, ide) {
           console.log('[Launcher] Launch complete, redirecting');
           eventSource.close();
           currentLaunch = null;
-          cancelBtn.style.display = 'none';
+          launchActions.style.display = 'none';
           window.location.href = data.redirectUrl || '/code/';
           break;
 
@@ -797,7 +804,7 @@ function setupLaunchStreamHandlers(eventSource, hpc, ide) {
           console.error('[Launcher] Launch error:', data.message);
           eventSource.close();
           currentLaunch = null;
-          cancelBtn.style.display = 'none';
+          launchActions.style.display = 'none';
 
           // Handle "already running" case
           if (data.message && data.message.includes('already')) {
@@ -829,7 +836,7 @@ function setupLaunchStreamHandlers(eventSource, hpc, ide) {
     console.error('[Launcher] SSE connection error');
     eventSource.close();
     currentLaunch = null;
-    cancelBtn.style.display = 'none';
+    launchActions.style.display = 'none';
     overlay.style.display = 'none';
     errorEl.textContent = 'Connection lost. Please try again.';
     errorEl.style.display = 'block';
@@ -846,7 +853,7 @@ async function launch(hpc) {
   console.log('[Launcher] Launch requested:', hpc, ide, 'releaseVersion:', releaseVersion, 'gpu:', gpu || 'none');
 
   const overlay = document.getElementById('loading-overlay');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const launchActions = document.getElementById('launch-actions');
   const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
@@ -870,7 +877,7 @@ async function launch(hpc) {
   const eventSource = new EventSource(url);
   currentLaunch = { hpc, ide, eventSource };
   launchCancelled = false;
-  cancelBtn.style.display = 'inline-flex';
+  launchActions.style.display = 'flex';
   lucide.createIcons();
 
   // Use shared SSE handlers
@@ -878,14 +885,45 @@ async function launch(hpc) {
 }
 
 /**
- * Cancel an in-progress launch
+ * Go back to menu without stopping the job
+ * Closes SSE connection and overlay, leaves any submitted job running
  */
-async function cancelLaunch() {
+function backToMenu() {
+  if (!currentLaunch) {
+    document.getElementById('loading-overlay').style.display = 'none';
+    return;
+  }
+
+  const { eventSource } = currentLaunch;
+  console.log('[Launcher] Back to menu requested, leaving job running');
+
+  launchCancelled = true;
+
+  // Close the SSE connection
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  // Reset UI
+  const overlay = document.getElementById('loading-overlay');
+  const launchActions = document.getElementById('launch-actions');
+  overlay.style.display = 'none';
+  launchActions.style.display = 'none';
+  currentLaunch = null;
+
+  // Refresh status to show any submitted/pending job
+  fetchStatus(true);
+}
+
+/**
+ * Stop an in-progress launch and cancel any submitted job
+ */
+async function stopLaunch() {
   if (!currentLaunch) return;
 
   const { hpc, ide, eventSource } = currentLaunch;
   const ideName = availableIdes[ide]?.name || ide;
-  console.log('[Launcher] Cancel requested:', hpc, ide);
+  console.log('[Launcher] Stop launch requested:', hpc, ide);
 
   launchCancelled = true;
 
@@ -895,17 +933,18 @@ async function cancelLaunch() {
   }
 
   const overlay = document.getElementById('loading-overlay');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const launchActions = document.getElementById('launch-actions');
+  const stopBtn = document.getElementById('cancel-stop-btn');
 
-  // Show cancelling progress with indeterminate bar
-  updateProgress(0, 'Stopping...', 'cancelling', { header: `Stopping ${ideName}...` });
+  // Show stopping progress with indeterminate bar
+  updateProgress(0, 'Stopping job...', 'stopping', { header: `Stopping ${ideName}...` });
   const fill = document.getElementById('progress-fill');
   fill.classList.add('indeterminate');
-  cancelBtn.disabled = true;
+  stopBtn.disabled = true;
 
-  let cancelFailed = false;
+  let stopFailed = false;
   try {
-    // Cancel the job on the server
+    // Stop the job on the server
     const res = await fetch(`/api/stop/${hpc}/${ide}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -915,23 +954,23 @@ async function cancelLaunch() {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Server returned ${res.status}`);
     }
-    console.log('[Launcher] Job cancelled successfully');
+    console.log('[Launcher] Job stopped successfully');
   } catch (e) {
-    console.error('[Launcher] Cancel error:', e);
-    cancelFailed = true;
+    console.error('[Launcher] Stop error:', e);
+    stopFailed = true;
   }
 
   // Reset UI
   overlay.style.display = 'none';
-  cancelBtn.style.display = 'none';
-  cancelBtn.disabled = false;
+  launchActions.style.display = 'none';
+  stopBtn.disabled = false;
   fill.classList.remove('indeterminate');
   currentLaunch = null;
 
-  // Show error if cancellation failed
-  if (cancelFailed) {
+  // Show error if stop failed
+  if (stopFailed) {
     const errorEl = document.getElementById('error');
-    errorEl.textContent = `Warning: Could not confirm cancellation of ${ideName} on ${hpc}. The job may still be running.`;
+    errorEl.textContent = `Warning: Could not confirm stop of ${ideName} on ${hpc}. The job may still be running.`;
     errorEl.style.display = 'block';
   }
 
@@ -947,7 +986,7 @@ async function connect(hpc, ide) {
   console.log('[Launcher] Connect requested:', hpc, ide);
 
   const overlay = document.getElementById('loading-overlay');
-  const cancelBtn = document.getElementById('cancel-launch-btn');
+  const launchActions = document.getElementById('launch-actions');
   const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
@@ -963,7 +1002,7 @@ async function connect(hpc, ide) {
   const eventSource = new EventSource(url);
   currentLaunch = { hpc, ide, eventSource };
   launchCancelled = false;
-  cancelBtn.style.display = 'inline-flex';
+  launchActions.style.display = 'flex';
   lucide.createIcons();
 
   // Use shared SSE handlers
@@ -971,40 +1010,93 @@ async function connect(hpc, ide) {
 }
 
 /**
- * Kill job for specific IDE
+ * Stop job for specific IDE with SSE progress
  */
-async function killJob(hpc, ide) {
+async function stopJob(hpc, ide) {
   const ideName = availableIdes[ide]?.name || ide;
-  if (!confirm(`Kill ${ideName} on ${hpc}?`)) return;
-  console.log('[Launcher] Kill job requested:', hpc, ide);
-
-  // Show killing state on IDE section
   const key = getSessionKey(hpc, ide);
+
+  // Guard against double-stop
+  if (stoppingJobs[key]) return;
+  if (!confirm(`Stop ${ideName} on ${hpc}?`)) return;
+
+  console.log('[Launcher] Stop job requested:', hpc, ide);
+  stoppingJobs[key] = true;
+
+  // Show stopping state on cluster header
   const dot = document.getElementById(hpc + '-dot');
   const statusText = document.getElementById(hpc + '-status-text');
+  if (dot) dot.className = 'status-dot stopping';
+  if (statusText) statusText.textContent = 'Stopping...';
 
-  if (dot) dot.className = 'status-dot killing';
-  if (statusText) statusText.textContent = 'Killing job...';
-
-  try {
-    const resp = await fetch(`/api/stop/${hpc}/${ide}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cancelJob: true })
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      alert('Failed to kill job: ' + (data.error || 'Unknown error'));
+  // Replace the IDE session buttons with progress bar
+  const sessionEl = document.querySelector(`.ide-session.running:has([onclick*="stopJob('${hpc}', '${ide}')"])`);
+  if (sessionEl) {
+    const btnGroup = sessionEl.querySelector('.btn-group');
+    if (btnGroup) {
+      btnGroup.innerHTML = `
+        <div class="stop-progress">
+          <div class="stop-progress-text">Stopping job...</div>
+          <div class="stop-progress-bar"><div class="stop-progress-fill"></div></div>
+        </div>
+      `;
     }
-    // Clean up countdown
+  }
+
+  // Use SSE for progress
+  const eventSource = new EventSource(`/api/stop/${hpc}/${ide}/stream`);
+
+  // Fallback timeout - if SSE hangs, clean up after 15s
+  const fallbackTimeout = setTimeout(() => {
+    if (stoppingJobs[key]) {
+      console.log('[Launcher] Stop timeout, cleaning up');
+      delete stoppingJobs[key];
+      eventSource.close();
+      delete countdowns[key];
+      delete walltimes[key];
+      fetchStatus(true);
+    }
+  }, 15000);
+
+  eventSource.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('[Launcher] Stop SSE event:', data);
+
+      if (data.type === 'progress') {
+        const textEl = sessionEl?.querySelector('.stop-progress-text');
+        if (textEl) textEl.textContent = data.message;
+      }
+
+      if (data.type === 'complete' || data.type === 'error') {
+        clearTimeout(fallbackTimeout);
+        delete stoppingJobs[key];
+        eventSource.close();
+
+        if (data.type === 'error') {
+          alert('Failed to stop job: ' + (data.message || 'Unknown error'));
+        }
+
+        // Clean up countdown and refresh status
+        delete countdowns[key];
+        delete walltimes[key];
+        fetchStatus(true);
+      }
+    } catch (e) {
+      console.error('[Launcher] Stop SSE parse error:', e);
+    }
+  };
+
+  eventSource.onerror = function() {
+    console.error('[Launcher] Stop SSE connection error');
+    clearTimeout(fallbackTimeout);
+    delete stoppingJobs[key];
+    eventSource.close();
+    // Clean up and refresh
     delete countdowns[key];
     delete walltimes[key];
-    setTimeout(fetchStatus, 1000);
-  } catch (e) {
-    console.error('Kill error:', e);
-    alert('Failed to kill job: ' + e.message);
-    fetchStatus();
-  }
+    fetchStatus(true);
+  };
 }
 
 /**
@@ -1086,6 +1178,7 @@ document.addEventListener('DOMContentLoaded', function() {
   startPolling();
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // Attach cancel button event listener
-  document.getElementById('cancel-launch-btn').addEventListener('click', cancelLaunch);
+  // Attach launch action button listeners
+  document.getElementById('back-to-menu-btn').addEventListener('click', backToMenu);
+  document.getElementById('cancel-stop-btn').addEventListener('click', stopLaunch);
 });
