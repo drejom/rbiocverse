@@ -286,10 +286,12 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
 # Start VS Code server
 # Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
+# keyring-setup.sh starts D-Bus + gnome-keyring for persistent Copilot auth (issue #28)
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
+  /usr/local/share/rbiocverse/scripts/keyring-setup.sh \\
   code serve-web \\
     --host 0.0.0.0 \\
     --port $IDE_PORT \\
