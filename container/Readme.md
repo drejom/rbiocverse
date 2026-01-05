@@ -147,9 +147,61 @@ SCverse single-cell ecosystem:
 
 ### Other
 - VSCode CLI (`code serve-web`, tunnels)
+- gnome-keyring for persistent Copilot authentication
 - DNAnexus dxfuse
 - SLURM SSH wrappers
 - qpdf, lftp, git-filter-repo
+
+## Persistent GitHub Copilot Authentication
+
+VS Code stores OAuth tokens in the OS keyring. In headless/container environments, tokens are lost on process exit unless a keyring daemon is running. This container includes `gnome-keyring` for token persistence.
+
+### Usage in Singularity Jobs
+
+Use `keyring-setup.sh` as a wrapper to start D-Bus and gnome-keyring before VS Code:
+
+```sh
+# In your SLURM job script:
+singularity exec \
+  -B /packages \
+  container.sif \
+  /usr/local/share/rbiocverse/scripts/keyring-setup.sh \
+  code serve-web --host 0.0.0.0 --port 8080
+```
+
+The keyring files persist in `~/.local/share/keyrings/` (auto bind-mounted in Singularity).
+
+### Integration with omhq-hpc-code-server-stack
+
+The [HPC Code Server Manager](https://github.com/drejom/omhq-hpc-code-server-stack) generates SLURM job scripts.
+To enable keyring support, modify `buildVscodeScript()` in `manager/services/hpc.js`:
+
+```javascript
+// Change the final exec line from:
+exec singularity exec ... code serve-web ...
+
+// To:
+exec singularity exec ... /usr/local/share/rbiocverse/scripts/keyring-setup.sh code serve-web ...
+```
+
+### Testing
+
+Verify the keyring is working with `secret-tool`:
+
+```sh
+# Inside the container, store a test secret
+echo -n "test-value" | secret-tool store --label="Test" service test-service account test
+
+# Retrieve it
+secret-tool lookup service test-service account test
+```
+
+### How it Works
+
+1. `keyring-setup.sh` starts a private D-Bus session
+2. `gnome-keyring-daemon` unlocks/creates the default keyring
+3. VS Code uses `libsecret` to store/retrieve OAuth tokens
+4. Keyring files persist across jobs via the user's home directory
 
 ## rbiocverse Metapackage
 
@@ -219,6 +271,7 @@ See `rbiocverse/pyproject.toml` for Python packages:
 │   └── jupyter_lab_config.py   # JupyterLab HPC config
 ├── scripts/
 │   ├── cluster-config.sh       # Shared cluster detection and paths
+│   ├── keyring-setup.sh        # Initialize gnome-keyring for token persistence
 │   ├── sync-packages.sh        # Pre-release: sync R packages from old environment
 │   ├── sync-python-packages.sh # Pre-release: sync Python packages from old environment
 │   ├── sync-python.py          # Helper: categorize Python packages

@@ -66,6 +66,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     build-essential cm-super dvipng ffmpeg \
     # Utilities (from issues #12, #11, #9)
     qpdf lftp git-filter-repo \
+    # Keyring for VS Code token persistence (#17)
+    gnome-keyring libsecret-1-0 libsecret-tools dbus-x11 \
     # Fonts
     fonts-powerline \
     # Python
@@ -200,6 +202,7 @@ COPY config/jupyter_lab_config.py /etc/jupyter/
 COPY rbiocverse/ /usr/local/share/rbiocverse/
 COPY scripts/install.R /usr/local/share/rbiocverse/scripts/
 COPY scripts/migrate-packages.R /usr/local/share/rbiocverse/scripts/
+COPY scripts/keyring-setup.sh /usr/local/share/rbiocverse/scripts/
 
 # Default user (matches Bioconductor base image)
 USER rstudio

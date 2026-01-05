@@ -5,6 +5,12 @@ All notable changes to the rbiocverse package collection will be documented in t
 ## [3.22.0] - 2026-01-03
 
 ### Added
+- **gnome-keyring for persistent Copilot authentication** (#17):
+  - Packages: gnome-keyring, libsecret-1-0, libsecret-tools, dbus-x11
+  - `keyring-setup.sh` wrapper script for use with `code serve-web`
+  - OAuth tokens now persist across VS Code browser sessions
+  - Keyring files stored in `~/.local/share/keyrings/` (auto bind-mounted in Singularity)
+
 - **SoS polyglot notebooks** for multi-language workflows in JupyterLab:
   - Core: sos, sos-notebook, jupyterlab-sos
   - Language kernels: sos-r, sos-python, sos-bash
