@@ -1,6 +1,10 @@
 /**
  * API Routes
  * Handles all /api/* endpoints using extracted services
+ *
+ * Multi-user ready: All session operations accept a user parameter.
+ * In single-user mode, user defaults to config.hpcUser.
+ * When auth is added, user will come from req.session.user or similar.
  */
 
 const express = require('express');
@@ -15,6 +19,18 @@ const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
 const { config, ides, gpuConfig, releases, defaultReleaseVersion } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
+
+/**
+ * Extract user from request
+ * In single-user mode, returns null (which defaults to config.hpcUser).
+ * When auth is implemented, this will extract from session/token.
+ * @param {Request} req - Express request
+ * @returns {string|null} Username or null for default
+ */
+function getRequestUser(req) {
+  // Future: return req.session?.user || req.user?.username || null;
+  return null;  // Single-user mode: use config.hpcUser
+}
 
 // Shared tunnel service instance
 const tunnelService = new TunnelService();

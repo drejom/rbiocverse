@@ -35,7 +35,7 @@ describe('StateManager Integration Tests', () => {
   describe('Persistence', () => {
     it('should save and load state correctly', async () => {
       // Create session with initial properties
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
         node: 'node01',
@@ -46,7 +46,7 @@ describe('StateManager Integration Tests', () => {
       await newManager.load();
 
       // Verify state was persisted
-      const session = newManager.getSession('gemini', 'vscode');
+      const session = newManager.getSession(null, 'gemini', 'vscode');
       expect(session.status).to.equal('running');
       expect(session.jobId).to.equal('12345');
       expect(session.node).to.equal('node01');
@@ -76,12 +76,12 @@ describe('StateManager Integration Tests', () => {
     });
 
     it('should persist multiple sessions', async () => {
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '111',
       });
 
-      await stateManager.createSession('apollo', 'jupyter', {
+      await stateManager.createSession(null, 'apollo', 'jupyter', {
         status: 'running',
         jobId: '222',
       });
@@ -90,33 +90,33 @@ describe('StateManager Integration Tests', () => {
       const newManager = new StateManager();
       await newManager.load();
 
-      expect(newManager.getSession('gemini', 'vscode').jobId).to.equal('111');
-      expect(newManager.getSession('apollo', 'jupyter').jobId).to.equal('222');
+      expect(newManager.getSession(null, 'gemini', 'vscode').jobId).to.equal('111');
+      expect(newManager.getSession(null, 'apollo', 'jupyter').jobId).to.equal('222');
     });
 
     it('should clear session and persist', async () => {
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
 
-      await stateManager.clearSession('gemini', 'vscode');
+      await stateManager.clearSession(null, 'gemini', 'vscode');
 
       // Load in new instance
       const newManager = new StateManager();
       await newManager.load();
 
-      expect(newManager.getSession('gemini', 'vscode')).to.be.null;
+      expect(newManager.getSession(null, 'gemini', 'vscode')).to.be.null;
     });
 
     it('should clear activeSession when clearing its session', async () => {
-      await stateManager.setActiveSession('gemini', 'vscode');
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.setActiveSession(null, 'gemini', 'vscode');
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
 
-      await stateManager.clearSession('gemini', 'vscode');
+      await stateManager.clearSession(null, 'gemini', 'vscode');
 
       // Load in new instance
       const newManager = new StateManager();
@@ -131,7 +131,7 @@ describe('StateManager Integration Tests', () => {
       process.env.ENABLE_STATE_PERSISTENCE = 'false';
       const manager = new StateManager();
 
-      await manager.createSession('gemini', 'vscode', {
+      await manager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
@@ -143,7 +143,7 @@ describe('StateManager Integration Tests', () => {
 
     it('should not load when persistence is disabled', async () => {
       // Create state file first with persistence enabled
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
@@ -154,22 +154,22 @@ describe('StateManager Integration Tests', () => {
       await manager.load();
 
       // Should have default state (not loaded from file)
-      expect(manager.getSession('gemini', 'vscode')).to.be.null;
+      expect(manager.getSession(null, 'gemini', 'vscode')).to.be.null;
     });
   });
 
   describe('Session Management', () => {
     it('should update existing session', async () => {
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'starting',
         jobId: '12345',
       });
 
-      await stateManager.updateSession('gemini', 'vscode', {
+      await stateManager.updateSession(null, 'gemini', 'vscode', {
         node: 'node01',
       });
 
-      const session = stateManager.getSession('gemini', 'vscode');
+      const session = stateManager.getSession(null, 'gemini', 'vscode');
       expect(session.status).to.equal('starting');
       expect(session.jobId).to.equal('12345');
       expect(session.node).to.equal('node01');
@@ -177,7 +177,7 @@ describe('StateManager Integration Tests', () => {
 
     it('should throw when updating non-existent session', async () => {
       try {
-        await stateManager.updateSession('gemini', 'vscode', {
+        await stateManager.updateSession(null, 'gemini', 'vscode', {
           status: 'running',
         });
         expect.fail('Should have thrown');
@@ -187,7 +187,7 @@ describe('StateManager Integration Tests', () => {
     });
 
     it('should create session with initial properties', async () => {
-      const session = await stateManager.createSession('gemini', 'vscode', {
+      const session = await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
@@ -199,50 +199,53 @@ describe('StateManager Integration Tests', () => {
     });
 
     it('should set and persist active session', async () => {
-      await stateManager.setActiveSession('gemini', 'vscode');
+      await stateManager.setActiveSession(null, 'gemini', 'vscode');
 
       const newManager = new StateManager();
       await newManager.load();
 
-      expect(newManager.getActiveSession()).to.deep.equal({ hpc: 'gemini', ide: 'vscode' });
+      // Active session now includes user (defaults to config.hpcUser = 'domeally')
+      expect(newManager.getActiveSession()).to.deep.equal({ user: 'domeally', hpc: 'gemini', ide: 'vscode' });
     });
 
     it('should get all sessions', async () => {
-      await stateManager.createSession('gemini', 'vscode', { status: 'running' });
-      await stateManager.createSession('apollo', 'jupyter', { status: 'pending' });
+      await stateManager.createSession(null, 'gemini', 'vscode', { status: 'running' });
+      await stateManager.createSession(null, 'apollo', 'jupyter', { status: 'pending' });
 
       const sessions = stateManager.getAllSessions();
       expect(Object.keys(sessions)).to.have.length(2);
-      expect(sessions['gemini-vscode'].status).to.equal('running');
-      expect(sessions['apollo-jupyter'].status).to.equal('pending');
+      // Session keys now include user: domeally-gemini-vscode
+      expect(sessions['domeally-gemini-vscode'].status).to.equal('running');
+      expect(sessions['domeally-apollo-jupyter'].status).to.equal('pending');
     });
 
     it('should get active sessions only', async () => {
-      await stateManager.createSession('gemini', 'vscode', { status: 'running' });
-      await stateManager.createSession('apollo', 'jupyter', { status: 'idle' });
-      await stateManager.createSession('gemini', 'rstudio', { status: 'pending' });
+      await stateManager.createSession(null, 'gemini', 'vscode', { status: 'running' });
+      await stateManager.createSession(null, 'apollo', 'jupyter', { status: 'idle' });
+      await stateManager.createSession(null, 'gemini', 'rstudio', { status: 'pending' });
 
       const active = stateManager.getActiveSessions();
       expect(Object.keys(active)).to.have.length(2);
-      expect(active['gemini-vscode']).to.exist;
-      expect(active['gemini-rstudio']).to.exist;
-      expect(active['apollo-jupyter']).to.be.undefined;
+      // Session keys now include user: domeally-gemini-vscode
+      expect(active['domeally-gemini-vscode']).to.exist;
+      expect(active['domeally-gemini-rstudio']).to.exist;
+      expect(active['domeally-apollo-jupyter']).to.be.undefined;
     });
 
     it('should check hasActiveSession', async () => {
-      await stateManager.createSession('gemini', 'vscode', { status: 'running' });
-      await stateManager.createSession('apollo', 'jupyter', { status: 'idle' });
+      await stateManager.createSession(null, 'gemini', 'vscode', { status: 'running' });
+      await stateManager.createSession(null, 'apollo', 'jupyter', { status: 'idle' });
 
-      expect(stateManager.hasActiveSession('gemini', 'vscode')).to.be.true;
-      expect(stateManager.hasActiveSession('apollo', 'jupyter')).to.be.false;
-      expect(stateManager.hasActiveSession('gemini', 'rstudio')).to.be.false;
+      expect(stateManager.hasActiveSession(null, 'gemini', 'vscode')).to.be.true;
+      expect(stateManager.hasActiveSession(null, 'apollo', 'jupyter')).to.be.false;
+      expect(stateManager.hasActiveSession(null, 'gemini', 'rstudio')).to.be.false;
     });
   });
 
   describe('Reconciliation', () => {
     it('should call reconcile on load', async () => {
       // Save state with a running session
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
@@ -256,12 +259,12 @@ describe('StateManager Integration Tests', () => {
       await newManager.load();
 
       // Session should be cleared (deleted)
-      expect(newManager.getSession('gemini', 'vscode')).to.be.null;
+      expect(newManager.getSession(null, 'gemini', 'vscode')).to.be.null;
     });
 
     it('should preserve session if job still exists', async () => {
       // Save state with a running session
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'running',
         jobId: '12345',
       });
@@ -275,14 +278,14 @@ describe('StateManager Integration Tests', () => {
       await newManager.load();
 
       // Session should still exist
-      const session = newManager.getSession('gemini', 'vscode');
+      const session = newManager.getSession(null, 'gemini', 'vscode');
       expect(session).to.not.be.null;
       expect(session.jobId).to.equal('12345');
     });
 
     it('should only reconcile running sessions', async () => {
       // Save state with a stopped session
-      await stateManager.createSession('gemini', 'vscode', {
+      await stateManager.createSession(null, 'gemini', 'vscode', {
         status: 'stopped',
         jobId: '12345',
       });
