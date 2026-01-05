@@ -115,7 +115,9 @@ vscodeProxy.on('proxyReq', (proxyReq, req, res) => {
   // Re-authenticate if:
   // 1. No cookie at all, or
   // 2. Cookie token doesn't match session token (stale cookie from old session)
-  const isRootPath = targetPath === '/vscode-direct' || targetPath === '/vscode-direct/';
+  // Strip query string for root path check (URL may have ?t=timestamp)
+  const pathWithoutQuery = targetPath.split('?')[0];
+  const isRootPath = pathWithoutQuery === '/vscode-direct' || pathWithoutQuery === '/vscode-direct/';
   if (!hasValidCookie && sessionToken && isRootPath) {
     // Initial page load or stale cookie - use root auth flow to get fresh cookie
     proxyReq.path = `/?tkn=${sessionToken}`;
