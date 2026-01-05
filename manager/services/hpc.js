@@ -321,7 +321,7 @@ exec ${this.cluster.singularityBin} exec \\
   --env XDG_DATA_HOME=$XDG_DATA_HOME \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
-  sh -c 'eval "$(dbus-launch --sh-syntax)" && echo -n hpc-code-server | gnome-keyring-daemon --unlock --components=secrets && export GNOME_KEYRING_CONTROL=$XDG_RUNTIME_DIR/keyring && exec code serve-web \\
+  sh -c 'eval "$(dbus-launch --sh-syntax)" && echo -n "$VSCODE_KEYRING_PASS" | gnome-keyring-daemon --unlock --components=secrets && export GNOME_KEYRING_CONTROL=$XDG_RUNTIME_DIR/keyring && exec code serve-web \\
     --host 0.0.0.0 \\
     --port $IDE_PORT \\
     ${tokenArg} \\
