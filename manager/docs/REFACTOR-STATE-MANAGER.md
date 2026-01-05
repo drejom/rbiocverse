@@ -56,9 +56,10 @@ class StateManager {
 
 Add methods:
 ```javascript
-createSession(hpc, ide) {
+createSession(hpc, ide, initialProperties = {}) {
   const sessionKey = `${hpc}-${ide}`;
-  this.state.sessions[sessionKey] = createIdleSession(ide);
+  const newSession = createIdleSession(ide);
+  this.state.sessions[sessionKey] = Object.assign(newSession, initialProperties);
   this.save();
   return this.state.sessions[sessionKey];
 }
@@ -74,7 +75,7 @@ updateSession(hpc, ide, updates) {
 
 clearSession(hpc, ide) {
   const sessionKey = `${hpc}-${ide}`;
-  this.state.sessions[sessionKey] = null;
+  delete this.state.sessions[sessionKey];  // Use delete, not null (cleaner, no null checks needed)
   this._clearActiveSessionIfMatches(hpc, ide);
   this.save();
 }
@@ -103,8 +104,8 @@ await stateManager.save();
 
 **After:**
 ```javascript
-const session = stateManager.createSession(hpc, ide);
-stateManager.updateSession(hpc, ide, {
+// Single call with initial properties (one disk write)
+const session = stateManager.createSession(hpc, ide, {
   status: 'pending',
   jobId: result.jobId,
 });
