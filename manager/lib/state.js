@@ -278,7 +278,7 @@ class StateManager {
         if (!exists) {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
           this._clearActiveSessionIfMatches(hpc, session.ide);
-          this.state.sessions[sessionKey] = null;
+          delete this.state.sessions[sessionKey];
         }
       }
     }
@@ -327,73 +327,148 @@ class StateManager {
   }
 
   // ============================================
-  // Session access methods (composite key based)
+  // Session access methods (hpc, ide based)
   // ============================================
 
   /**
-   * Get session by composite key
-   * @param {string} sessionKey - Composite key (e.g., "gemini-vscode")
+   * Create a new session with optional initial properties
+   * Throws if session already exists (use getOrCreateSession for get-or-create pattern)
+   * @param {string} hpc - Cluster name (gemini, apollo)
+   * @param {string} ide - IDE type (vscode, jupyter, rstudio)
+   * @param {Object} initialProperties - Optional initial values to merge
+   * @returns {Promise<Object>} The created session
+   * @throws {Error} If session already exists
+   */
+  async createSession(hpc, ide, initialProperties = {}) {
+    const sessionKey = `${hpc}-${ide}`;
+    if (this.state.sessions[sessionKey]) {
+      throw new Error(`Session already exists: ${sessionKey}`);
+    }
+    const newSession = createIdleSession(ide);
+    this.state.sessions[sessionKey] = Object.assign(newSession, initialProperties);
+    await this.save();
+    return this.state.sessions[sessionKey];
+  }
+
+  /**
+   * Get session, or create one if it doesn't exist
+   * Handles race condition where concurrent callers may try to create simultaneously
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @returns {Promise<Object>} The existing or newly created session
+   */
+  async getOrCreateSession(hpc, ide) {
+    const existing = this.getSession(hpc, ide);
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      // Attempt to create the session. This may race with another caller.
+      return await this.createSession(hpc, ide);
+    } catch (err) {
+      // If another concurrent caller created the session first, gracefully return it.
+      if (err && typeof err.message === 'string' && err.message.includes('Session already exists')) {
+        const session = this.getSession(hpc, ide);
+        if (session) {
+          return session;
+        }
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Get session by hpc and ide
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
    * @returns {Object|null} Session or null
    */
-  getSessionByKey(sessionKey) {
-    return this.state.sessions[sessionKey] || null;
+  getSession(hpc, ide) {
+    return this.state.sessions[`${hpc}-${ide}`] || null;
   }
 
   /**
-   * Update session by composite key and persist
-   * @param {string} sessionKey - Composite key
+   * Update session and persist
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
    * @param {Object} updates - Fields to update
+   * @returns {Promise<Object>} Updated session
+   * @throws {Error} If session doesn't exist
    */
-  async updateSessionByKey(sessionKey, updates) {
-    if (!this.state.sessions[sessionKey]) {
-      this.state.sessions[sessionKey] = {};
-    }
-    Object.assign(this.state.sessions[sessionKey], updates);
-    await this.save();
-  }
-
-  /**
-   * Clear session by composite key and persist
-   * @param {string} sessionKey - Composite key
-   */
-  async clearSessionByKey(sessionKey) {
+  async updateSession(hpc, ide, updates) {
+    const sessionKey = `${hpc}-${ide}`;
     const session = this.state.sessions[sessionKey];
-    if (session) {
-      const [hpc] = sessionKey.split('-');
-      this._clearActiveSessionIfMatches(hpc, session.ide);
+    if (!session) {
+      throw new Error(`No session exists: ${sessionKey}`);
     }
-    this.state.sessions[sessionKey] = null;
+    Object.assign(session, updates);
     await this.save();
+    return session;
   }
 
-  // ============================================
-  // Legacy methods (kept for compatibility)
-  // ============================================
-
   /**
-   * @deprecated Use getSessionByKey instead
+   * Clear (delete) session and persist
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
    */
-  async updateSession(hpc, updates) {
-    if (!this.state.sessions[hpc]) {
-      this.state.sessions[hpc] = {};
+  async clearSession(hpc, ide) {
+    const sessionKey = `${hpc}-${ide}`;
+    const session = this.state.sessions[sessionKey];
+    if (!session) {
+      log.warn(`clearSession called for non-existent session: ${sessionKey}`);
+      return;
     }
-    Object.assign(this.state.sessions[hpc], updates);
+    this._clearActiveSessionIfMatches(hpc, ide);
+    delete this.state.sessions[sessionKey];
     await this.save();
   }
 
   /**
-   * @deprecated Use clearSessionByKey instead
+   * Get all sessions (shallow copy)
+   * @returns {Object} All sessions keyed by sessionKey
    */
-  async clearSession(hpc) {
-    this.state.sessions[hpc] = null;
-    await this.save();
+  getAllSessions() {
+    return { ...this.state.sessions };
   }
 
   /**
-   * @deprecated Use getSessionByKey instead
+   * Get active sessions (running or pending only)
+   * @returns {Object} Active sessions keyed by sessionKey
    */
-  getSession(hpc) {
-    return this.state.sessions[hpc];
+  getActiveSessions() {
+    return Object.fromEntries(
+      Object.entries(this.state.sessions).filter(
+        ([, session]) => session && (session.status === 'running' || session.status === 'pending')
+      )
+    );
+  }
+
+  /**
+   * Check if a session exists and is active
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @returns {boolean}
+   */
+  hasActiveSession(hpc, ide) {
+    const session = this.getSession(hpc, ide);
+    return !!(session && (session.status === 'running' || session.status === 'pending'));
+  }
+
+  /**
+   * Get the active session reference
+   * @returns {Object|null} { hpc, ide } or null
+   */
+  getActiveSession() {
+    return this.state.activeSession;
+  }
+
+  /**
+   * Clear the active session reference
+   */
+  async clearActiveSession() {
+    this.state.activeSession = null;
+    await this.save();
   }
 
   /**
@@ -946,4 +1021,4 @@ class StateManager {
   }
 }
 
-module.exports = { StateManager, createIdleSession, POLLING_CONFIG };
+module.exports = { StateManager, POLLING_CONFIG };
