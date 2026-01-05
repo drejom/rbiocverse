@@ -196,13 +196,23 @@ class StateManager {
         loadedState.sessions = {};
       }
 
-      this.state = loadedState;
+      // IMPORTANT: Mutate this.state instead of replacing it!
+      // api.js captures a reference to this.state at startup.
+      // If we reassign this.state, api.js would have a stale reference
+      // and new sessions would be added to the wrong object.
+      this.state.activeSession = loadedState.activeSession ?? null;
+      this.state.clusterHealth = loadedState.clusterHealth ?? {};
 
-      // Ensure tunnelProcess is null for all sessions (can't be restored from disk)
-      for (const session of Object.values(this.state.sessions)) {
+      // Clear and repopulate sessions (maintains the same object reference)
+      for (const key of Object.keys(this.state.sessions)) {
+        delete this.state.sessions[key];
+      }
+      for (const [key, session] of Object.entries(loadedState.sessions)) {
         if (session) {
+          // Ensure tunnelProcess is null (can't restore from disk)
           session.tunnelProcess = null;
         }
+        this.state.sessions[key] = session;
       }
 
       await this.reconcile();
