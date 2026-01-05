@@ -278,7 +278,7 @@ class StateManager {
         if (!exists) {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
           this._clearActiveSessionIfMatches(hpc, session.ide);
-          this.state.sessions[sessionKey] = null;
+          delete this.state.sessions[sessionKey];
         }
       }
     }
@@ -327,8 +327,33 @@ class StateManager {
   }
 
   // ============================================
-  // Session access methods (composite key based)
+  // Session access methods (hpc, ide based)
   // ============================================
+
+  /**
+   * Create a new session with optional initial properties
+   * @param {string} hpc - Cluster name (gemini, apollo)
+   * @param {string} ide - IDE type (vscode, jupyter, rstudio)
+   * @param {Object} initialProperties - Optional initial values to merge
+   * @returns {Promise<Object>} The created session
+   */
+  async createSession(hpc, ide, initialProperties = {}) {
+    const sessionKey = `${hpc}-${ide}`;
+    const newSession = createIdleSession(ide);
+    this.state.sessions[sessionKey] = Object.assign(newSession, initialProperties);
+    await this.save();
+    return this.state.sessions[sessionKey];
+  }
+
+  /**
+   * Get session by hpc and ide
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @returns {Object|null} Session or null
+   */
+  getSession(hpc, ide) {
+    return this.state.sessions[`${hpc}-${ide}`] || null;
+  }
 
   /**
    * Get session by composite key
@@ -337,6 +362,25 @@ class StateManager {
    */
   getSessionByKey(sessionKey) {
     return this.state.sessions[sessionKey] || null;
+  }
+
+  /**
+   * Update session and persist
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @param {Object} updates - Fields to update
+   * @returns {Object} Updated session
+   * @throws {Error} If session doesn't exist
+   */
+  async updateSession(hpc, ide, updates) {
+    const sessionKey = `${hpc}-${ide}`;
+    const session = this.state.sessions[sessionKey];
+    if (!session) {
+      throw new Error(`No session exists: ${sessionKey}`);
+    }
+    Object.assign(session, updates);
+    await this.save();
+    return session;
   }
 
   /**
@@ -353,6 +397,18 @@ class StateManager {
   }
 
   /**
+   * Clear (delete) session and persist
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   */
+  async clearSession(hpc, ide) {
+    const sessionKey = `${hpc}-${ide}`;
+    this._clearActiveSessionIfMatches(hpc, ide);
+    delete this.state.sessions[sessionKey];
+    await this.save();
+  }
+
+  /**
    * Clear session by composite key and persist
    * @param {string} sessionKey - Composite key
    */
@@ -362,38 +418,57 @@ class StateManager {
       const [hpc] = sessionKey.split('-');
       this._clearActiveSessionIfMatches(hpc, session.ide);
     }
-    this.state.sessions[sessionKey] = null;
+    delete this.state.sessions[sessionKey];
     await this.save();
   }
 
-  // ============================================
-  // Legacy methods (kept for compatibility)
-  // ============================================
+  /**
+   * Get all sessions (shallow copy)
+   * @returns {Object} All sessions keyed by sessionKey
+   */
+  getAllSessions() {
+    return { ...this.state.sessions };
+  }
 
   /**
-   * @deprecated Use getSessionByKey instead
+   * Get active sessions (running or pending only)
+   * @returns {Object} Active sessions keyed by sessionKey
    */
-  async updateSession(hpc, updates) {
-    if (!this.state.sessions[hpc]) {
-      this.state.sessions[hpc] = {};
+  getActiveSessions() {
+    const active = {};
+    for (const [key, session] of Object.entries(this.state.sessions)) {
+      if (session && (session.status === 'running' || session.status === 'pending')) {
+        active[key] = session;
+      }
     }
-    Object.assign(this.state.sessions[hpc], updates);
-    await this.save();
+    return active;
   }
 
   /**
-   * @deprecated Use clearSessionByKey instead
+   * Check if a session exists and is active
+   * @param {string} hpc - Cluster name
+   * @param {string} ide - IDE type
+   * @returns {boolean}
    */
-  async clearSession(hpc) {
-    this.state.sessions[hpc] = null;
-    await this.save();
+  hasActiveSession(hpc, ide) {
+    const session = this.getSession(hpc, ide);
+    return !!(session && (session.status === 'running' || session.status === 'pending'));
   }
 
   /**
-   * @deprecated Use getSessionByKey instead
+   * Get the active session reference
+   * @returns {Object|null} { hpc, ide } or null
    */
-  getSession(hpc) {
-    return this.state.sessions[hpc];
+  getActiveSession() {
+    return this.state.activeSession;
+  }
+
+  /**
+   * Clear the active session reference
+   */
+  async clearActiveSession() {
+    this.state.activeSession = null;
+    await this.save();
   }
 
   /**
