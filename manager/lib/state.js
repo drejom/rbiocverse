@@ -13,6 +13,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const { LockError } = require('./errors');
 const { log } = require('./logger');
+const { clusters } = require('../config');
+
+// Time constants
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Polling configuration for adaptive backend polling
@@ -437,6 +441,12 @@ class StateManager {
     try {
       const changed = await this.refreshAllSessions();
 
+      // Refresh cluster health (throttled - only when interval >= 60s)
+      const currentInterval = this.getOptimalPollInterval();
+      if (currentInterval >= POLLING_CONFIG.INTERVALS_MS.MODERATE) {
+        await this.refreshClusterHealth();
+      }
+
       if (changed) {
         this.consecutiveUnchangedPolls = 0;
         log.debugFor('state', 'Poll detected changes, resetting backoff');
@@ -594,6 +604,236 @@ class StateManager {
       consecutiveUnchangedPolls: this.consecutiveUnchangedPolls,
       currentInterval: this.getOptimalPollInterval(),
     };
+  }
+
+  // ============================================
+  // Cluster Health Methods
+  // ============================================
+
+  /**
+   * Refresh cluster health for all clusters
+   * Called from poll() when interval >= POLLING_CONFIG.INTERVALS_MS.MODERATE
+   * Polls clusters in parallel for efficiency
+   */
+  async refreshClusterHealth() {
+    if (!this.hpcServiceFactory) return;
+
+    const now = Date.now();
+
+    // Initialize clusterHealth if needed
+    if (!this.state.clusterHealth) {
+      this.state.clusterHealth = {};
+    }
+
+    // Refresh health for each cluster in parallel
+    const clusterNames = Object.keys(clusters);
+
+    // Initialize all cluster health objects first
+    for (const hpc of clusterNames) {
+      if (!this.state.clusterHealth[hpc]) {
+        this.state.clusterHealth[hpc] = {
+          current: null,
+          history: [],
+          lastRolloverAt: 0,
+          consecutiveFailures: 0,
+        };
+      }
+    }
+
+    // Fetch health from all clusters in parallel
+    const healthPromises = clusterNames.map(async (hpc) => {
+      try {
+        const hpcService = this.hpcServiceFactory(hpc);
+        const health = await hpcService.getClusterHealth();
+
+        // Reset failure counter on success
+        this.state.clusterHealth[hpc].consecutiveFailures = 0;
+
+        // Update current health
+        this.state.clusterHealth[hpc].current = health;
+
+        // Append to history (only if online and health data is valid)
+        // Use pre-calculated percentages from hpc.js
+        if (health.online && health.cpus && health.memory && health.nodes) {
+          this.state.clusterHealth[hpc].history.push({
+            timestamp: now,
+            cpus: health.cpus.percent ?? 0,
+            memory: health.memory.percent ?? 0,
+            nodes: health.nodes.percent ?? 0,
+            gpus: health.gpus?.percent ?? null,
+          });
+
+          // Throttle rollover to avoid repeated file I/O (at most once per hour)
+          const ROLLOVER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+          const lastRolloverAt = this.state.clusterHealth[hpc].lastRolloverAt || 0;
+          if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
+            await this.rolloverHealthHistory(hpc);
+            this.state.clusterHealth[hpc].lastRolloverAt = now;
+          }
+        }
+
+        log.debugFor('state', `Cluster health refreshed: ${hpc}`, {
+          cpus: health.cpus?.percent,
+          memory: health.memory?.percent,
+          nodes: health.nodes,
+        });
+      } catch (e) {
+        // Track consecutive failures
+        this.state.clusterHealth[hpc].consecutiveFailures =
+          (this.state.clusterHealth[hpc].consecutiveFailures || 0) + 1;
+
+        // Mark cluster as offline
+        this.state.clusterHealth[hpc].current = {
+          online: false,
+          error: e.message,
+          lastChecked: now,
+        };
+
+        // Escalate logging if failures persist
+        const failures = this.state.clusterHealth[hpc].consecutiveFailures;
+        if (failures >= 5) {
+          log.error('Cluster health check failing persistently', { hpc, failures, error: e.message });
+        } else {
+          log.warn('Failed to refresh cluster health', { hpc, failures, error: e.message });
+        }
+      }
+    });
+
+    // Wait for all health checks to complete
+    await Promise.all(healthPromises);
+  }
+
+  /**
+   * Roll over history entries older than 24h to dated archive files
+   * Keeps state.json lightweight while preserving historical data
+   *
+   * Downsampling strategy:
+   * - Current day (in state.json): full resolution (every poll)
+   * - Archives: 1 sample per hour (24 samples/day max)
+   *
+   * @param {string} hpc - Cluster name
+   */
+  async rolloverHealthHistory(hpc) {
+    const history = this.state.clusterHealth[hpc]?.history || [];
+    const cutoff = Date.now() - ONE_DAY_MS;
+
+    // Find entries to archive (older than 24h)
+    const toArchive = history.filter(e => e.timestamp < cutoff);
+    if (toArchive.length === 0) return;
+
+    // Group by date (YYYY-MM-DD)
+    const byDate = {};
+    for (const entry of toArchive) {
+      const date = new Date(entry.timestamp).toISOString().split('T')[0];
+      if (!byDate[date]) byDate[date] = [];
+      byDate[date].push(entry);
+    }
+
+    // Write each date's entries to archive file
+    const archiveDir = path.join(path.dirname(this.stateFile), 'health-history');
+    await fs.mkdir(archiveDir, { recursive: true });
+
+    for (const [date, entries] of Object.entries(byDate)) {
+      const archiveFile = path.join(archiveDir, `${hpc}-${date}.json`);
+
+      // Merge with existing archive if present
+      let existing = { cluster: hpc, date, entries: [] };
+      try {
+        const data = await fs.readFile(archiveFile, 'utf8');
+        const parsed = JSON.parse(data);
+        // Validate structure before using
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
+          existing = parsed;
+        } else {
+          log.warn('Invalid archive JSON structure, using fresh archive', { archiveFile, hpc, date });
+        }
+      } catch (e) {
+        if (e.code !== 'ENOENT') {
+          // Log unexpected errors (not just missing file)
+          log.warn('Failed to read archive file, using fresh archive', { archiveFile, hpc, date, error: e.message });
+        }
+      }
+
+      // Combine existing and new entries, then downsample to 1 per hour
+      const allEntries = [...existing.entries, ...entries];
+      const downsampled = this.downsampleToHourly(allEntries);
+
+      existing.entries = downsampled;
+      await fs.writeFile(archiveFile, JSON.stringify(existing, null, 2));
+      log.state(`Archived health entries`, { hpc, date, raw: entries.length, downsampled: downsampled.length });
+    }
+
+    // Remove archived entries from state
+    this.state.clusterHealth[hpc].history = history.filter(e => e.timestamp >= cutoff);
+  }
+
+  /**
+   * Downsample health entries to one per hour
+   * Uses the median value for each metric within each hour bucket
+   * @param {Array} entries - Health history entries
+   * @returns {Array} Downsampled entries (1 per hour)
+   */
+  downsampleToHourly(entries) {
+    if (entries.length === 0) return [];
+
+    // Group by hour (YYYY-MM-DDTHH)
+    const byHour = {};
+    for (const entry of entries) {
+      const hourKey = new Date(entry.timestamp).toISOString().slice(0, 13); // "2025-01-04T14"
+      if (!byHour[hourKey]) byHour[hourKey] = [];
+      byHour[hourKey].push(entry);
+    }
+
+    // For each hour, compute representative sample (median of each metric)
+    const result = [];
+    for (const [hourKey, hourEntries] of Object.entries(byHour)) {
+      // Use middle timestamp for the hour
+      const sortedByTime = hourEntries.sort((a, b) => a.timestamp - b.timestamp);
+      const midIndex = Math.floor(sortedByTime.length / 2);
+
+      result.push({
+        timestamp: sortedByTime[midIndex].timestamp,
+        cpus: this.median(hourEntries.map(e => e.cpus)),
+        memory: this.median(hourEntries.map(e => e.memory)),
+        nodes: this.median(hourEntries.map(e => e.nodes)),
+        gpus: this.medianNullable(hourEntries.map(e => e.gpus)),
+        sampleCount: hourEntries.length, // Track how many samples were aggregated
+      });
+    }
+
+    // Sort by timestamp
+    return result.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  /**
+   * Calculate median of numeric array
+   * @param {number[]} values
+   * @returns {number}
+   */
+  median(values) {
+    const sorted = values.filter(v => typeof v === 'number').sort((a, b) => a - b);
+    if (sorted.length === 0) return 0;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  }
+
+  /**
+   * Calculate median for nullable values (e.g., GPUs which may be null)
+   * @param {(number|null)[]} values
+   * @returns {number|null}
+   */
+  medianNullable(values) {
+    const nonNull = values.filter(v => v !== null && typeof v === 'number');
+    if (nonNull.length === 0) return null;
+    return this.median(nonNull);
+  }
+
+  /**
+   * Get cluster health data for API responses
+   * @returns {Object} Cluster health data
+   */
+  getClusterHealth() {
+    return this.state.clusterHealth || {};
   }
 }
 

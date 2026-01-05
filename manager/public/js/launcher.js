@@ -7,6 +7,23 @@
 // Supported HPC clusters - add new clusters here
 const CLUSTER_NAMES = ['gemini', 'apollo'];
 
+// Health bar color thresholds
+const HEALTH_THRESHOLD_HIGH = 85;
+const HEALTH_THRESHOLD_MEDIUM = 60;
+
+/**
+ * Escape HTML special characters for safe attribute values
+ */
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // Default configuration - will be overwritten by server config
 let defaultConfig = {
   cpus: '2',
@@ -23,6 +40,9 @@ let defaultReleaseVersion = null;  // Set from server in fetchStatus()
 
 // GPU config from server (which clusters support GPUs)
 let gpuConfig = {};
+
+// Cluster health data from server
+let clusterHealth = {};
 
 // Selected options per cluster (for launch form)
 // Initialized dynamically from CLUSTER_NAMES
@@ -446,6 +466,102 @@ function selectIde(hpc, ide) {
   }
 }
 
+// ============================================
+// Cluster Health Bar Rendering
+// ============================================
+
+/**
+ * Render health indicator bars for a cluster
+ * Shows CPU, Memory, Nodes, and GPU (if available) usage
+ * @param {string} hpc - Cluster name
+ * @returns {string} HTML for health bars
+ */
+function renderHealthBars(hpc) {
+  const health = clusterHealth[hpc]?.current;
+
+  // Cluster offline or no data yet
+  if (!health || !health.online) {
+    return `
+      <div class="health-indicators offline">
+        <span class="health-indicator offline" title="Cluster offline or loading...">
+          <i data-lucide="wifi-off" class="icon-xs"></i>
+        </span>
+      </div>
+    `;
+  }
+
+  const bars = [];
+
+  // CPU bar
+  if (health.cpus) {
+    bars.push(renderSingleBar('cpu', health.cpus.percent, 'CPUs', `${health.cpus.used}/${health.cpus.total} allocated`));
+  }
+
+  // Memory bar
+  if (health.memory) {
+    bars.push(renderSingleBar('memory-stick', health.memory.percent, 'Memory', `${health.memory.used}/${health.memory.total} ${health.memory.unit}`));
+  }
+
+  // Nodes bar (show % busy) - uses pre-calculated percentage from backend
+  if (health.nodes && health.nodes.total > 0) {
+    const nodePercent = health.nodes.percent || 0;
+    const nodeDetail = `${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`;
+    bars.push(renderSingleBar('layers', nodePercent, 'Nodes', nodeDetail));
+  }
+
+  // GPU bar (if available) - uses pre-calculated percentage from backend
+  if (health.gpus && typeof health.gpus.percent !== 'undefined') {
+    const gpuDetails = [];
+    for (const [type, data] of Object.entries(health.gpus)) {
+      if (type === 'percent') continue; // Skip the overall percentage property
+      const typeGpuCount = data.total || ((data.idle || 0) + (data.busy || 0));
+      gpuDetails.push(`${type.toUpperCase()}: ${data.busy || 0}/${typeGpuCount}`);
+    }
+    bars.push(renderSingleBar('gpu', health.gpus.percent, 'GPUs', gpuDetails.join(', ')));
+  }
+
+  return `<div class="health-indicators">${bars.join('')}</div>`;
+}
+
+/**
+ * Render a single health indicator bar
+ * @param {string} icon - Lucide icon name
+ * @param {number} percent - Usage percentage (0-100)
+ * @param {string} label - Resource label
+ * @param {string} detail - Tooltip detail text
+ * @returns {string} HTML for single bar
+ */
+function renderSingleBar(icon, percent, label, detail) {
+  // Normalize percent to a finite number between 0 and 100
+  let safePercent = Number(percent);
+  if (!Number.isFinite(safePercent)) {
+    safePercent = 0;
+  }
+  safePercent = Math.min(100, Math.max(0, safePercent));
+
+  // Determine color level based on usage thresholds
+  let level = 'low';
+  if (safePercent >= HEALTH_THRESHOLD_HIGH) {
+    level = 'high';
+  } else if (safePercent >= HEALTH_THRESHOLD_MEDIUM) {
+    level = 'medium';
+  }
+
+  // Escape HTML for safe attribute values
+  const safeLabel = escapeHtml(label);
+  const safeDetail = escapeHtml(detail);
+  const tooltip = `${safeLabel}: ${safePercent}% used${safeDetail ? ` (${safeDetail})` : ''}`;
+
+  return `
+    <span class="health-indicator" title="${tooltip}">
+      <i data-lucide="${icon}" class="icon-xs"></i>
+      <div class="health-bar">
+        <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
+      </div>
+    </span>
+  `;
+}
+
 /**
  * Update a single cluster card
  */
@@ -516,6 +632,13 @@ function updateClusterCard(hpc, ideStatuses) {
   });
 
   content.innerHTML = html;
+
+  // Update health bars in header
+  const healthContainer = document.getElementById(`${hpc}-health`);
+  if (healthContainer) {
+    healthContainer.innerHTML = renderHealthBars(hpc);
+  }
+
   lucide.createIcons();
 }
 
@@ -552,6 +675,11 @@ async function fetchStatus(forceRefresh = false) {
     // Store GPU config
     if (data.gpuConfig) {
       gpuConfig = data.gpuConfig;
+    }
+
+    // Store cluster health data
+    if (data.clusterHealth) {
+      clusterHealth = data.clusterHealth;
     }
 
     // Track cache info

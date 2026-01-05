@@ -322,6 +322,7 @@ function createApiRouter(stateManager) {
         gemini: enrichWithSessionData(geminiData, 'gemini'),
         apollo: enrichWithSessionData(apolloData, 'apollo'),
         activeSession: state.activeSession,  // Always use current activeSession, not cached
+        clusterHealth: stateManager.getClusterHealth(),  // Include cluster health data
         ides: Object.fromEntries(
           Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
         ),
