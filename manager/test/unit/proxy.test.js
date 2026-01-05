@@ -70,7 +70,8 @@ describe('Proxy Helpers', () => {
     });
 
     it('should extract token with hex characters', () => {
-      expect(getCookieToken('vscode-tkn=FAKE_TEST_TOKEN_00000000')).to.equal('FAKE_TEST_TOKEN_00000000');
+      // Using obviously fake test token to avoid GitGuardian false positives
+      expect(getCookieToken('vscode-tkn=aabbccdd11223344')).to.equal('aabbccdd11223344');
     });
 
     it('should handle token at end of cookie string', () => {
