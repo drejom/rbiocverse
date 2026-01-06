@@ -97,6 +97,30 @@ Click **Stop** to cancel your SLURM job and free resources for others.
 
 Jobs automatically end when their walltime expires. Save your work before the timer runs out!
 
+## Python and Reticulate
+
+### Default Configuration
+
+Python is pre-configured to use the container's Python with cluster-managed packages:
+
+- `RETICULATE_PYTHON=/usr/local/bin/python3` - container Python
+- `PYTHONPATH` - points to curated cluster packages (Bioc 3.22+)
+
+When you call `library(reticulate)`, it uses the system Python directly - no virtualenv is created.
+
+### Installing Custom Python Packages
+
+To install packages not in the cluster library, create a virtualenv:
+
+```r
+library(reticulate)
+virtualenv_create("my-project")
+use_virtualenv("my-project")
+py_install("some-package")
+```
+
+This keeps your custom packages isolated while still accessing cluster packages via `PYTHONPATH`.
+
 ## Troubleshooting
 
 ### "Connection lost" or blank screen

@@ -65,8 +65,13 @@ function getSessionToken(ide) {
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
 
-// Serve static files from public directory
+// Serve static files from public directory (images, wrapper pages)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve React UI build assets (launcher) from ui/dist/
+// In development, Vite dev server proxies to Express API
+// Assets are built to /assets/ by Vite
+app.use('/assets', express.static(path.join(__dirname, 'ui', 'dist', 'assets')));
 
 // Proxy for forwarding to VS Code when tunnel is active
 const vscodeProxy = httpProxy.createProxyServer({
@@ -440,7 +445,7 @@ function hasRunningSession() {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
 }
 
-// Landing page - serve static index.html or redirect to active IDE if session running
+// Landing page - serve React launcher or redirect to active IDE if session running
 app.get('/', (req, res) => {
   // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
   if (req.query.menu) {
@@ -454,7 +459,8 @@ app.get('/', (req, res) => {
     return res.redirect(proxyPath);
   }
   log.ui('Serving launcher page');
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  // Serve React build from ui/dist/
+  res.sendFile(path.join(__dirname, 'ui', 'dist', 'index.html'));
 });
 
 // Serve the menu iframe content

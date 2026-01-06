@@ -1,0 +1,959 @@
+/**
+ * HPC Code Server - Launcher Styles
+ * Migrated from public/css/style.css for React
+ */
+
+/* Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Lucide icon styling */
+.lucide {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  stroke-width: 2;
+}
+
+.icon-sm {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* Devicon icons need more margin (font-based vs SVG) */
+.icon-sm[class*="devicon-"] {
+  margin-right: 8px;
+}
+
+/* Time pie chart */
+.time-pie {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-pie svg {
+  width: 40px;
+  height: 40px;
+}
+
+.time-pie-bg {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: none;
+}
+
+.time-pie-fill {
+  fill: #4ade80;
+  stroke: none;
+  transition: d 0.5s ease-out, fill 0.3s;
+}
+
+.time-pie-fill.warning {
+  fill: #fbbf24;
+}
+
+.time-pie-fill.critical {
+  fill: #ef4444;
+}
+
+.time-pie-text {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.time-pie-text.warning {
+  color: #fbbf24;
+}
+
+.time-pie-text.critical {
+  color: #ef4444;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  padding: 20px;
+}
+
+/* Launcher Container */
+.launcher {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 30px;
+  max-width: 800px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+h1 {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+/* Cluster Cards */
+.cluster-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 15px;
+  transition: all 0.2s;
+}
+
+.cluster-card.running {
+  /* Card itself no longer has green border - moved to .running-sessions */
+}
+
+/* Container for running IDE sessions - gets the green border */
+.running-sessions {
+  border: 2px solid #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.cluster-card.pending {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.cluster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.cluster-name {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.cluster-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+/* Status Indicators */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.status-dot.running {
+  background: #4ade80;
+}
+
+.status-dot.pending {
+  background: #fbbf24;
+  animation: pulse 1.5s infinite;
+}
+
+.status-dot.stopping {
+  background: #f87171;
+  animation: pulse 0.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.cluster-info {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+/* Countdown Display */
+.countdown {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.countdown.warning {
+  color: #fbbf24;
+}
+
+.countdown.critical {
+  color: #ef4444;
+}
+
+.resources {
+  display: flex;
+  gap: 15px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+/* Launch Form */
+.launch-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+
+.form-input {
+  flex: 1;
+  min-width: 60px;
+}
+
+/* Proportional widths for resource inputs */
+.form-input.input-cpus {
+  flex: 0.7;
+  min-width: 50px;
+}
+
+.form-input.input-mem {
+  flex: 0.8;
+  min-width: 55px;
+}
+
+.form-input.input-time {
+  flex: 1;
+  min-width: 80px;
+}
+
+.form-input label {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.form-input input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.form-input input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+}
+
+.btn-success {
+  background: #4ade80;
+  color: #000;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #22c55e;
+}
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Error Display */
+.error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  color: #fca5a5;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.loading-content {
+  text-align: center;
+  color: #fff;
+}
+
+.loading-content .spinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 15px;
+}
+
+/* Launch action buttons in loading overlay */
+.launch-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.estimated-start {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+/* Launcher Header */
+.launcher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 25px;
+}
+
+.launcher-header h1 {
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.launcher-header .subtitle {
+  text-align: left;
+  margin-bottom: 0;
+}
+
+/* Cache Indicator */
+.cache-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.cache-age {
+  opacity: 0.7;
+}
+
+.cache-age.stale {
+  color: #fbbf24;
+  opacity: 1;
+}
+
+/* IDE Selector */
+.ide-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ide-btn {
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ide-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.ide-btn.selected {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.ide-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* IDE Session sections (when running) */
+.ide-session {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.ide-session:last-child {
+  margin-bottom: 0;
+}
+
+.ide-session.running {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.ide-session.pending {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.ide-session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ide-name {
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.ide-node {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+}
+
+.ide-session-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 8px;
+}
+
+.resources-inline {
+  display: flex;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+}
+
+.resources-inline span {
+  display: flex;
+  align-items: center;
+}
+
+/* Smaller buttons for IDE sessions */
+.btn-group-sm {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* Smaller time pie for IDE sessions */
+.time-pie-sm svg {
+  width: 36px;
+  height: 36px;
+}
+
+.time-pie-sm .time-pie-text {
+  font-size: 1rem;
+}
+
+/* Section divider */
+.section-divider {
+  text-align: center;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 15px 0 10px;
+  position: relative;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 30%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.section-divider::before {
+  left: 0;
+}
+
+.section-divider::after {
+  right: 0;
+}
+
+/* Extra small icon */
+.icon-xs {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  margin-right: 3px;
+  opacity: 0.6;
+}
+
+/* Launch section when running IDEs exist */
+.launch-section {
+  margin-top: 5px;
+}
+
+/* Progress Bar with Uncertainty Visualization */
+.progress-container {
+  text-align: center;
+  padding: 20px;
+}
+
+.progress-header {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #fff;
+}
+
+.progress-step {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 15px;
+  min-height: 1.2em;
+}
+
+.progress-bar {
+  height: 4px;
+  background: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  margin: 0 20px;
+}
+
+/* Uncertainty band - shows expected step completion range */
+.progress-bar-estimate {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.1));
+  position: absolute;
+  left: 0;
+  transition: width 0.3s ease;
+}
+
+/* Pulsing fill - shows confirmed progress */
+.progress-bar-fill {
+  height: 100%;
+  background: #10b981;
+  position: absolute;
+  left: 0;
+  animation: pulse-fill 1.5s ease-in-out infinite;
+  transition: width 0.3s ease;
+}
+
+@keyframes pulse-fill {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pending state (amber) */
+.progress-bar-fill.pending {
+  background: #f59e0b;
+}
+
+.progress-bar-estimate.pending {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), rgba(245, 158, 11, 0.1));
+}
+
+/* Indeterminate state for cancel (high variance) */
+.progress-bar-fill.indeterminate {
+  width: 30% !important;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% { left: -30%; }
+  100% { left: 100%; }
+}
+
+/* Error state */
+.progress-bar-fill.error {
+  background: #ef4444;
+  animation: none;
+}
+
+.progress-error {
+  color: #fca5a5;
+  font-size: 0.9rem;
+  margin-top: 15px;
+}
+
+/* Release Selector - Apple-like design */
+.release-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.release-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  padding-left: 18px;
+}
+
+.bioc-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  position: absolute;
+  top: -2px;
+  left: 0;
+}
+
+.release-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 8px;
+  margin-left: -2px;
+}
+
+.release-dropdown {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.release-dropdown:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.release-dropdown:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.release-dropdown option {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+/* GPU Selector - Segmented control (Apple-like) */
+.gpu-selector {
+  flex: 1.5;
+  min-width: 140px;
+}
+
+.gpu-label {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.gpu-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 1px;
+  min-height: 36px;
+}
+
+.gpu-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+
+.gpu-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.gpu-btn.selected {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.gpu-btn .icon-xs {
+  width: 12px;
+  height: 12px;
+  margin-right: 0;
+}
+
+/* Cluster Health Indicator Bars */
+.health-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Single health indicator (icon + bar) */
+.health-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.health-indicator .icon-xs {
+  opacity: 0.6;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* Health bar container */
+.health-bar {
+  width: 40px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Health bar fill */
+.health-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+/* Green - low usage (<60%) */
+.health-bar-fill.low {
+  background: #4ade80;
+}
+
+/* Orange - moderate usage (60-85%) */
+.health-bar-fill.medium {
+  background: #fbbf24;
+}
+
+/* Red - high usage (>85%) */
+.health-bar-fill.high {
+  background: #ef4444;
+}
+
+/* Offline state */
+.health-indicators.offline {
+  opacity: 0.5;
+}
+
+.health-indicator.offline .health-bar {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.health-indicator.offline .icon-xs {
+  color: #ef4444;
+  opacity: 1;
+}
+
+/* Cluster header layout - health bars left, status right */
+.cluster-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cluster-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 640px) {
+  .cluster-header {
+    flex-wrap: wrap;
+  }
+
+  .cluster-header-left {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .cluster-status {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+
+  .health-indicators {
+    flex-wrap: wrap;
+  }
+}
+
+/* Stop Progress Bar (inline in IDE session) */
+.stop-progress {
+  margin: 8px 0;
+}
+
+.stop-progress-text {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 6px;
+}
+
+.stop-progress-bar {
+  height: 3px;
+  background: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stop-progress-fill {
+  height: 100%;
+  width: 30%;
+  background: #ef4444;
+  position: absolute;
+  animation: stop-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes stop-indeterminate {
+  0% { left: -30%; }
+  100% { left: 100%; }
+}
