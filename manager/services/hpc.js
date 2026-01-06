@@ -62,22 +62,24 @@ class HpcService {
 
   /**
    * Get user's default SLURM account
-   * Called once on startup to determine which account to use for fairshare queries
+   * Called once per user to determine which account to use for fairshare queries
+   * @param {string} user - Username (defaults to config.hpcUser for single-user mode)
    * @returns {Promise<string|null>} Default account name or null if not found
    */
-  async getUserDefaultAccount() {
+  async getUserDefaultAccount(user = null) {
+    const effectiveUser = user || config.hpcUser;
     try {
       const output = await this.sshExec(
-        `sacctmgr show user ${config.hpcUser} format=defaultaccount -nP 2>/dev/null`
+        `sacctmgr show user ${effectiveUser} format=defaultaccount -nP 2>/dev/null`
       );
       const account = output.trim();
       if (account && account !== '') {
-        log.info('User default account', { cluster: this.clusterName, user: config.hpcUser, account });
+        log.info('User default account', { cluster: this.clusterName, user: effectiveUser, account });
         return account;
       }
       return null;
     } catch (e) {
-      log.warn('Failed to get user default account', { cluster: this.clusterName, error: e.message });
+      log.warn('Failed to get user default account', { cluster: this.clusterName, user: effectiveUser, error: e.message });
       return null;
     }
   }
@@ -164,15 +166,17 @@ class HpcService {
   /**
    * Get job information for all IDEs on this cluster
    * Single SSH call with comma-separated job names, then parse by Name field
+   * @param {string} user - Username (defaults to config.hpcUser for single-user mode)
    * @returns {Promise<Object>} Map of ide -> job info (or null)
    */
-  async getAllJobs() {
+  async getAllJobs(user = null) {
+    const effectiveUser = user || config.hpcUser;
     // Build comma-separated list of job names
     const jobNames = Object.values(ides).map(ide => ide.jobName).join(',');
 
     // Single SSH call for all IDEs
     const output = await this.sshExec(
-      `squeue --user=${config.hpcUser} --name=${jobNames} --states=R,PD -h -O JobID,Name,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null`
+      `squeue --user=${effectiveUser} --name=${jobNames} --states=R,PD -h -O JobID,Name,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null`
     );
 
     // Initialize results with null for all IDEs
