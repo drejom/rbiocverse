@@ -2,7 +2,7 @@
  * Launch form component
  * Resource inputs (CPUs, Memory, Time) and optional GPU selector on one line
  */
-import { Cpu, MemoryStick, Timer, Zap } from 'lucide-react';
+import { Cpu, MemoryStick, Timer, Zap, Gpu } from 'lucide-react';
 
 export function LaunchForm({ values, onChange, limits, gpuConfig, selectedGpu, onGpuSelect }) {
   const handleChange = (field) => (e) => {
@@ -61,7 +61,9 @@ export function LaunchForm({ values, onChange, limits, gpuConfig, selectedGpu, o
       </div>
       {hasGpu && (
         <div className="gpu-selector">
-          <label className="gpu-label">Accelerator</label>
+          <label className="gpu-label">
+            <Zap className="icon-sm" /> Accelerator
+          </label>
           <div className="gpu-toggle">
             <button
               type="button"
@@ -77,7 +79,7 @@ export function LaunchForm({ values, onChange, limits, gpuConfig, selectedGpu, o
                 className={`gpu-btn ${selectedGpu === type ? 'selected' : ''}`}
                 onClick={() => onGpuSelect(type)}
               >
-                <Zap className="icon-xs" /> {type.toUpperCase()}
+                <Gpu className="icon-xs" /> {type.toUpperCase()}
               </button>
             ))}
           </div>

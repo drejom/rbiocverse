@@ -2,7 +2,7 @@
  * Health indicator bar component
  * Shows resource usage with color-coded fill
  */
-import { Cpu, MemoryStick, Server, Gauge, CircuitBoard, WifiOff } from 'lucide-react';
+import { Cpu, MemoryStick, Server, Gauge, Gpu, WifiOff } from 'lucide-react';
 
 // Resource usage thresholds (percent)
 const THRESHOLD_HIGH = 85;
@@ -30,7 +30,7 @@ const iconMap = {
   'memory-stick': MemoryStick,
   server: Server,
   gauge: Gauge,
-  gpu: CircuitBoard,
+  gpu: Gpu,
 };
 
 function SingleBar({ icon, percent, label, detail, isFairshare = false }) {

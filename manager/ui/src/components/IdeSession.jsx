@@ -2,7 +2,7 @@
  * IDE session component
  * Shows running or pending IDE session with actions
  */
-import { Server, Cpu, MemoryStick, CircuitBoard, Package, Plug, Square, X } from 'lucide-react';
+import { Server, Cpu, MemoryStick, Gpu, Package, Plug, Square, X } from 'lucide-react';
 import TimePie from './TimePie';
 
 // IDE icon mapping
@@ -44,7 +44,7 @@ export function RunningSession({
         <div className="resources-inline">
           <span><Cpu className="icon-xs" />{status.cpus || '?'}</span>
           <span><MemoryStick className="icon-xs" />{status.memory || '?'}</span>
-          {status.gpu && <span><CircuitBoard className="icon-xs" />{status.gpu.toUpperCase()}</span>}
+          {status.gpu && <span><Gpu className="icon-xs" />{status.gpu.toUpperCase()}</span>}
           {status.releaseVersion && <span><Package className="icon-xs" />{status.releaseVersion}</span>}
         </div>
       </div>
