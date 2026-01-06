@@ -44,7 +44,8 @@ const state = stateManager.state;
 function updateActivity() {
   const { activeSession } = state;
   if (activeSession) {
-    const sessionKey = `${activeSession.hpc}-${activeSession.ide}`;
+    // Session key format: user-hpc-ide (multi-user prep)
+    const sessionKey = `${activeSession.user}-${activeSession.hpc}-${activeSession.ide}`;
     if (state.sessions[sessionKey]) {
       state.sessions[sessionKey].lastActivity = Date.now();
     }
@@ -56,7 +57,8 @@ function updateActivity() {
 function getSessionToken(ide) {
   const { activeSession } = state;
   if (!activeSession) return null;
-  const sessionKey = `${activeSession.hpc}-${ide}`;
+  // Session key format: user-hpc-ide (multi-user prep)
+  const sessionKey = `${activeSession.user}-${activeSession.hpc}-${ide}`;
   return state.sessions[sessionKey]?.token || null;
 }
 
