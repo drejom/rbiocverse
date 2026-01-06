@@ -554,12 +554,14 @@ function renderFairshareBar(fairshare) {
   if (!Number.isFinite(percent)) percent = 0;
   percent = Math.min(100, Math.max(0, percent));
 
-  // Color: high fairshare = green (good priority), low = red (bad priority)
+  // Color thresholds: high fairshare = green (good priority), low = red (bad priority)
   // This is INVERTED from usage bars (high usage = bad)
+  const FAIRSHARE_THRESHOLD_POOR = 30;
+  const FAIRSHARE_THRESHOLD_MODERATE = 60;
   let level = 'low';  // green - good priority
-  if (percent < 30) {
+  if (percent < FAIRSHARE_THRESHOLD_POOR) {
     level = 'high';  // red - poor priority
-  } else if (percent < 60) {
+  } else if (percent < FAIRSHARE_THRESHOLD_MODERATE) {
     level = 'medium';  // yellow - moderate priority
   }
 
