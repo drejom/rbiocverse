@@ -66,6 +66,10 @@ const vscodeDefaults = {
     'files.autoSaveDelay': 1000,
     'python.defaultInterpreterPath': '/usr/local/bin/python3',
 
+    // Live Server - disable auto-browser open (use HPC menu button instead)
+    // Browser would try to open localhost:5500 which doesn't work through proxy
+    'liveServer.settings.NoBrowser': true,
+
   },
 
   // Pre-installed extensions baked into Singularity image (see github.com/drejom/vscode-rbioc#14)
