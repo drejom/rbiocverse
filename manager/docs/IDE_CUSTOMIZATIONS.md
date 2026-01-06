@@ -2,6 +2,29 @@
 
 Global settings for VS Code and RStudio, applied automatically on session start.
 
+## Browser Keyboard Shortcut Limitations
+
+When running in a browser, some keyboard shortcuts are captured by the browser before reaching the IDE. This is a fundamental browser security limitation.
+
+**Affected shortcuts:**
+
+| Shortcut | Browser captures | IDE wants |
+|----------|-----------------|-----------|
+| `Ctrl+N` | New window | New file |
+| `Ctrl+W` | Close tab | Close editor |
+| `Ctrl+T` | New tab | Go to symbol |
+| `Ctrl+Shift+N` | Incognito window | - |
+| `Ctrl+Shift+T` | Reopen tab | - |
+
+**Solutions (in order of effectiveness):**
+
+1. **Install as PWA** - Click the install icon in Chrome's address bar. PWA mode gives the IDE more keyboard access.
+2. **Use Command Palette** - `Ctrl+Shift+P` (or `F1`) works everywhere. Type any action.
+3. **Use alternative bindings** - VS Code has alternatives like `Ctrl+K Ctrl+W` for close editor.
+4. **Remap in VS Code** - Open Keyboard Shortcuts (`Ctrl+K Ctrl+S`) and remap conflicting shortcuts.
+
+---
+
 ## VS Code
 
 ### Machine Settings
