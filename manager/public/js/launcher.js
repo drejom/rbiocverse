@@ -102,38 +102,11 @@ function formatTime(seconds) {
 
 /**
  * Generate SVG pie chart for time remaining
+ * Uses shared PieChart module from pie-chart.js
  */
 function renderTimePie(remaining, total, hpc, ide) {
-  const percent = total > 0 ? Math.max(0, remaining / total) : 1;
-  const radius = 14;
-  const cx = 18, cy = 18;
   const key = getSessionKey(hpc, ide);
-
-  let colorClass = '';
-  if (remaining < 600) colorClass = 'critical';
-  else if (remaining < 1800) colorClass = 'warning';
-
-  let piePath = '';
-  if (percent >= 1) {
-    piePath = `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
-  } else if (percent > 0) {
-    const angle = percent * 2 * Math.PI;
-    const endX = cx + radius * Math.sin(angle);
-    const endY = cy - radius * Math.cos(angle);
-    const largeArc = percent > 0.5 ? 1 : 0;
-    piePath = `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
-  }
-
-  return `
-    <div class="time-pie time-pie-sm">
-      <svg viewBox="0 0 36 36">
-        <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
-        <path class="time-pie-fill ${colorClass}" id="${key}-pie-fill" d="${piePath}"
-          data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
-      </svg>
-      <span class="time-pie-text ${colorClass}" id="${key}-countdown-value">${formatTime(remaining)}</span>
-    </div>
-  `;
+  return PieChart.renderPieChart(remaining, total, key, { sizeClass: 'time-pie-sm' });
 }
 
 /**
@@ -812,23 +785,8 @@ function updateCacheIndicator() {
 }
 
 /**
- * Calculate SVG path for pie wedge
- */
-function calcPiePath(percent, cx, cy, radius) {
-  if (percent >= 1) {
-    return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
-  } else if (percent > 0) {
-    const angle = percent * 2 * Math.PI;
-    const endX = cx + radius * Math.sin(angle);
-    const endY = cy - radius * Math.cos(angle);
-    const largeArc = percent > 0.5 ? 1 : 0;
-    return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
-  }
-  return '';
-}
-
-/**
  * Client-side countdown tick for all active sessions
+ * Uses shared PieChart module for updates
  */
 function tickCountdowns() {
   Object.keys(countdowns).forEach(key => {
@@ -836,26 +794,7 @@ function tickCountdowns() {
       countdowns[key]--;
       const remaining = countdowns[key];
       const total = walltimes[key] || remaining;
-
-      let colorClass = '';
-      if (remaining < 600) colorClass = 'critical';
-      else if (remaining < 1800) colorClass = 'warning';
-
-      const pieEl = document.getElementById(key + '-pie-fill');
-      if (pieEl) {
-        const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-        const cx = parseFloat(pieEl.dataset.cx) || 18;
-        const cy = parseFloat(pieEl.dataset.cy) || 18;
-        const radius = parseFloat(pieEl.dataset.radius) || 14;
-        pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
-        pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
-      }
-
-      const valueEl = document.getElementById(key + '-countdown-value');
-      if (valueEl) {
-        valueEl.textContent = formatTime(remaining);
-        valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
-      }
+      PieChart.updatePieChart(key, remaining, total);
     }
   });
 }
