@@ -295,8 +295,9 @@ set -ex
 
 # Setup directories
 mkdir -p ${machineSettingsDir} ${extensionsDir}
-# Create writable /run directory for VS Code sockets (serve-web needs this for secret storage)
-mkdir -p $HOME/.vscode-slurm/run
+# Create writable /run/user/<uid> directory for VS Code sockets
+mkdir -p $HOME/.vscode-slurm/run/user/$(id -u)
+chmod 700 $HOME/.vscode-slurm/run/user/$(id -u)
 
 # Write Machine settings
 echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json
@@ -320,7 +321,8 @@ exec ${this.cluster.singularityBin} exec \\
     ${tokenArg} \\
     --accept-server-license-terms \\
     --server-base-path /vscode-direct \\
-    --server-data-dir ${dataDir}
+    --server-data-dir ${dataDir} \\
+    --password-store=basic
 `;
   }
 
