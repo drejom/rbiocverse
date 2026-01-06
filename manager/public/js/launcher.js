@@ -50,6 +50,13 @@ let selectedIde = Object.fromEntries(CLUSTER_NAMES.map(c => [c, 'vscode']));
 let selectedReleaseVersion = Object.fromEntries(CLUSTER_NAMES.map(c => [c, null]));  // Set from server
 let selectedGpu = Object.fromEntries(CLUSTER_NAMES.map(c => [c, '']));  // '' = no GPU
 
+// User-edited form values (preserved across re-renders)
+// null = use defaults, otherwise { cpus, mem, time }
+let formValues = Object.fromEntries(CLUSTER_NAMES.map(c => [c, null]));
+
+// Partition limits from server (static config)
+let partitionLimits = {};
+
 // Cluster status keyed by hpc (contains ides)
 // Initialized dynamically from CLUSTER_NAMES
 let clusterStatus = Object.fromEntries(CLUSTER_NAMES.map(c => [c, {}]));
@@ -87,6 +94,160 @@ const STEP_ESTIMATES = {
  */
 function getSessionKey(hpc, ide) {
   return `${hpc}-${ide}`;
+}
+
+// ============================================
+// Form Value Persistence & Validation
+// ============================================
+
+/**
+ * Save current form values before re-render
+ * @param {string} hpc - Cluster name
+ */
+function saveFormValues(hpc) {
+  const cpusEl = document.getElementById(hpc + '-cpus');
+  const memEl = document.getElementById(hpc + '-mem');
+  const timeEl = document.getElementById(hpc + '-time');
+  if (cpusEl || memEl || timeEl) {
+    formValues[hpc] = {
+      cpus: cpusEl?.value || defaultConfig.cpus,
+      mem: memEl?.value || defaultConfig.mem,
+      time: timeEl?.value || defaultConfig.time,
+    };
+  }
+}
+
+/**
+ * Restore saved form values after re-render
+ * @param {string} hpc - Cluster name
+ */
+function restoreFormValues(hpc) {
+  const saved = formValues[hpc];
+  if (!saved) return;
+  const cpusEl = document.getElementById(hpc + '-cpus');
+  const memEl = document.getElementById(hpc + '-mem');
+  const timeEl = document.getElementById(hpc + '-time');
+  if (cpusEl) cpusEl.value = saved.cpus;
+  if (memEl) memEl.value = saved.mem;
+  if (timeEl) timeEl.value = saved.time;
+}
+
+/**
+ * Get form values for a cluster (saved or defaults)
+ * @param {string} hpc - Cluster name
+ * @returns {Object} { cpus, mem, time }
+ */
+function getFormValues(hpc) {
+  return formValues[hpc] || {
+    cpus: defaultConfig.cpus,
+    mem: defaultConfig.mem,
+    time: defaultConfig.time,
+  };
+}
+
+/**
+ * Get effective partition limits for a cluster based on GPU selection
+ * @param {string} hpc - Cluster name
+ * @returns {Object|null} { maxCpus, maxMemMB, maxTime } or null if no limits
+ */
+function getEffectiveLimits(hpc) {
+  const gpu = selectedGpu[hpc] || '';
+  const clusterLimits = partitionLimits[hpc];
+  if (!clusterLimits) return null;
+
+  // Get partition based on GPU selection
+  let partition;
+  if (gpu && gpuConfig[hpc]?.[gpu]) {
+    partition = gpuConfig[hpc][gpu].partition;
+  } else {
+    // Default partition per cluster
+    partition = hpc === 'gemini' ? 'compute' : 'fast,all';
+  }
+  return clusterLimits[partition] || null;
+}
+
+/**
+ * Parse memory string to MB
+ * @param {string} mem - Memory like "40G" or "100M"
+ * @returns {number} Memory in MB, or 0 if invalid
+ */
+function parseMemToMB(mem) {
+  const match = mem.match(/^(\d+)([gGmM])$/);
+  if (!match) return 0;
+  const [, value, unit] = match;
+  return unit.toLowerCase() === 'g' ? parseInt(value) * 1024 : parseInt(value);
+}
+
+/**
+ * Validate form inputs against partition limits
+ * @param {string} hpc - Cluster name
+ * @returns {Object} { valid: boolean, errors: string[] }
+ */
+function validateForm(hpc) {
+  const limits = getEffectiveLimits(hpc);
+  const cpusEl = document.getElementById(hpc + '-cpus');
+  const memEl = document.getElementById(hpc + '-mem');
+  const timeEl = document.getElementById(hpc + '-time');
+
+  const cpus = cpusEl?.value || '';
+  const mem = memEl?.value || '';
+  const time = timeEl?.value || '';
+
+  const errors = [];
+
+  // CPU validation
+  const cpuVal = parseInt(cpus);
+  if (isNaN(cpuVal) || cpuVal < 1) {
+    errors.push('CPUs must be at least 1');
+  } else if (limits && cpuVal > limits.maxCpus) {
+    errors.push(`CPUs: max ${limits.maxCpus} for this partition`);
+  }
+
+  // Memory validation
+  const memMatch = mem.match(/^(\d+)([gGmM])$/);
+  if (!memMatch) {
+    errors.push('Memory: use format like "40G" or "100M"');
+  } else if (limits) {
+    const memMB = parseMemToMB(mem);
+    if (memMB > limits.maxMemMB) {
+      const maxMemG = Math.floor(limits.maxMemMB / 1024);
+      errors.push(`Memory: max ${maxMemG}G for this partition`);
+    }
+  }
+
+  // Time validation
+  if (!/^(\d{1,2}-)?\d{1,2}:\d{2}:\d{2}$/.test(time)) {
+    errors.push('Time: use format like "12:00:00" or "1-00:00:00"');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Update input field attributes based on partition limits
+ * @param {string} hpc - Cluster name
+ */
+function updateInputConstraints(hpc) {
+  const limits = getEffectiveLimits(hpc);
+  if (!limits) return;
+
+  const cpusEl = document.getElementById(hpc + '-cpus');
+  const memEl = document.getElementById(hpc + '-mem');
+  const timeEl = document.getElementById(hpc + '-time');
+
+  if (cpusEl) {
+    cpusEl.max = limits.maxCpus;
+    cpusEl.title = `Max: ${limits.maxCpus} CPUs`;
+  }
+  if (memEl) {
+    const maxMemG = Math.floor(limits.maxMemMB / 1024);
+    memEl.title = `Max: ${maxMemG}G`;
+    memEl.placeholder = `Max ${maxMemG}G`;
+  }
+  if (timeEl) {
+    timeEl.title = `Max: ${limits.maxTime}`;
+    timeEl.placeholder = limits.maxTime;
+  }
 }
 
 /**
@@ -213,6 +374,8 @@ function selectGpu(hpc, gpu) {
       btn.classList.toggle('selected', btn.dataset.gpu === gpu);
     });
   }
+  // Update input constraints for new partition limits
+  updateInputConstraints(hpc);
 }
 
 /**
@@ -646,7 +809,14 @@ function updateClusterCard(hpc, ideStatuses) {
     }
   });
 
+  // Save form values before re-render
+  saveFormValues(hpc);
+
   content.innerHTML = html;
+
+  // Restore form values and update constraints after re-render
+  restoreFormValues(hpc);
+  updateInputConstraints(hpc);
 
   // Update health bars in header
   const healthContainer = document.getElementById(`${hpc}-health`);
@@ -664,7 +834,13 @@ function updateClusterCard(hpc, ideStatuses) {
  */
 async function fetchStatus(forceRefresh = false) {
   try {
-    const url = forceRefresh ? '/api/cluster-status?refresh=true' : '/api/cluster-status';
+    // Build URL with query params
+    // hasLimits=true tells server to skip static config (partitionLimits) we already have
+    // This reduces response payload on subsequent polls - limits are static and only needed once
+    const params = new URLSearchParams();
+    if (forceRefresh) params.set('refresh', 'true');
+    if (Object.keys(partitionLimits).length > 0) params.set('hasLimits', 'true');
+    const url = '/api/cluster-status' + (params.toString() ? '?' + params.toString() : '');
     const res = await fetch(url);
     const data = await res.json();
 
@@ -690,6 +866,11 @@ async function fetchStatus(forceRefresh = false) {
     // Store GPU config
     if (data.gpuConfig) {
       gpuConfig = data.gpuConfig;
+    }
+
+    // Store partition limits (static config - server only sends on first request)
+    if (data.partitionLimits) {
+      partitionLimits = data.partitionLimits;
     }
 
     // Store cluster health data
@@ -961,9 +1142,18 @@ async function launch(hpc) {
   const gpu = selectedGpu[hpc] || '';
   console.log('[Launcher] Launch requested:', hpc, ide, 'releaseVersion:', releaseVersion, 'gpu:', gpu || 'none');
 
+  const errorEl = document.getElementById('error');
+
+  // Validate form inputs before launching
+  const validation = validateForm(hpc);
+  if (!validation.valid) {
+    errorEl.textContent = validation.errors.join('; ');
+    errorEl.style.display = 'block';
+    return;
+  }
+
   const overlay = document.getElementById('loading-overlay');
   const launchActions = document.getElementById('launch-actions');
-  const errorEl = document.getElementById('error');
 
   errorEl.style.display = 'none';
   overlay.style.display = 'flex';

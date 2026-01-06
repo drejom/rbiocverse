@@ -16,7 +16,7 @@ const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
 const { validateSbatchInputs } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
-const { config, ides, gpuConfig, releases, defaultReleaseVersion } = require('../config');
+const { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
 
@@ -293,6 +293,7 @@ function createApiRouter(stateManager) {
   // Returns jobs grouped by cluster then IDE
   router.get('/cluster-status', async (req, res) => {
     const forceRefresh = req.query.refresh === 'true';
+    const hasLimits = req.query.hasLimits === 'true';  // Client has partition limits
     const now = Date.now();
 
     try {
@@ -361,6 +362,8 @@ function createApiRouter(stateManager) {
         ),
         defaultReleaseVersion,
         gpuConfig,  // Include GPU config for client-side validation
+        // Only include static partition limits if client doesn't have them yet
+        ...(hasLimits ? {} : { partitionLimits }),
         updatedAt: new Date().toISOString(),
         cached: !anyFresh,
         cacheAge: Math.floor(maxCacheAge / 1000),
