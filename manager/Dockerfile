@@ -28,8 +28,9 @@ RUN addgroup -g 568 apps && adduser -u 568 -G apps -h /home/apps -D apps
 WORKDIR /app
 
 # Copy package files and install production dependencies only
+# --ignore-scripts skips postinstall (which installs ui deps - not needed in prod)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy backend source (explicit list, not wildcard)
 COPY --from=builder /app/server.js ./
