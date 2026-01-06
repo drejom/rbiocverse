@@ -234,7 +234,35 @@ proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
 | Set `GNOME_KEYRING_CONTROL` | Keyring accessible, VS Code ignores it |
 | Custom `XDG_RUNTIME_DIR` | Works for keyring, VS Code ignores it |
 | Update `~/.vscode/argv.json` | serve-web doesn't read it |
-| Try `--password-store` flag | serve-web rejects the flag |
+| Try `--password-store` flag | serve-web rejects the flag (Electron-only) |
+| Bind writable `/run` directory | No effect - serve-web uses browser storage |
+| Create `/run/user/<uid>` with 700 perms | Fixes socket errors but not secret persistence |
+
+## Detailed Investigation of Browser Secret Storage
+
+### Verified Working Components
+1. **`/_vscode-cli/mint-key` endpoint** - Called successfully, returns 200
+2. **Cookies are set correctly**:
+   - `vscode-secret-key-path`: Points to mint-key endpoint
+   - `vscode-cli-secret-half`: Server's key half (httpOnly, persists across refresh)
+   - `vscode-tkn`: Connection token
+3. **Cookie values persist** - Same `vscode-cli-secret-half` value before and after refresh
+4. **Server logs show "Stored 1 sessions!"** - Login succeeds
+
+### What Fails
+1. **After page refresh, "Got 0 sessions"** - Secrets are lost
+2. **`secrets.provider` in localStorage** - Present during session, behavior unclear on refresh
+3. **New extension host process** - Each refresh spawns new exthost, can't read previous secrets
+
+### The Actual Problem
+The two-part encryption key system (PR #191538) stores:
+- Server half: In httpOnly cookie (works, persists)
+- Client half: In browser localStorage (supposed to persist)
+- Combined key: Used to encrypt/decrypt secrets
+
+Even though cookies persist, something in the client-side key handling or
+secret decryption fails on page reload. This may be a VS Code bug or a
+subtle interaction with our proxy setup.
 
 ## Current State
 
