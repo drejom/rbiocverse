@@ -6,9 +6,10 @@
 // This fixes Safari normal mode caching issues (works in private mode because it starts fresh)
 (async function() {
   try {
-    // Clear localStorage and sessionStorage (Safari aggressive caching fix)
+    // Clear sessionStorage (Safari aggressive caching fix)
+    // Note: DO NOT clear localStorage - it contains VS Code's encrypted secrets (secrets.provider)
+    // which are needed for persistent GitHub/Copilot authentication across page reloads
     try {
-      localStorage.clear();
       sessionStorage.clear();
     } catch(e) { console.log('Storage clear:', e); }
 

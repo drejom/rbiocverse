@@ -56,7 +56,6 @@ Set via Singularity `--env`:
 |----------|-------|---------|
 | `TERM` | `xterm-256color` | Color terminal support |
 | `R_LIBS_SITE` | Cluster-specific path | Shared R library location |
-| `VSCODE_KEYRING_PASS` | `hpc-code-server` | File-based secret storage (no gnome-keyring) |
 
 ### Extension Bootstrap
 

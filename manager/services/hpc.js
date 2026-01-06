@@ -61,6 +61,28 @@ class HpcService {
   }
 
   /**
+   * Get user's default SLURM account
+   * Called once on startup to determine which account to use for fairshare queries
+   * @returns {Promise<string|null>} Default account name or null if not found
+   */
+  async getUserDefaultAccount() {
+    try {
+      const output = await this.sshExec(
+        `sacctmgr show user ${config.hpcUser} format=defaultaccount -nP 2>/dev/null`
+      );
+      const account = output.trim();
+      if (account && account !== '') {
+        log.info('User default account', { cluster: this.clusterName, user: config.hpcUser, account });
+        return account;
+      }
+      return null;
+    } catch (e) {
+      log.warn('Failed to get user default account', { cluster: this.clusterName, error: e.message });
+      return null;
+    }
+  }
+
+  /**
    * Execute SSH command on cluster
    * Supports multi-line commands (heredocs) via stdin
    * @param {string} command - Command to execute
@@ -258,7 +280,6 @@ fi
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       '--env RETICULATE_PYTHON=/usr/local/bin/python3',
-      '--env VSCODE_KEYRING_PASS=hpc-code-server',
       `--env OMP_NUM_THREADS=${cpus}`,
       `--env MKL_NUM_THREADS=${cpus}`,
       `--env OPENBLAS_NUM_THREADS=${cpus}`,
@@ -274,6 +295,9 @@ set -ex
 
 # Setup directories
 mkdir -p ${machineSettingsDir} ${extensionsDir}
+# Create writable /run/user/<uid> directory for VS Code sockets
+mkdir -p $HOME/.vscode-slurm/run/user/$(id -u)
+chmod 700 $HOME/.vscode-slurm/run/user/$(id -u)
 
 # Write Machine settings
 echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json
@@ -288,6 +312,7 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 # Note: serve-web only supports --server-data-dir, not --extensions-dir or --user-data-dir
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
+  -B $HOME/.vscode-slurm/run:/run \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
   code serve-web \\
@@ -296,7 +321,8 @@ exec ${this.cluster.singularityBin} exec \\
     ${tokenArg} \\
     --accept-server-license-terms \\
     --server-base-path /vscode-direct \\
-    --server-data-dir ${dataDir}
+    --server-data-dir ${dataDir} \\
+    --cli-data-dir ${dataDir}/cli
 `;
   }
 
@@ -798,16 +824,28 @@ SLURM_SCRIPT`;
    *   - nodes {{ idle, busy, down, total, percent }} - Node counts by state
    *   - gpus {Object|null} - GPU data by type, with overall percent
    *   - pendingJobs {number} - Jobs in queue
+   *   - runningJobs {number} - Jobs currently running
+   *   - fairshare {number|null} - User's fairshare score (0-1, higher is better)
    *   - lastChecked {number} - Timestamp
    *   - error {string} - Error message if offline
+   *
+   * @param {Object} options - Options
+   * @param {string} options.userAccount - User's default SLURM account for fairshare query
    */
-  async getClusterHealth() {
+  async getClusterHealth(options = {}) {
+    const { userAccount } = options;
+
     // Single SSH call to get all health info
     // %C = CPUs (A/I/O/T = allocated/idle/other/total)
     // %e = free memory per node
     // %m = total memory per node
     // %D = node count
     // %t = state (idle, mix, alloc, down, drain)
+    // Fairshare: user's queue priority (0-1, higher is better)
+    const fairshareCmd = userAccount
+      ? `echo "===FAIRSHARE===" && sshare -u ${config.hpcUser} -A ${userAccount} -h -P -o "FairShare" 2>/dev/null | tail -1 && `
+      : '';
+
     const cmd = `
 echo "===CPUS===" && \
 sinfo -h -o '%C' 2>/dev/null && \
@@ -815,10 +853,13 @@ echo "===NODES===" && \
 sinfo -h -o '%D %t' 2>/dev/null && \
 echo "===MEMORY===" && \
 sinfo -h -N -o '%m %e' 2>/dev/null && \
+echo "===RUNNING===" && \
+squeue -h -t R 2>/dev/null | wc -l && \
 echo "===PENDING===" && \
 squeue -h -t PD 2>/dev/null | wc -l && \
 echo "===GRES===" && \
-sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
+sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none" && \
+${fairshareCmd}echo "done"
 `;
 
     try {
@@ -925,7 +966,13 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
       };
     }
 
-    // Parse pending jobs
+    // Parse running jobs count
+    let runningJobs = 0;
+    if (sections.RUNNING && sections.RUNNING[0]) {
+      runningJobs = parseInt(sections.RUNNING[0], 10) || 0;
+    }
+
+    // Parse pending jobs count
     let pendingJobs = 0;
     if (sections.PENDING && sections.PENDING[0]) {
       pendingJobs = parseInt(sections.PENDING[0], 10) || 0;
@@ -979,13 +1026,24 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none"
       gpus.percent = totalGpus > 0 ? Math.round((busyGpus / totalGpus) * 100) : 0;
     }
 
+    // Parse user's fairshare score (0-1, higher is better queue priority)
+    let fairshare = null;
+    if (sections.FAIRSHARE && sections.FAIRSHARE[0]) {
+      const parsed = parseFloat(sections.FAIRSHARE[0]);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+        fairshare = parsed;
+      }
+    }
+
     return {
       online: true,
       cpus,
       memory,
       nodes,
       gpus,
+      runningJobs,
       pendingJobs,
+      fairshare,
       lastChecked: Date.now(),
     };
   }

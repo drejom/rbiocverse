@@ -3,6 +3,7 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/js/pie-chart.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -380,40 +381,9 @@
       return m + 'm';
     }
 
-    function calcPiePath(percent, cx, cy, radius) {
-      if (percent >= 1) {
-        return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
-      } else if (percent > 0) {
-        const angle = percent * 2 * Math.PI;
-        const endX = cx + radius * Math.sin(angle);
-        const endY = cy - radius * Math.cos(angle);
-        const largeArc = percent > 0.5 ? 1 : 0;
-        return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
-      }
-      return '';
-    }
-
+    // Pie chart functions from shared /js/pie-chart.js (PieChart.*)
     function renderTimePie(remaining, total) {
-      const percent = total > 0 ? Math.max(0, remaining / total) : 1;
-      const radius = 14;
-      const cx = 18, cy = 18;
-
-      let colorClass = '';
-      if (remaining < 600) colorClass = 'critical';
-      else if (remaining < 1800) colorClass = 'warning';
-
-      const piePath = calcPiePath(percent, cx, cy, radius);
-
-      return `
-        <div class="time-pie">
-          <svg viewBox="0 0 36 36">
-            <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
-            <path class="time-pie-fill ${colorClass}" id="pie-fill" d="${piePath}"
-              data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
-          </svg>
-          <span class="time-pie-text ${colorClass}" id="countdown-value">${formatTime(remaining)}</span>
-        </div>
-      `;
+      return PieChart.renderPieChart(remaining, total, 'menu');
     }
 
     function render() {
@@ -559,26 +529,10 @@
         const remaining = countdown;
         const total = walltime || remaining;
 
-        let colorClass = '';
-        if (remaining < 600) colorClass = 'critical';
-        else if (remaining < 1800) colorClass = 'warning';
+        // Update pie chart using shared module
+        PieChart.updatePieChart('menu', remaining, total);
 
-        const pieEl = document.getElementById('pie-fill');
-        if (pieEl) {
-          const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-          const cx = parseFloat(pieEl.dataset.cx) || 18;
-          const cy = parseFloat(pieEl.dataset.cy) || 18;
-          const radius = parseFloat(pieEl.dataset.radius) || 14;
-          pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
-          pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
-        }
-
-        const valueEl = document.getElementById('countdown-value');
-        if (valueEl) {
-          valueEl.textContent = formatTime(remaining);
-          valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
-        }
-
+        // Update toggle button appearance
         toggle.className = open ? 'open' : '';
         if (countdown < 600) toggle.classList.add('critical');
         else if (countdown < 1800) toggle.classList.add('warning');

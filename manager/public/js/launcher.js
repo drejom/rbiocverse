@@ -102,38 +102,11 @@ function formatTime(seconds) {
 
 /**
  * Generate SVG pie chart for time remaining
+ * Uses shared PieChart module from pie-chart.js
  */
 function renderTimePie(remaining, total, hpc, ide) {
-  const percent = total > 0 ? Math.max(0, remaining / total) : 1;
-  const radius = 14;
-  const cx = 18, cy = 18;
   const key = getSessionKey(hpc, ide);
-
-  let colorClass = '';
-  if (remaining < 600) colorClass = 'critical';
-  else if (remaining < 1800) colorClass = 'warning';
-
-  let piePath = '';
-  if (percent >= 1) {
-    piePath = `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
-  } else if (percent > 0) {
-    const angle = percent * 2 * Math.PI;
-    const endX = cx + radius * Math.sin(angle);
-    const endY = cy - radius * Math.cos(angle);
-    const largeArc = percent > 0.5 ? 1 : 0;
-    piePath = `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
-  }
-
-  return `
-    <div class="time-pie time-pie-sm">
-      <svg viewBox="0 0 36 36">
-        <circle class="time-pie-bg" cx="${cx}" cy="${cy}" r="${radius}"/>
-        <path class="time-pie-fill ${colorClass}" id="${key}-pie-fill" d="${piePath}"
-          data-cx="${cx}" data-cy="${cy}" data-radius="${radius}"/>
-      </svg>
-      <span class="time-pie-text ${colorClass}" id="${key}-countdown-value">${formatTime(remaining)}</span>
-    </div>
-  `;
+  return PieChart.renderPieChart(remaining, total, key, { sizeClass: 'time-pie-sm' });
 }
 
 /**
@@ -522,6 +495,11 @@ function renderHealthBars(hpc) {
     bars.push(renderSingleBar('server', nodePercent, 'Nodes', nodeDetail));
   }
 
+  // Fairshare bar (rightmost) - user's queue priority (1.0 = best, 0 = worst)
+  if (typeof health.fairshare === 'number') {
+    bars.push(renderFairshareBar(health.fairshare));
+  }
+
   return `<div class="health-indicators">${bars.join('')}</div>`;
 }
 
@@ -559,6 +537,39 @@ function renderSingleBar(icon, percent, label, detail) {
       <i data-lucide="${icon}" class="icon-xs"></i>
       <div class="health-bar">
         <div class="health-bar-fill ${level}" style="width: ${safePercent}%"></div>
+      </div>
+    </span>
+  `;
+}
+
+/**
+ * Render fairshare indicator bar
+ * Shows user's queue priority: 1.0 = full green (best), 0 = empty/red (worst)
+ * @param {number} fairshare - Fairshare score (0-1)
+ * @returns {string} HTML for fairshare bar
+ */
+function renderFairshareBar(fairshare) {
+  // Convert 0-1 to 0-100 percent
+  let percent = Math.round(fairshare * 100);
+  if (!Number.isFinite(percent)) percent = 0;
+  percent = Math.min(100, Math.max(0, percent));
+
+  // Color: high fairshare = green (good priority), low = red (bad priority)
+  // This is INVERTED from usage bars (high usage = bad)
+  let level = 'low';  // green - good priority
+  if (percent < 30) {
+    level = 'high';  // red - poor priority
+  } else if (percent < 60) {
+    level = 'medium';  // yellow - moderate priority
+  }
+
+  const tooltip = `Priority: ${percent}% fairshare (higher is better)`;
+
+  return `
+    <span class="health-indicator" title="${tooltip}">
+      <i data-lucide="gauge" class="icon-xs"></i>
+      <div class="health-bar">
+        <div class="health-bar-fill ${level}" style="width: ${percent}%"></div>
       </div>
     </span>
   `;
@@ -774,23 +785,8 @@ function updateCacheIndicator() {
 }
 
 /**
- * Calculate SVG path for pie wedge
- */
-function calcPiePath(percent, cx, cy, radius) {
-  if (percent >= 1) {
-    return `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.001} ${cy - radius} Z`;
-  } else if (percent > 0) {
-    const angle = percent * 2 * Math.PI;
-    const endX = cx + radius * Math.sin(angle);
-    const endY = cy - radius * Math.cos(angle);
-    const largeArc = percent > 0.5 ? 1 : 0;
-    return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
-  }
-  return '';
-}
-
-/**
  * Client-side countdown tick for all active sessions
+ * Uses shared PieChart module for updates
  */
 function tickCountdowns() {
   Object.keys(countdowns).forEach(key => {
@@ -798,26 +794,7 @@ function tickCountdowns() {
       countdowns[key]--;
       const remaining = countdowns[key];
       const total = walltimes[key] || remaining;
-
-      let colorClass = '';
-      if (remaining < 600) colorClass = 'critical';
-      else if (remaining < 1800) colorClass = 'warning';
-
-      const pieEl = document.getElementById(key + '-pie-fill');
-      if (pieEl) {
-        const percent = total > 0 ? Math.max(0, remaining / total) : 0;
-        const cx = parseFloat(pieEl.dataset.cx) || 18;
-        const cy = parseFloat(pieEl.dataset.cy) || 18;
-        const radius = parseFloat(pieEl.dataset.radius) || 14;
-        pieEl.setAttribute('d', calcPiePath(percent, cx, cy, radius));
-        pieEl.className.baseVal = 'time-pie-fill' + (colorClass ? ' ' + colorClass : '');
-      }
-
-      const valueEl = document.getElementById(key + '-countdown-value');
-      if (valueEl) {
-        valueEl.textContent = formatTime(remaining);
-        valueEl.className = 'time-pie-text' + (colorClass ? ' ' + colorClass : '');
-      }
+      PieChart.updatePieChart(key, remaining, total);
     }
   });
 }
