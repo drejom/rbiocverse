@@ -171,6 +171,11 @@ ENV R_LIBS=/usr/local/lib/R/site-library
 # VSCode R session watcher
 RUN echo 'if (interactive() && Sys.getenv("TERM_PROGRAM") == "vscode") source(file.path(Sys.getenv("HOME"), ".vscode-R", "init.R"))' >> "${R_HOME}/etc/Rprofile.site"
 
+# Shiny default port - configurable via SHINY_PORT env var for multi-user support
+# When two users on same node both use Shiny, manager can assign different ports
+# shiny.launch.browser=FALSE prevents auto-browser (use HPC menu button instead)
+RUN echo 'if (nzchar(Sys.getenv("SHINY_PORT"))) options(shiny.port = as.integer(Sys.getenv("SHINY_PORT")), shiny.host = "0.0.0.0", shiny.launch.browser = FALSE)' >> "${R_HOME}/etc/Rprofile.site"
+
 # renv cache directory (shared across projects)
 # NOTE: Use /usr/local/share, not /opt (Apollo bind mounts /opt from host)
 RUN mkdir -p /usr/local/share/renv/cache && chmod 777 /usr/local/share/renv/cache
