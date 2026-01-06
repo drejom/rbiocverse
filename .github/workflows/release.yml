@@ -78,41 +78,38 @@ jobs:
 
           # Get commits between main and dev for changelog
           CHANGELOG=$(git log origin/main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
+          RELEASE_NOTES="${{ inputs.release_notes || 'See changes above.' }}"
+          VERSION="${{ inputs.version }}"
 
-          # Create PR body
-          PR_BODY="## Release v${{ inputs.version }}
+          # Create PR body file to handle special characters properly
+          {
+            echo "## Release v${VERSION}"
+            echo ""
+            echo "### Changes"
+            echo "$CHANGELOG"
+            echo ""
+            echo "### Release Notes"
+            echo "$RELEASE_NOTES"
+            echo ""
+            echo "---"
+            echo "*This PR was automatically created by the release workflow.*"
+          } > /tmp/pr-body.md
 
-          ### Changes
-          ${CHANGELOG}
-
-          ### Release Notes
-          ${{ inputs.release_notes || 'See changes above.' }}
-
-          ---
-          *This PR was automatically created by the release workflow.*"
+          echo "PR body:"
+          cat /tmp/pr-body.md
 
           # Create PR from dev to main
           echo "Creating PR from dev to main..."
-          PR_OUTPUT=$(gh pr create \
+          gh pr create \
             --base main \
             --head dev \
-            --title "Release v${{ inputs.version }}" \
-            --body "${PR_BODY}" 2>&1)
-          PR_EXIT_CODE=$?
+            --title "Release v${VERSION}" \
+            --body-file /tmp/pr-body.md
 
-          echo "PR create output: $PR_OUTPUT"
-
-          if [ $PR_EXIT_CODE -ne 0 ]; then
-            echo "Error: Failed to create PR"
-            echo "$PR_OUTPUT"
-            exit 1
-          fi
-
-          # Extract PR number from URL
+          # Extract PR number
           PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
           echo "Created PR #$PR_NUMBER"
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "pr_url=$PR_OUTPUT" >> $GITHUB_OUTPUT
 
       - name: Merge PR
         env:
