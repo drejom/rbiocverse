@@ -4,8 +4,9 @@
  */
 
 // Parse additional ports from comma-separated string (e.g., "5500,3000,5173")
-// Returns default [5500] if env var not set, empty array if set to empty string
-function parseAdditionalPorts(envValue, defaultValue = '5500') {
+// Returns default [5500,3838] if env var not set, empty array if set to empty string
+// Default includes Live Server (5500) and Shiny (3838)
+function parseAdditionalPorts(envValue, defaultValue = '5500,3838') {
   // If env var is explicitly set (even to empty string), use it
   if (envValue !== undefined) {
     if (envValue === '') return [];
