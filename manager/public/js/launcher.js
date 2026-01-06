@@ -57,6 +57,9 @@ let formValues = Object.fromEntries(CLUSTER_NAMES.map(c => [c, null]));
 // Partition limits from server (static config)
 let partitionLimits = {};
 
+// Default partition per cluster from server (e.g., gemini: 'compute', apollo: 'fast,all')
+let defaultPartitions = {};
+
 // Cluster status keyed by hpc (contains ides)
 // Initialized dynamically from CLUSTER_NAMES
 let clusterStatus = Object.fromEntries(CLUSTER_NAMES.map(c => [c, {}]));
@@ -133,19 +136,6 @@ function restoreFormValues(hpc) {
 }
 
 /**
- * Get form values for a cluster (saved or defaults)
- * @param {string} hpc - Cluster name
- * @returns {Object} { cpus, mem, time }
- */
-function getFormValues(hpc) {
-  return formValues[hpc] || {
-    cpus: defaultConfig.cpus,
-    mem: defaultConfig.mem,
-    time: defaultConfig.time,
-  };
-}
-
-/**
  * Get effective partition limits for a cluster based on GPU selection
  * @param {string} hpc - Cluster name
  * @returns {Object|null} { maxCpus, maxMemMB, maxTime } or null if no limits
@@ -155,13 +145,13 @@ function getEffectiveLimits(hpc) {
   const clusterLimits = partitionLimits[hpc];
   if (!clusterLimits) return null;
 
-  // Get partition based on GPU selection
+  // Get partition based on GPU selection or use server-provided default
   let partition;
   if (gpu && gpuConfig[hpc]?.[gpu]) {
     partition = gpuConfig[hpc][gpu].partition;
   } else {
-    // Default partition per cluster
-    partition = hpc === 'gemini' ? 'compute' : 'fast,all';
+    // Use default partition from server config (avoids hardcoding cluster names)
+    partition = defaultPartitions[hpc] || 'compute';
   }
   return clusterLimits[partition] || null;
 }
@@ -176,6 +166,28 @@ function parseMemToMB(mem) {
   if (!match) return 0;
   const [, value, unit] = match;
   return unit.toLowerCase() === 'g' ? parseInt(value) * 1024 : parseInt(value);
+}
+
+// Maximum CPUs allowed (matches server-side validation)
+const MAX_CPUS = 128;
+
+/**
+ * Parse time string to seconds (for validation)
+ * @param {string} time - Time in format "HH:MM:SS" or "D-HH:MM:SS"
+ * @returns {number} Time in seconds, or 0 if invalid
+ */
+function parseTimeToSeconds(time) {
+  const dayMatch = time.match(/^(\d+)-(\d+):(\d+):(\d+)$/);
+  if (dayMatch) {
+    const [, days, hours, mins, secs] = dayMatch.map(Number);
+    return days * 86400 + hours * 3600 + mins * 60 + secs;
+  }
+  const timeMatch = time.match(/^(\d+):(\d+):(\d+)$/);
+  if (timeMatch) {
+    const [, hours, mins, secs] = timeMatch.map(Number);
+    return hours * 3600 + mins * 60 + secs;
+  }
+  return 0;
 }
 
 /**
@@ -195,10 +207,10 @@ function validateForm(hpc) {
 
   const errors = [];
 
-  // CPU validation
+  // CPU validation (absolute max + partition limit)
   const cpuVal = parseInt(cpus);
-  if (isNaN(cpuVal) || cpuVal < 1) {
-    errors.push('CPUs must be at least 1');
+  if (isNaN(cpuVal) || cpuVal < 1 || cpuVal > MAX_CPUS) {
+    errors.push(`CPUs must be 1-${MAX_CPUS}`);
   } else if (limits && cpuVal > limits.maxCpus) {
     errors.push(`CPUs: max ${limits.maxCpus} for this partition`);
   }
@@ -215,9 +227,15 @@ function validateForm(hpc) {
     }
   }
 
-  // Time validation
+  // Time validation (format + partition limit)
   if (!/^(\d{1,2}-)?\d{1,2}:\d{2}:\d{2}$/.test(time)) {
     errors.push('Time: use format like "12:00:00" or "1-00:00:00"');
+  } else if (limits) {
+    const timeSecs = parseTimeToSeconds(time);
+    const maxTimeSecs = parseTimeToSeconds(limits.maxTime);
+    if (timeSecs > maxTimeSecs) {
+      errors.push(`Time: max ${limits.maxTime} for this partition`);
+    }
   }
 
   return { valid: errors.length === 0, errors };
@@ -868,9 +886,12 @@ async function fetchStatus(forceRefresh = false) {
       gpuConfig = data.gpuConfig;
     }
 
-    // Store partition limits (static config - server only sends on first request)
+    // Store partition limits and default partitions (static config - server only sends on first request)
     if (data.partitionLimits) {
       partitionLimits = data.partitionLimits;
+    }
+    if (data.defaultPartitions) {
+      defaultPartitions = data.defaultPartitions;
     }
 
     // Store cluster health data
