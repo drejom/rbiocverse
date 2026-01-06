@@ -164,25 +164,35 @@ async function fetchClusterStatus(stateManager) {
  * @returns {express.Router} Configured router
  */
 function createApiRouter(stateManager) {
-  // Helper: get session key
-  function getSessionKey(hpc, ide) {
-    return `${hpc}-${ide}`;
+  // Helper: build session key (user-hpc-ide format)
+  function buildSessionKey(user, hpc, ide) {
+    const effectiveUser = user || config.hpcUser;
+    return `${effectiveUser}-${hpc}-${ide}`;
   }
 
-  // Helper: parse session key
+  // Helper: parse session key (user-hpc-ide format)
   function parseSessionKey(key) {
-    const [hpc, ide] = key.split('-');
-    return { hpc, ide };
+    const parts = key.split('-');
+    if (parts.length >= 3) {
+      const ide = parts.pop();
+      const hpc = parts.pop();
+      const user = parts.join('-');
+      return { user, hpc, ide };
+    }
+    return null;
   }
 
   // Helper: get sessions info for status endpoint (grouped by hpc then ide)
-  function getSessionsInfo() {
+  // For single-user mode, shows all sessions for config.hpcUser
+  function getSessionsInfo(user) {
     const sessions = {};
-    const allSessions = stateManager.getAllSessions();
+    const allSessions = stateManager.getSessionsForUser(user);
     for (const [key, session] of Object.entries(allSessions)) {
       if (!session) continue;
 
-      const { hpc, ide } = parseSessionKey(key);
+      const parsed = parseSessionKey(key);
+      if (!parsed) continue;
+      const { hpc, ide } = parsed;
       if (!sessions[hpc]) sessions[hpc] = {};
 
       sessions[hpc][ide] = {
@@ -212,6 +222,8 @@ function createApiRouter(stateManager) {
 
   // Check dev server ports (Live Server 5500, Shiny 3838) - single SSH call
   router.get('/dev-servers', async (req, res) => {
+    const user = getRequestUser(req);
+
     // Only check if there's an active VS Code session
     const activeSession = stateManager.getActiveSession();
     if (!activeSession || activeSession.ide !== 'vscode') {
@@ -219,7 +231,7 @@ function createApiRouter(stateManager) {
     }
 
     const { hpc } = activeSession;
-    const session = stateManager.getSession(hpc, 'vscode');
+    const session = stateManager.getSession(user, hpc, 'vscode');
 
     if (!session || session.status !== 'running' || !session.node) {
       return res.json({ liveServer: false, shiny: false });
@@ -251,13 +263,15 @@ function createApiRouter(stateManager) {
   // Returns cached state from StateManager background polling
   // No SSH calls - instant response from cached data
   router.get('/status', async (req, res) => {
+    const user = getRequestUser(req);
+
     // Backend polling keeps state fresh automatically
     // Frontend can poll frequently since this is just reading from memory
     const pollingInfo = stateManager.getPollingInfo();
 
     res.json({
-      sessions: getSessionsInfo(),
-      activeSession: stateManager.getActiveSession(), // { hpc, ide } or null
+      sessions: getSessionsInfo(user),
+      activeSession: stateManager.getActiveSession(), // { user, hpc, ide } or null
       ides: Object.keys(ides), // Available IDE types
       config: {
         defaultHpc: config.defaultHpc,
@@ -314,10 +328,11 @@ function createApiRouter(stateManager) {
 
       // Merge session data (releaseVersion, gpu) with SLURM job data
       // SLURM doesn't track releaseVersion/gpu, so we get it from stateManager
+      const user = getRequestUser(req);
       function enrichWithSessionData(clusterData, hpc) {
         const enriched = { ...clusterData };
         for (const [ide, jobData] of Object.entries(enriched)) {
-          const session = stateManager.getSession(hpc, ide);
+          const session = stateManager.getSession(user, hpc, ide);
           if (session) {
             enriched[ide] = {
               ...jobData,
@@ -359,6 +374,7 @@ function createApiRouter(stateManager) {
 
   // Launch session for a specific IDE
   router.post('/launch', async (req, res) => {
+    const user = getRequestUser(req);
     const {
       hpc = config.defaultHpc,
       ide = config.defaultIde,
@@ -372,7 +388,7 @@ function createApiRouter(stateManager) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
-    const sessionKey = getSessionKey(hpc, ide);
+    const sessionKey = buildSessionKey(user, hpc, ide);
     const lockName = `launch:${sessionKey}`;
 
     // Acquire lock to prevent concurrent launches
@@ -384,7 +400,7 @@ function createApiRouter(stateManager) {
 
     try {
       // Get or create session
-      const session = await stateManager.getOrCreateSession(hpc, ide);
+      const session = await stateManager.getOrCreateSession(user, hpc, ide);
 
       // If already running, just switch to this session (reconnect)
       if (session.status === 'running') {
@@ -404,7 +420,7 @@ function createApiRouter(stateManager) {
           }
         }
 
-        await stateManager.setActiveSession(hpc, ide);
+        await stateManager.setActiveSession(user, hpc, ide);
         stateManager.releaseLock(lockName);
         return res.json({ status: 'connected', hpc, ide, jobId: session.jobId, node: session.node });
       }
@@ -424,7 +440,7 @@ function createApiRouter(stateManager) {
         return res.status(400).json({ error: e.message });
       }
 
-      await stateManager.updateSession(hpc, ide, {
+      await stateManager.updateSession(user, hpc, ide, {
         status: 'starting',
         error: null,
         cpus: cpus,
@@ -467,13 +483,13 @@ function createApiRouter(stateManager) {
       const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
-        const currentSession = stateManager.getSession(hpc, ide);
+        const currentSession = stateManager.getSession(user, hpc, ide);
         if (currentSession?.status === 'running') {
-          stateManager.updateSession(hpc, ide, { status: 'idle', tunnelProcess: null });
+          stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
         }
       });
 
-      await stateManager.updateSession(hpc, ide, {
+      await stateManager.updateSession(user, hpc, ide, {
         status: 'running',
         jobId,
         token,
@@ -481,7 +497,7 @@ function createApiRouter(stateManager) {
         tunnelProcess,
         startedAt: new Date().toISOString(),
       });
-      await stateManager.setActiveSession(hpc, ide);
+      await stateManager.setActiveSession(user, hpc, ide);
 
       // Invalidate cache for this cluster and fetch fresh status after successful launch
       // This ensures ALL users (multi-user environment) see the new job on their next poll
@@ -504,9 +520,9 @@ function createApiRouter(stateManager) {
 
     } catch (error) {
       log.error('Launch error', { hpc, ide, error: error.message });
-      const session = stateManager.getSession(hpc, ide);
+      const session = stateManager.getSession(user, hpc, ide);
       if (session) {
-        await stateManager.updateSession(hpc, ide, {
+        await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
           error: error.message,
         });
@@ -523,6 +539,7 @@ function createApiRouter(stateManager) {
   // Launch session with SSE progress streaming
   // Returns real-time progress events during job submission and startup
   router.get('/launch/:hpc/:ide/stream', async (req, res) => {
+    const user = getRequestUser(req);
     const { hpc, ide } = req.params;
     const cpus = req.query.cpus || config.defaultCpus;
     const mem = req.query.mem || config.defaultMem;
@@ -599,7 +616,7 @@ function createApiRouter(stateManager) {
       res.end();
     };
 
-    const sessionKey = getSessionKey(hpc, ide);
+    const sessionKey = buildSessionKey(user, hpc, ide);
     const lockName = `launch:${sessionKey}`;
 
     // Acquire lock to prevent concurrent launches
@@ -611,7 +628,7 @@ function createApiRouter(stateManager) {
 
     try {
       // Get or create session
-      const session = await stateManager.getOrCreateSession(hpc, ide);
+      const session = await stateManager.getOrCreateSession(user, hpc, ide);
 
       // If already running, just switch to this session (reconnect tunnel)
       if (session.status === 'running') {
@@ -632,7 +649,7 @@ function createApiRouter(stateManager) {
           }
         }
 
-        await stateManager.setActiveSession(hpc, ide);
+        await stateManager.setActiveSession(user, hpc, ide);
         stateManager.releaseLock(lockName);
 
         const ideConfig = ides[ide];
@@ -661,7 +678,7 @@ function createApiRouter(stateManager) {
         return sendError(e.message);
       }
 
-      await stateManager.updateSession(hpc, ide, {
+      await stateManager.updateSession(user, hpc, ide, {
         status: 'starting',
         error: null,
         cpus: cpus,
@@ -690,7 +707,7 @@ function createApiRouter(stateManager) {
         });
 
         if (waitResult.pending) {
-          await stateManager.updateSession(hpc, ide, { status: 'pending', jobId: currentJobId });
+          await stateManager.updateSession(user, hpc, ide, { status: 'pending', jobId: currentJobId });
           stateManager.releaseLock(lockName);
 
           res.write(`data: ${JSON.stringify({
@@ -760,13 +777,13 @@ function createApiRouter(stateManager) {
       const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
-        const currentSession = stateManager.getSession(hpc, ide);
+        const currentSession = stateManager.getSession(user, hpc, ide);
         if (currentSession?.status === 'running') {
-          stateManager.updateSession(hpc, ide, { status: 'idle', tunnelProcess: null });
+          stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
         }
       });
 
-      await stateManager.updateSession(hpc, ide, {
+      await stateManager.updateSession(user, hpc, ide, {
         status: 'running',
         jobId,
         token,
@@ -776,7 +793,7 @@ function createApiRouter(stateManager) {
         tunnelProcess,
         startedAt: new Date().toISOString(),
       });
-      await stateManager.setActiveSession(hpc, ide);
+      await stateManager.setActiveSession(user, hpc, ide);
 
       // Invalidate cache for this cluster
       invalidateStatusCache(hpc);
@@ -793,9 +810,9 @@ function createApiRouter(stateManager) {
 
     } catch (error) {
       log.error('Launch stream error', { hpc, ide, error: error.message });
-      const session = stateManager.getSession(hpc, ide);
+      const session = stateManager.getSession(user, hpc, ide);
       if (session) {
-        await stateManager.updateSession(hpc, ide, {
+        await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
           error: error.message,
         });
@@ -808,6 +825,7 @@ function createApiRouter(stateManager) {
 
   // Switch active session (connect to different HPC/IDE)
   router.post('/switch/:hpc/:ide', async (req, res) => {
+    const user = getRequestUser(req);
     const { hpc, ide } = req.params;
 
     // Validate IDE type
@@ -815,7 +833,7 @@ function createApiRouter(stateManager) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
-    const session = stateManager.getSession(hpc, ide);
+    const session = stateManager.getSession(user, hpc, ide);
 
     if (!session || session.status !== 'running') {
       return res.status(400).json({ error: `No running ${ide} session on ${hpc}` });
@@ -841,7 +859,7 @@ function createApiRouter(stateManager) {
         });
       }
 
-      await stateManager.setActiveSession(hpc, ide);
+      await stateManager.setActiveSession(user, hpc, ide);
       log.api(`Switched to ${hpc} ${ide}`, { hpc, ide });
       res.json({ status: 'switched', hpc, ide });
     } catch (error) {
@@ -853,6 +871,7 @@ function createApiRouter(stateManager) {
   // Stop session for specific HPC/IDE
   // When cancelJob=true, also refreshes cluster status cache so UI sees freed slot
   router.post('/stop/:hpc/:ide', async (req, res) => {
+    const user = getRequestUser(req);
     const { cancelJob = false } = req.body;
     const { hpc, ide } = req.params;
 
@@ -861,7 +880,7 @@ function createApiRouter(stateManager) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
-    const session = stateManager.getSession(hpc, ide);
+    const session = stateManager.getSession(user, hpc, ide);
 
     // Stop tunnel if exists
     tunnelService.stop(hpc, ide);
@@ -893,7 +912,7 @@ function createApiRouter(stateManager) {
     }
 
     // Clear session and active session if needed
-    await stateManager.clearSession(hpc, ide);
+    await stateManager.clearSession(user, hpc, ide);
 
     // If we cancelled a job, invalidate cache for this cluster and fetch fresh status
     // This ensures ALL users (multi-user environment) immediately see the freed slot
@@ -920,6 +939,7 @@ function createApiRouter(stateManager) {
   // Stop session with SSE progress streaming (indeterminate progress)
   // Due to high variance in cancel times (CV 74%), uses indeterminate animation
   router.get('/stop/:hpc/:ide/stream', async (req, res) => {
+    const user = getRequestUser(req);
     const { hpc, ide } = req.params;
 
     // Validate IDE type
@@ -952,7 +972,7 @@ function createApiRouter(stateManager) {
     };
 
     try {
-      const session = stateManager.getSession(hpc, ide);
+      const session = stateManager.getSession(user, hpc, ide);
 
       sendProgress('cancelling', 'Stopping...');
 
@@ -979,7 +999,7 @@ function createApiRouter(stateManager) {
       }
 
       // Clear session and active session if needed
-      await stateManager.clearSession(hpc, ide);
+      await stateManager.clearSession(user, hpc, ide);
 
       // Invalidate cache and fetch fresh status
       if (jobCancelled) {

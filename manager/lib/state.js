@@ -31,13 +31,14 @@ function buildSessionKey(user, hpc, ide) {
 
 /**
  * Parse session key into components
- * @param {string} sessionKey - Session key (user-hpc-ide)
+ * Format: user-hpc-ide (e.g., domeally-gemini-vscode)
+ * @param {string} sessionKey - Session key
  * @returns {{user: string, hpc: string, ide: string}|null} Parsed components or null
  */
 function parseSessionKey(sessionKey) {
   const parts = sessionKey.split('-');
   if (parts.length >= 3) {
-    // Handle case where username might contain hyphens
+    // user-hpc-ide format (user may contain hyphens)
     // IDE is always last, HPC is second-to-last, user is everything before
     const ide = parts.pop();
     const hpc = parts.pop();
@@ -308,12 +309,16 @@ class StateManager {
   async reconcile() {
     for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
       if (session?.status === 'running' && session.jobId) {
-        // Extract hpc from composite key (e.g., "gemini-vscode" -> "gemini")
-        const [hpc] = sessionKey.split('-');
+        const parsed = parseSessionKey(sessionKey);
+        if (!parsed) {
+          log.warn('Failed to parse session key during reconcile', { sessionKey });
+          continue;
+        }
+        const { user, hpc, ide } = parsed;
         const exists = await this.checkJobExists(hpc, session.jobId);
         if (!exists) {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
-          this._clearActiveSessionIfMatches(hpc, session.ide);
+          this._clearActiveSessionIfMatches(user, hpc, ide);
           delete this.state.sessions[sessionKey];
         }
       }
@@ -511,15 +516,11 @@ class StateManager {
    * @returns {Object} Active sessions for user
    */
   getActiveSessionsForUser(user) {
-    const effectiveUser = user || config.hpcUser;
+    const userSessions = this.getSessionsForUser(user);
     return Object.fromEntries(
-      Object.entries(this.state.sessions).filter(([key, session]) => {
-        const parsed = parseSessionKey(key);
-        return parsed &&
-               parsed.user === effectiveUser &&
-               session &&
-               (session.status === 'running' || session.status === 'pending');
-      })
+      Object.entries(userSessions).filter(
+        ([, session]) => session && (session.status === 'running' || session.status === 'pending')
+      )
     );
   }
 
@@ -587,18 +588,18 @@ class StateManager {
   // ============================================
 
   /**
-   * Get user's SLURM default account (cached)
-   * Fetches from cluster if not cached
+   * Get user's SLURM default account from cache
+   * Note: This only reads from cache. Use fetchUserAccount() to populate cache.
    * @param {string} user - Username (null for default/single-user mode)
-   * @returns {Promise<string|null>} Account name or null
+   * @returns {string|null} Account name or null if not cached
    */
-  async getUserAccount(user) {
+  getUserAccount(user) {
     const effectiveUser = user || config.hpcUser;
     const cached = this.userAccounts.get(effectiveUser);
     if (cached) {
       return cached.account;
     }
-    return null;  // Not fetched yet - will be fetched by fetchUserAccount
+    return null;  // Not fetched yet - use fetchUserAccount() to populate
   }
 
   /**
@@ -792,7 +793,12 @@ class StateManager {
       if (!session || !session.jobId) continue;
       if (session.status !== 'running' && session.status !== 'pending') continue;
 
-      const [hpc, ide] = sessionKey.split('-');
+      const parsed = parseSessionKey(sessionKey);
+      if (!parsed) {
+        log.warn('Failed to parse session key during refresh', { sessionKey });
+        continue;
+      }
+      const { user, hpc, ide } = parsed;
       const clusterJobs = jobsByCluster[hpc] || {};
       const jobInfo = clusterJobs[ide];
 
@@ -801,7 +807,7 @@ class StateManager {
       if (!jobInfo || jobInfo.jobId !== session.jobId) {
         // Job no longer exists or is a different job
         log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
-        this._clearActiveSessionIfMatches(hpc, ide);
+        this._clearActiveSessionIfMatches(user, hpc, ide);
         this.state.sessions[sessionKey] = null;
         significantChange = true;
         continue;
@@ -959,7 +965,7 @@ class StateManager {
 
     // Fetch health from all clusters in parallel
     // Pass userAccount for fairshare query (use current user's cached account)
-    const userAccount = await this.getUserAccount(null);  // null = config.hpcUser
+    const userAccount = this.getUserAccount(null);  // null = config.hpcUser
     const healthPromises = clusterNames.map(async (hpc) => {
       try {
         const hpcService = this.hpcServiceFactory(hpc);
