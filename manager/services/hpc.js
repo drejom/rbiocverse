@@ -321,8 +321,7 @@ exec ${this.cluster.singularityBin} exec \\
     ${tokenArg} \\
     --accept-server-license-terms \\
     --server-base-path /vscode-direct \\
-    --server-data-dir ${dataDir} \\
-    --password-store=basic
+    --server-data-dir ${dataDir}
 `;
   }
 
