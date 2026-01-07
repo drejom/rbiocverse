@@ -658,26 +658,28 @@ class StateManager {
     // Start job polling immediately
     this.scheduleJobPoll();
 
-    // Start health polling - check if we have fresh cached data first
+    // Start health polling - check if ALL clusters have fresh cached data
     const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
-    const hasFreshHealth = this.state.clusterHealth &&
-      Object.values(this.state.clusterHealth).some(h =>
-        h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < INTERVAL_MS
-      );
+    const clusterNames = Object.keys(clusters);
+    const allClustersHaveFreshHealth = clusterNames.length > 0 &&
+      clusterNames.every(hpc => {
+        const h = this.state.clusterHealth?.[hpc];
+        return h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < INTERVAL_MS;
+      });
 
-    if (hasFreshHealth) {
-      log.state('Using cached cluster health data (< 30 min old)');
-      // Schedule next health poll after remaining TTL
+    if (allClustersHaveFreshHealth) {
+      log.state('Using cached cluster health data (all clusters < 30 min old)');
+      // Schedule next health poll after remaining TTL of oldest cluster
       const oldestCheck = Math.min(
-        ...Object.values(this.state.clusterHealth)
-          .filter(h => h?.current?.lastChecked)
-          .map(h => h.current.lastChecked)
+        ...clusterNames
+          .map(hpc => this.state.clusterHealth[hpc]?.current?.lastChecked)
+          .filter(ts => ts)
       );
       const elapsed = Date.now() - oldestCheck;
       const remaining = Math.max(INTERVAL_MS - elapsed, 1000);
       this.healthPollTimer = setTimeout(() => this.healthPoll(), remaining);
     } else {
-      // Fetch cluster health immediately on startup
+      // Fetch cluster health immediately - at least one cluster needs refresh
       this.healthPoll();
     }
   }
