@@ -329,18 +329,17 @@ function createApiRouter(stateManager) {
 
       // Merge session data (releaseVersion, gpu) with SLURM job data
       // SLURM doesn't track releaseVersion/gpu, so we get it from stateManager
+      // If no session exists (e.g., server restart), these will be null
       const user = getRequestUser(req);
       function enrichWithSessionData(clusterData, hpc) {
         const enriched = { ...clusterData };
         for (const [ide, jobData] of Object.entries(enriched)) {
           const session = stateManager.getSession(user, hpc, ide);
-          if (session) {
-            enriched[ide] = {
-              ...jobData,
-              releaseVersion: session.releaseVersion || null,
-              gpu: session.gpu || null,
-            };
-          }
+          enriched[ide] = {
+            ...jobData,
+            releaseVersion: session?.releaseVersion || null,
+            gpu: session?.gpu || null,
+          };
         }
         return enriched;
       }
@@ -702,11 +701,18 @@ function createApiRouter(stateManager) {
 
       // Use local variables to collect job data (avoid mutating session directly)
       let jobId, token, node;
-      const jobReleaseVersion = releaseVersion;
-      const jobGpu = gpu || null;
+      let jobReleaseVersion = releaseVersion;
+      let jobGpu = gpu || null;
 
       // Check for existing job for this IDE
       const jobInfo = await hpcService.getJobInfo(ide);
+
+      // For existing jobs, preserve session's releaseVersion and gpu
+      // (SLURM doesn't track these, so we rely on session state)
+      if (jobInfo && session) {
+        jobReleaseVersion = session.releaseVersion || releaseVersion;
+        jobGpu = session.gpu || gpu || null;
+      }
 
       // Helper to wait for node assignment (avoids duplication)
       const handleWaitForNode = async (currentJobId) => {
