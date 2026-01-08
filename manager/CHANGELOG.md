@@ -2,6 +2,30 @@
 
 All notable changes to the HPC Code Server Manager.
 
+## [0.0.4] - 2026-01-08
+
+### Added
+
+- **React UI Migration** - Launcher rebuilt with React + Vite for improved maintainability
+- **24hr Trend Sparklines** - Health indicators now show usage trends over past 24 hours
+- **GPU Queue Health Display** - Selecting A100/V100 shows GPU-specific utilization stats
+- **Per-partition Health Stats** - CPU/memory stats update based on selected GPU partition
+- **Stale Session Detection** - Verify SLURM job exists before reconnecting to prevent failed tunnels
+- **Shiny Server Support** - Port 3838 passed through for Shiny apps in RStudio/VS Code
+
+### Fixed
+
+- **Session Reconnection** - Preserve releaseVersion and GPU selection on reconnect to existing jobs
+- **Cluster Health Polling** - Poll health data when ANY cluster has stale data, not just first
+- **GPU Icons** - Fixed GPU icon rendering and layout stability in accelerator toggle
+- **RStudio Python** - Correct PYTHONPATH and RETICULATE_PYTHON paths for Python integration
+- **Form Validation** - Client-side validation for resource inputs (CPUs, memory, time)
+
+### Changed
+
+- **Health Bar Layout** - Fairshare indicator moved to leftmost position (most important for user)
+- **Sparkline Position** - Trend lines displayed above health bars with consistent baseline alignment
+
 ## [Unreleased]
 
 ### Breaking Changes
