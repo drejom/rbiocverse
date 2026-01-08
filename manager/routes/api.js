@@ -22,14 +22,14 @@ const { createClusterCache } = require('../lib/cache');
 
 /**
  * Extract user from request
- * In single-user mode, returns null (which defaults to config.hpcUser).
+ * In single-user mode, returns config.hpcUser directly.
  * When auth is implemented, this will extract from session/token.
  * @param {Request} req - Express request
- * @returns {string|null} Username or null for default
+ * @returns {string} Username
  */
 function getRequestUser(req) {
-  // Future: return req.session?.user || req.user?.username || null;
-  return null;  // Single-user mode: use config.hpcUser
+  // Future: return req.session?.user || req.user?.username || config.hpcUser;
+  return config.hpcUser;  // Single-user mode: use config.hpcUser directly
 }
 
 // Shared tunnel service instance
@@ -335,6 +335,19 @@ function createApiRouter(stateManager) {
         const enriched = { ...clusterData };
         for (const [ide, jobData] of Object.entries(enriched)) {
           const session = stateManager.getSession(user, hpc, ide);
+          // DEBUG: trace session lookup for releaseVersion/gpu enrichment
+          if (jobData.status !== 'idle') {
+            log.state('enrichWithSessionData lookup', {
+              user,
+              hpc,
+              ide,
+              jobStatus: jobData.status,
+              sessionFound: !!session,
+              sessionStatus: session?.status,
+              releaseVersion: session?.releaseVersion,
+              gpu: session?.gpu,
+            });
+          }
           enriched[ide] = {
             ...jobData,
             releaseVersion: session?.releaseVersion || null,
@@ -798,6 +811,11 @@ function createApiRouter(stateManager) {
         }
       });
 
+      log.state('Saving session with releaseVersion', {
+        user, hpc, ide, jobId, node,
+        releaseVersion: jobReleaseVersion,
+        gpu: jobGpu,
+      });
       await stateManager.updateSession(user, hpc, ide, {
         status: 'running',
         jobId,

@@ -221,7 +221,11 @@ class StateManager {
     try {
       const data = await fs.readFile(this.stateFile, 'utf8');
       const loadedState = JSON.parse(data);
-      log.state('Loaded from disk', { file: this.stateFile });
+      log.state('Loaded from disk', {
+        file: this.stateFile,
+        sessionKeys: Object.keys(loadedState.sessions || {}),
+        activeSession: loadedState.activeSession,
+      });
 
       // Migrate from old activeHpc to new activeSession format
       if (loadedState.activeHpc && !loadedState.activeSession) {
@@ -272,7 +276,11 @@ class StateManager {
    */
   async save() {
     if (!this.enablePersistence) return;
-    log.debugFor('state', 'saving to disk', { file: this.stateFile });
+    log.state('Saving state to disk', {
+      file: this.stateFile,
+      sessionKeys: Object.keys(this.state.sessions),
+      activeSession: this.state.activeSession,
+    });
 
     try {
       const dir = path.dirname(this.stateFile);
@@ -386,6 +394,7 @@ class StateManager {
    */
   async createSession(user, hpc, ide, initialProperties = {}) {
     const sessionKey = buildSessionKey(user, hpc, ide);
+    log.state('Creating session', { sessionKey, user: user || config.hpcUser, hpc, ide });
     if (this.state.sessions[sessionKey]) {
       throw new Error(`Session already exists: ${sessionKey}`);
     }
@@ -452,6 +461,7 @@ class StateManager {
     if (!session) {
       throw new Error(`No session exists: ${sessionKey}`);
     }
+    log.state('Updating session', { sessionKey, fields: Object.keys(updates) });
     Object.assign(session, updates);
     await this.save();
     return session;
