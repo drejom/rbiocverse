@@ -445,21 +445,9 @@ function hasRunningSession() {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
 }
 
-// Landing page - serve React launcher or redirect to active IDE if session running
+// Landing page - always serve React launcher (no auto-redirect)
 app.get('/', (req, res) => {
-  // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
-  if (req.query.menu) {
-    log.ui('Main menu opened via ?menu=1');
-  }
-  log.debugFor('ui', 'root request', { menu: req.query.menu, hasSession: hasRunningSession() });
-  if (!req.query.menu && hasRunningSession()) {
-    // Redirect to the active IDE's proxy path
-    const activeIde = state.activeSession?.ide || 'vscode';
-    const proxyPath = ides[activeIde]?.proxyPath || '/code/';
-    return res.redirect(proxyPath);
-  }
   log.ui('Serving launcher page');
-  // Serve React build from ui/dist/
   res.sendFile(path.join(__dirname, 'ui', 'dist', 'index.html'));
 });
 
