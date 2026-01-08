@@ -65,7 +65,7 @@ const vscodeDefaults = {
     // General HPC-friendly settings
     'files.autoSave': 'afterDelay',
     'files.autoSaveDelay': 1000,
-    'python.defaultInterpreterPath': '/usr/local/bin/python3',
+    'python.defaultInterpreterPath': '/usr/bin/python3',
 
     // Live Server - disable auto-browser open (use HPC menu button instead)
     // Browser would try to open localhost:5500 which doesn't work through proxy

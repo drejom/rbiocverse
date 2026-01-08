@@ -103,7 +103,7 @@ Jobs automatically end when their walltime expires. Save your work before the ti
 
 Python is pre-configured to use the container's Python with cluster-managed packages:
 
-- `RETICULATE_PYTHON=/usr/local/bin/python3` - container Python
+- `RETICULATE_PYTHON=/usr/bin/python3` - container Python
 - `PYTHONPATH` - points to curated cluster packages (Bioc 3.22+)
 
 When you call `library(reticulate)`, it uses the system Python directly - no virtualenv is created.

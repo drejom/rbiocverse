@@ -285,7 +285,7 @@ fi
       '--env TERM=xterm-256color',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
-      '--env RETICULATE_PYTHON=/usr/local/bin/python3',
+      '--env RETICULATE_PYTHON=/usr/bin/python3',
       '--env RETICULATE_PYTHON_FALLBACK=FALSE',
       `--env SHINY_PORT=${ides.shiny?.port || 3838}`,
       `--env OMP_NUM_THREADS=${cpus}`,
@@ -387,7 +387,7 @@ export TMPDIR=/tmp
 export TZ=America/Los_Angeles
 # Set reticulate Python to container's Python (prevents stale virtualenv issues)
 # FALLBACK=FALSE prevents auto-creation of ~/.virtualenvs/r-reticulate
-export RETICULATE_PYTHON=/usr/local/bin/python3
+export RETICULATE_PYTHON=/usr/bin/python3
 export RETICULATE_PYTHON_FALLBACK=FALSE
 exec /usr/lib/rstudio-server/bin/rsession "$@"
 `;
@@ -493,7 +493,7 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
       token ? `--env JUPYTER_TOKEN=${token}` : '',
       pythonSitePackages ? `--env PYTHONPATH=${pythonSitePackages}` : '',
       `--env R_LIBS_SITE=${releasePaths.rLibsSite}`,
-      '--env RETICULATE_PYTHON=/usr/local/bin/python3',
+      '--env RETICULATE_PYTHON=/usr/bin/python3',
       '--env RETICULATE_PYTHON_FALLBACK=FALSE',
       `--env JUPYTER_DATA_DIR=${workdir}`,
       `--env JUPYTER_RUNTIME_DIR=${workdir}/runtime`,
