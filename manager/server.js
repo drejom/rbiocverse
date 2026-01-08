@@ -44,7 +44,8 @@ const state = stateManager.state;
 function updateActivity() {
   const { activeSession } = state;
   if (activeSession) {
-    const sessionKey = `${activeSession.hpc}-${activeSession.ide}`;
+    // Session key format: user-hpc-ide (multi-user prep)
+    const sessionKey = `${activeSession.user}-${activeSession.hpc}-${activeSession.ide}`;
     if (state.sessions[sessionKey]) {
       state.sessions[sessionKey].lastActivity = Date.now();
     }
@@ -56,15 +57,21 @@ function updateActivity() {
 function getSessionToken(ide) {
   const { activeSession } = state;
   if (!activeSession) return null;
-  const sessionKey = `${activeSession.hpc}-${ide}`;
+  // Session key format: user-hpc-ide (multi-user prep)
+  const sessionKey = `${activeSession.user}-${activeSession.hpc}-${ide}`;
   return state.sessions[sessionKey]?.token || null;
 }
 
 // Mount API routes
 app.use('/api', createApiRouter(stateManager));
 
-// Serve static files from public directory
+// Serve static files from public directory (images, wrapper pages)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve React UI build assets (launcher) from ui/dist/
+// In development, Vite dev server proxies to Express API
+// Assets are built to /assets/ by Vite
+app.use('/assets', express.static(path.join(__dirname, 'ui', 'dist', 'assets')));
 
 // Proxy for forwarding to VS Code when tunnel is active
 const vscodeProxy = httpProxy.createProxyServer({
@@ -438,21 +445,10 @@ function hasRunningSession() {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
 }
 
-// Landing page - serve static index.html or redirect to active IDE if session running
+// Landing page - always serve React launcher (no auto-redirect)
 app.get('/', (req, res) => {
-  // Allow ?menu=1 to bypass redirect (for "Main Menu" button)
-  if (req.query.menu) {
-    log.ui('Main menu opened via ?menu=1');
-  }
-  log.debugFor('ui', 'root request', { menu: req.query.menu, hasSession: hasRunningSession() });
-  if (!req.query.menu && hasRunningSession()) {
-    // Redirect to the active IDE's proxy path
-    const activeIde = state.activeSession?.ide || 'vscode';
-    const proxyPath = ides[activeIde]?.proxyPath || '/code/';
-    return res.redirect(proxyPath);
-  }
   log.ui('Serving launcher page');
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'ui', 'dist', 'index.html'));
 });
 
 // Serve the menu iframe content

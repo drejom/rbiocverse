@@ -4,8 +4,9 @@
  */
 
 // Parse additional ports from comma-separated string (e.g., "5500,3000,5173")
-// Returns default [5500] if env var not set, empty array if set to empty string
-function parseAdditionalPorts(envValue, defaultValue = '5500') {
+// Returns default [5500,3838] if env var not set, empty array if set to empty string
+// Default includes Live Server (5500) and Shiny (3838)
+function parseAdditionalPorts(envValue, defaultValue = '5500,3838') {
   // If env var is explicitly set (even to empty string), use it
   if (envValue !== undefined) {
     if (envValue === '') return [];
@@ -64,7 +65,11 @@ const vscodeDefaults = {
     // General HPC-friendly settings
     'files.autoSave': 'afterDelay',
     'files.autoSaveDelay': 1000,
-    'python.defaultInterpreterPath': '/usr/local/bin/python3',
+    'python.defaultInterpreterPath': '/usr/bin/python3',
+
+    // Live Server - disable auto-browser open (use HPC menu button instead)
+    // Browser would try to open localhost:5500 which doesn't work through proxy
+    'liveServer.settings.NoBrowser': true,
 
   },
 

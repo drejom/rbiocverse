@@ -57,13 +57,13 @@ describe('Configuration', () => {
   });
 
   describe('additionalPorts', () => {
-    it('should default to port 5500 (Live Server)', () => {
+    it('should default to ports 5500 (Live Server) and 3838 (Shiny)', () => {
       delete process.env.ADDITIONAL_PORTS;
 
       delete require.cache[require.resolve('../../config')];
       const { config } = require('../../config');
 
-      expect(config.additionalPorts).to.deep.equal([5500]);
+      expect(config.additionalPorts).to.deep.equal([5500, 3838]);
     });
 
     it('should parse single additional port', () => {

@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "dev:ui": "cd ui && npm run dev",
+    "build": "cd ui && npm run build",
+    "postinstall": "cd ui && npm install",
     "test": "mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
     "test:watch": "mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
     "test:coverage": "c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",

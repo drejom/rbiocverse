@@ -541,7 +541,7 @@
 
     function goToMenu() {
       console.log('[Menu] Navigating to main menu');
-      window.top.location.href = '/?menu=1';
+      window.top.location.href = '/';
     }
 
     async function stopJob() {
@@ -580,7 +580,7 @@
           console.log('[Menu] Stop timeout, redirecting');
           isStopping = false;
           eventSource.close();
-          window.top.location.href = '/?menu=1';
+          window.top.location.href = '/';
         }
       }, 15000);
 
@@ -601,7 +601,7 @@
             if (data.type === 'error') {
               alert('Failed: ' + (data.message || 'Unknown error'));
             }
-            window.top.location.href = '/?menu=1';
+            window.top.location.href = '/';
           }
         } catch(e) {
           console.error('[Menu] Stop SSE parse error:', e);
@@ -614,7 +614,7 @@
         isStopping = false;
         eventSource.close();
         // Fallback to direct navigation
-        window.top.location.href = '/?menu=1';
+        window.top.location.href = '/';
       };
     }
 
