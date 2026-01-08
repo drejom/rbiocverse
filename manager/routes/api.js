@@ -423,27 +423,45 @@ function createApiRouter(stateManager) {
       // Get or create session
       const session = await stateManager.getOrCreateSession(user, hpc, ide);
 
-      // If already running, just switch to this session (reconnect)
+      // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
-        // Ensure tunnel is running for this session
-        if (!session.tunnelProcess) {
-          try {
-            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
-              // Tunnel exit callback
-              if (session.status === 'running') {
-                session.status = 'idle';
-              }
-              session.tunnelProcess = null;
-            });
-          } catch (error) {
-            stateManager.releaseLock(lockName);
-            return res.status(500).json({ error: error.message });
-          }
-        }
+        // Verify job still exists in SLURM
+        const hpcService = new HpcService(hpc);
+        const jobInfo = await hpcService.getJobInfo(ide);
 
-        await stateManager.setActiveSession(user, hpc, ide);
-        stateManager.releaseLock(lockName);
-        return res.json({ status: 'connected', hpc, ide, jobId: session.jobId, node: session.node });
+        if (!jobInfo || jobInfo.jobId !== session.jobId) {
+          // Job is gone (walltime expired, cancelled, etc) - clear stale session
+          log.state('Stale session detected, clearing', {
+            user,
+            hpc,
+            ide,
+            expectedJobId: session.jobId,
+            actualJob: jobInfo?.jobId || 'none',
+          });
+          await stateManager.clearSession(user, hpc, ide);
+          // Fall through to fresh launch flow below
+        } else {
+          // Job exists - safe to reconnect
+          // Ensure tunnel is running for this session
+          if (!session.tunnelProcess) {
+            try {
+              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+                // Tunnel exit callback
+                if (session.status === 'running') {
+                  session.status = 'idle';
+                }
+                session.tunnelProcess = null;
+              });
+            } catch (error) {
+              stateManager.releaseLock(lockName);
+              return res.status(500).json({ error: error.message });
+            }
+          }
+
+          await stateManager.setActiveSession(user, hpc, ide);
+          stateManager.releaseLock(lockName);
+          return res.json({ status: 'connected', hpc, ide, jobId: session.jobId, node: session.node });
+        }
       }
 
       // Reject if starting/pending (in progress)
@@ -651,37 +669,66 @@ function createApiRouter(stateManager) {
       // Get or create session
       const session = await stateManager.getOrCreateSession(user, hpc, ide);
 
-      // If already running, just switch to this session (reconnect tunnel)
+      // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
-        sendProgress('connecting', 'Reconnecting tunnel...');
+        sendProgress('verifying', 'Checking job status...');
 
-        // Ensure tunnel is running for this session
-        if (!session.tunnelProcess) {
-          try {
-            session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
-              if (session.status === 'running') {
-                session.status = 'idle';
-              }
-              session.tunnelProcess = null;
+        // Verify job still exists in SLURM
+        const hpcService = new HpcService(hpc);
+        const jobInfo = await hpcService.getJobInfo(ide);
+
+        if (!jobInfo || jobInfo.jobId !== session.jobId) {
+          // Job is gone (walltime expired, cancelled, etc) - clear stale session
+          log.state('Stale session detected, clearing', {
+            user,
+            hpc,
+            ide,
+            expectedJobId: session.jobId,
+            actualJob: jobInfo?.jobId || 'none',
+          });
+          await stateManager.clearSession(user, hpc, ide);
+          sendProgress('launching', 'Previous job ended, starting fresh...');
+          // Fall through to fresh launch flow below
+        } else {
+          // Job exists - safe to reconnect
+          sendProgress('connecting', 'Reconnecting tunnel...');
+
+          // Backfill missing metadata if reconnecting to pre-migration job
+          if (!session.releaseVersion && releaseVersion) {
+            await stateManager.updateSession(user, hpc, ide, {
+              releaseVersion,
+              gpu: gpu || null,
             });
-          } catch (error) {
-            stateManager.releaseLock(lockName);
-            return sendError(error.message);
           }
+
+          // Ensure tunnel is running for this session
+          if (!session.tunnelProcess) {
+            try {
+              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+                if (session.status === 'running') {
+                  session.status = 'idle';
+                }
+                session.tunnelProcess = null;
+              });
+            } catch (error) {
+              stateManager.releaseLock(lockName);
+              return sendError(error.message);
+            }
+          }
+
+          await stateManager.setActiveSession(user, hpc, ide);
+          stateManager.releaseLock(lockName);
+
+          const ideConfig = ides[ide];
+          return sendComplete({
+            status: 'connected',
+            hpc,
+            ide,
+            jobId: session.jobId,
+            node: session.node,
+            redirectUrl: ideConfig?.proxyPath || '/code/',
+          });
         }
-
-        await stateManager.setActiveSession(user, hpc, ide);
-        stateManager.releaseLock(lockName);
-
-        const ideConfig = ides[ide];
-        return sendComplete({
-          status: 'connected',
-          hpc,
-          ide,
-          jobId: session.jobId,
-          node: session.node,
-          redirectUrl: ideConfig?.proxyPath || '/code/',
-        });
       }
 
       // Reject if starting/pending (in progress)
