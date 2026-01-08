@@ -85,6 +85,20 @@ async function startTunnelWithPortDiscovery(hpc, node, ide, onExit) {
 }
 
 /**
+ * Verify a session's job still exists in SLURM
+ * Returns true if job exists and matches, false if stale (job gone)
+ * @param {Object} session - Session object with jobId
+ * @param {string} hpc - HPC cluster name
+ * @param {string} ide - IDE type
+ * @returns {Promise<boolean>} True if job exists, false if stale
+ */
+async function verifyJobExists(session, hpc, ide) {
+  const hpcService = new HpcService(hpc);
+  const jobInfo = await hpcService.getJobInfo(ide);
+  return jobInfo && jobInfo.jobId === session.jobId;
+}
+
+/**
  * Fetch fresh status for a single cluster and update its cache
  * @param {string} clusterName - Cluster name ('gemini' or 'apollo')
  * @returns {Promise<Object>} Fresh cluster status data
@@ -425,28 +439,18 @@ function createApiRouter(stateManager) {
 
       // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
-        // Verify job still exists in SLURM
-        const hpcService = new HpcService(hpc);
-        const jobInfo = await hpcService.getJobInfo(ide);
+        const jobExists = await verifyJobExists(session, hpc, ide);
 
-        if (!jobInfo || jobInfo.jobId !== session.jobId) {
+        if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
-          log.state('Stale session detected, clearing', {
-            user,
-            hpc,
-            ide,
-            expectedJobId: session.jobId,
-            actualJob: jobInfo?.jobId || 'none',
-          });
+          log.state('Stale session detected, clearing', { user, hpc, ide, jobId: session.jobId });
           await stateManager.clearSession(user, hpc, ide);
           // Fall through to fresh launch flow below
         } else {
           // Job exists - safe to reconnect
-          // Ensure tunnel is running for this session
           if (!session.tunnelProcess) {
             try {
               session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
-                // Tunnel exit callback
                 if (session.status === 'running') {
                   session.status = 'idle';
                 }
@@ -672,20 +676,11 @@ function createApiRouter(stateManager) {
       // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
         sendProgress('verifying', 'Checking job status...');
+        const jobExists = await verifyJobExists(session, hpc, ide);
 
-        // Verify job still exists in SLURM
-        const hpcService = new HpcService(hpc);
-        const jobInfo = await hpcService.getJobInfo(ide);
-
-        if (!jobInfo || jobInfo.jobId !== session.jobId) {
+        if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
-          log.state('Stale session detected, clearing', {
-            user,
-            hpc,
-            ide,
-            expectedJobId: session.jobId,
-            actualJob: jobInfo?.jobId || 'none',
-          });
+          log.state('Stale session detected, clearing', { user, hpc, ide, jobId: session.jobId });
           await stateManager.clearSession(user, hpc, ide);
           sendProgress('launching', 'Previous job ended, starting fresh...');
           // Fall through to fresh launch flow below

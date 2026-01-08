@@ -3,6 +3,9 @@
  * Renders a simple SVG line chart
  */
 
+// Percentage point change threshold for trend coloring
+const TREND_THRESHOLD = 5;
+
 export function Sparkline({ data, width = 40, height = 12, className = '' }) {
   if (!data || data.length < 2) {
     return null;
@@ -23,8 +26,8 @@ export function Sparkline({ data, width = 40, height = 12, className = '' }) {
 
   // Determine trend color based on last vs first value
   const trend = values[values.length - 1] - values[0];
-  const strokeColor = trend > 5 ? 'var(--color-high)' :
-                      trend < -5 ? 'var(--color-low)' :
+  const strokeColor = trend > TREND_THRESHOLD ? 'var(--color-high)' :
+                      trend < -TREND_THRESHOLD ? 'var(--color-low)' :
                       'var(--color-medium)';
 
   return (
@@ -45,5 +48,3 @@ export function Sparkline({ data, width = 40, height = 12, className = '' }) {
     </svg>
   );
 }
-
-export default Sparkline;

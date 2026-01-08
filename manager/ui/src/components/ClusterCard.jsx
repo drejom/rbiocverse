@@ -4,7 +4,7 @@
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Play } from 'lucide-react';
-import HealthBars from './HealthBar';
+import { HealthBars } from './HealthBar';
 import ReleaseSelector from './ReleaseSelector';
 import IdeSelector from './IdeSelector';
 import LaunchForm from './LaunchForm';

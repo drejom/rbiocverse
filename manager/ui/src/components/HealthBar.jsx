@@ -3,7 +3,7 @@
  * Shows resource usage with color-coded fill and 24hr trend sparkline
  */
 import { Cpu, MemoryStick, Server, Gauge, Gpu, WifiOff } from 'lucide-react';
-import Sparkline from './Sparkline';
+import { Sparkline } from './Sparkline';
 
 // Resource usage thresholds (percent)
 const THRESHOLD_HIGH = 85;
@@ -51,7 +51,7 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false, trend = 
           />
         </div>
         {trend && trend.length >= 2 && (
-          <Sparkline data={trend} width={32} height={8} />
+          <Sparkline data={trend} width={40} height={8} />
         )}
       </div>
     </span>
@@ -72,10 +72,11 @@ export function HealthBars({ health, selectedGpu, history = [] }) {
   const bars = [];
 
   // Extract trend data from history (last 24 entries = 24 hours)
-  const cpuTrend = history.map(h => h.cpus).slice(-24);
-  const memoryTrend = history.map(h => h.memory).slice(-24);
-  const nodesTrend = history.map(h => h.nodes).slice(-24);
-  const gpusTrend = history.map(h => h.gpus).filter(v => v !== null).slice(-24);
+  // Use optional chaining and filter nulls for safety
+  const cpuTrend = history.map(h => h?.cpus).filter(v => v != null).slice(-24);
+  const memoryTrend = history.map(h => h?.memory).filter(v => v != null).slice(-24);
+  const nodesTrend = history.map(h => h?.nodes).filter(v => v != null).slice(-24);
+  const gpusTrend = history.map(h => h?.gpus).filter(v => v != null).slice(-24);
 
   // Determine which CPU stats to show based on GPU selection
   // When a GPU is selected, show that partition's CPU stats instead of cluster-wide
@@ -162,4 +163,3 @@ export function HealthBars({ health, selectedGpu, history = [] }) {
   return <div className="health-indicators">{bars}</div>;
 }
 
-export default HealthBars;
