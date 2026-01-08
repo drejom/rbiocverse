@@ -853,7 +853,9 @@ h1 {
 .health-bar-container {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 2px;
+  min-height: 16px; /* 8px sparkline + 2px gap + 6px bar */
 }
 
 /* Health bar */
