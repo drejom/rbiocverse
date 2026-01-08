@@ -52,7 +52,7 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false }) {
   );
 }
 
-export function HealthBars({ health }) {
+export function HealthBars({ health, selectedGpu }) {
   if (!health || !health.online) {
     return (
       <div className="health-indicators offline">
@@ -64,6 +64,12 @@ export function HealthBars({ health }) {
   }
 
   const bars = [];
+
+  // Determine which CPU stats to show based on GPU selection
+  // When a GPU is selected, show that partition's CPU stats instead of cluster-wide
+  const partitionKey = selectedGpu ? `gpu-${selectedGpu}` : null;
+  const partitionData = partitionKey ? health.partitions?.[partitionKey] : null;
+  const effectiveCpus = partitionData?.cpus || health.cpus;
 
   // Fairshare bar (leftmost - most important for user)
   if (typeof health.fairshare === 'number') {
@@ -79,21 +85,23 @@ export function HealthBars({ health }) {
     );
   }
 
-  // CPU bar
-  if (health.cpus) {
+  // CPU bar - shows partition-specific stats when GPU selected
+  if (effectiveCpus) {
+    const cpuLabel = selectedGpu ? `${selectedGpu.toUpperCase()} CPUs` : 'CPUs';
     bars.push(
       <SingleBar
         key="cpu"
         icon="cpu"
-        percent={health.cpus.percent}
-        label="CPUs"
-        detail={`${health.cpus.used}/${health.cpus.total} allocated`}
+        percent={effectiveCpus.percent}
+        label={cpuLabel}
+        detail={`${effectiveCpus.used}/${effectiveCpus.total} allocated`}
       />
     );
   }
 
-  // GPU bar
-  if (health.gpus && typeof health.gpus.percent !== 'undefined') {
+  // GPU bar - only show when viewing cluster-wide (no GPU selected)
+  // When a specific GPU is selected, the CPU bar already shows that partition's usage
+  if (!selectedGpu && health.gpus && typeof health.gpus.percent !== 'undefined') {
     const gpuDetails = Object.entries(health.gpus)
       .filter(([type]) => type !== 'percent')
       .map(([type, data]) => {
@@ -111,6 +119,25 @@ export function HealthBars({ health }) {
         detail={gpuDetails}
       />
     );
+  }
+
+  // When GPU is selected, show that specific GPU type's usage
+  if (selectedGpu && health.gpus) {
+    const gpuType = selectedGpu.toUpperCase();
+    const gpuData = health.gpus[gpuType];
+    if (gpuData) {
+      const total = gpuData.total || ((gpuData.idle || 0) + (gpuData.busy || 0));
+      const percent = total > 0 ? Math.round((gpuData.busy / total) * 100) : 0;
+      bars.push(
+        <SingleBar
+          key="gpu"
+          icon="gpu"
+          percent={percent}
+          label={`${gpuType} GPUs`}
+          detail={`${gpuData.busy || 0}/${total} in use`}
+        />
+      );
+    }
   }
 
   // Memory bar

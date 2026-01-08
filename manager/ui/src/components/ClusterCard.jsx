@@ -140,7 +140,7 @@ export function ClusterCard({
       <div className="cluster-header">
         <div className="cluster-header-left">
           <span className="cluster-name">{hpc.charAt(0).toUpperCase() + hpc.slice(1)}</span>
-          <HealthBars health={health} />
+          <HealthBars health={health} selectedGpu={selectedGpu} />
         </div>
         <div className="cluster-status">
           <span className={`status-dot ${cardStatus}`} />
