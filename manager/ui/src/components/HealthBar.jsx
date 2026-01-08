@@ -1,8 +1,9 @@
 /**
  * Health indicator bar component
- * Shows resource usage with color-coded fill
+ * Shows resource usage with color-coded fill and 24hr trend sparkline
  */
 import { Cpu, MemoryStick, Server, Gauge, Gpu, WifiOff } from 'lucide-react';
+import { Sparkline } from './Sparkline';
 
 // Resource usage thresholds (percent)
 const THRESHOLD_HIGH = 85;
@@ -33,7 +34,7 @@ const iconMap = {
   gpu: Gpu,
 };
 
-function SingleBar({ icon, percent, label, detail, isFairshare = false }) {
+function SingleBar({ icon, percent, label, detail, isFairshare = false, trend = null }) {
   const Icon = iconMap[icon] || Cpu;
   const safePercent = Math.min(100, Math.max(0, percent || 0));
   const level = isFairshare ? getFairshareLevel(safePercent) : getLevel(safePercent);
@@ -42,17 +43,22 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false }) {
   return (
     <span className="health-indicator" title={tooltip}>
       <Icon className="icon-xs" />
-      <div className="health-bar">
-        <div
-          className={`health-bar-fill ${level}`}
-          style={{ width: `${safePercent}%` }}
-        />
+      <div className="health-bar-container">
+        <div className="health-bar">
+          <div
+            className={`health-bar-fill ${level}`}
+            style={{ width: `${safePercent}%` }}
+          />
+        </div>
+        {trend && trend.length >= 2 && (
+          <Sparkline data={trend} width={40} height={8} />
+        )}
       </div>
     </span>
   );
 }
 
-export function HealthBars({ health }) {
+export function HealthBars({ health, selectedGpu, history = [] }) {
   if (!health || !health.online) {
     return (
       <div className="health-indicators offline">
@@ -65,7 +71,20 @@ export function HealthBars({ health }) {
 
   const bars = [];
 
-  // Fairshare bar (leftmost - most important for user)
+  // Extract trend data from history (last 24 entries = 24 hours)
+  // Use optional chaining and filter nulls for safety
+  const cpuTrend = history.map(h => h?.cpus).filter(v => v != null).slice(-24);
+  const memoryTrend = history.map(h => h?.memory).filter(v => v != null).slice(-24);
+  const nodesTrend = history.map(h => h?.nodes).filter(v => v != null).slice(-24);
+  const gpusTrend = history.map(h => h?.gpus).filter(v => v != null).slice(-24);
+
+  // Determine which CPU stats to show based on GPU selection
+  // When a GPU is selected, show that partition's CPU stats instead of cluster-wide
+  const partitionKey = selectedGpu ? `gpu-${selectedGpu}` : null;
+  const partitionData = partitionKey ? health.partitions?.[partitionKey] : null;
+  const effectiveCpus = partitionData?.cpus || health.cpus;
+
+  // Fairshare bar (leftmost - most important for user) - no trend for fairshare
   if (typeof health.fairshare === 'number') {
     bars.push(
       <SingleBar
@@ -79,36 +98,36 @@ export function HealthBars({ health }) {
     );
   }
 
-  // CPU bar
-  if (health.cpus) {
+  // Second bar: CPU when no GPU selected, specific GPU when GPU selected
+  // The icon changes from CPU to GPU based on selection
+  if (selectedGpu && health.gpus) {
+    // GPU selected: show that specific GPU type's usage with GPU icon
+    const gpuType = selectedGpu.toUpperCase();
+    const gpuData = health.gpus[gpuType];
+    if (gpuData) {
+      const total = gpuData.total || ((gpuData.idle || 0) + (gpuData.busy || 0));
+      const percent = total > 0 ? Math.round((gpuData.busy / total) * 100) : 0;
+      bars.push(
+        <SingleBar
+          key="resource"
+          icon="gpu"
+          percent={percent}
+          label={`${gpuType} GPUs`}
+          detail={`${gpuData.busy || 0}/${total} in use`}
+          trend={gpusTrend}
+        />
+      );
+    }
+  } else if (effectiveCpus) {
+    // No GPU selected: show cluster-wide CPU stats with CPU icon
     bars.push(
       <SingleBar
-        key="cpu"
+        key="resource"
         icon="cpu"
-        percent={health.cpus.percent}
+        percent={effectiveCpus.percent}
         label="CPUs"
-        detail={`${health.cpus.used}/${health.cpus.total} allocated`}
-      />
-    );
-  }
-
-  // GPU bar
-  if (health.gpus && typeof health.gpus.percent !== 'undefined') {
-    const gpuDetails = Object.entries(health.gpus)
-      .filter(([type]) => type !== 'percent')
-      .map(([type, data]) => {
-        const total = data.total || ((data.idle || 0) + (data.busy || 0));
-        return `${type.toUpperCase()}: ${data.busy || 0}/${total}`;
-      })
-      .join(', ');
-
-    bars.push(
-      <SingleBar
-        key="gpu"
-        icon="gpu"
-        percent={health.gpus.percent}
-        label="GPUs"
-        detail={gpuDetails}
+        detail={`${effectiveCpus.used}/${effectiveCpus.total} allocated`}
+        trend={cpuTrend}
       />
     );
   }
@@ -122,6 +141,7 @@ export function HealthBars({ health }) {
         percent={health.memory.percent}
         label="Memory"
         detail={`${health.memory.used}/${health.memory.total} ${health.memory.unit}`}
+        trend={memoryTrend}
       />
     );
   }
@@ -135,6 +155,7 @@ export function HealthBars({ health }) {
         percent={health.nodes.percent}
         label="Nodes"
         detail={`${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`}
+        trend={nodesTrend}
       />
     );
   }
@@ -142,4 +163,3 @@ export function HealthBars({ health }) {
   return <div className="health-indicators">{bars}</div>;
 }
 
-export default HealthBars;

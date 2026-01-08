@@ -17,7 +17,7 @@ const STOP_TIMEOUT_MS = 15000;
 const CLUSTER_NAMES = ['gemini', 'apollo'];
 
 function App() {
-  const { status, config, health, loading, refresh } = useClusterStatus();
+  const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
 
@@ -123,6 +123,7 @@ function App() {
             hpc={hpc}
             ideStatuses={status[hpc]}
             health={health[hpc]}
+            history={history[hpc]}
             config={config}
             countdown={getCountdown}
             stoppingJobs={stoppingJobs}

@@ -857,10 +857,17 @@ SLURM_SCRIPT`;
       ? `echo "===FAIRSHARE===" && sshare -u ${config.hpcUser} -A ${userAccount} -h -P -o "FairShare" 2>/dev/null | tail -1 && `
       : '';
 
+    // Per-partition CPU queries for Gemini (gpu-a100, gpu-v100)
+    // Apollo doesn't have GPU partitions, so we only need aggregate stats there
+    const partitionCpuCmd = this.clusterName === 'gemini'
+      ? `echo "===CPUS_GPU_A100===" && sinfo -p gpu-a100 -h -o '%C' 2>/dev/null && \
+echo "===CPUS_GPU_V100===" && sinfo -p gpu-v100 -h -o '%C' 2>/dev/null && `
+      : '';
+
     const cmd = `
 echo "===CPUS===" && \
 sinfo -h -o '%C' 2>/dev/null && \
-echo "===NODES===" && \
+${partitionCpuCmd}echo "===NODES===" && \
 sinfo -h -o '%D %t' 2>/dev/null && \
 echo "===MEMORY===" && \
 sinfo -h -N -o '%m %e' 2>/dev/null && \
@@ -924,6 +931,31 @@ ${fairshareCmd}echo "done"
           };
         }
       }
+    }
+
+    // Parse per-partition CPUs (Gemini only: gpu-a100, gpu-v100)
+    // Helper to parse CPU string
+    const parseCpuString = (str) => {
+      if (!str) return null;
+      const parts = str.split('/');
+      if (parts.length !== 4) return null;
+      const nums = parts.map(p => Number(p.trim()));
+      if (!nums.every(Number.isFinite)) return null;
+      const [allocated, idle, , total] = nums;
+      return {
+        used: allocated,
+        idle: idle,
+        total: total,
+        percent: total > 0 ? Math.round((allocated / total) * 100) : 0,
+      };
+    };
+
+    const partitions = {};
+    if (sections.CPUS_GPU_A100?.[0]) {
+      partitions['gpu-a100'] = { cpus: parseCpuString(sections.CPUS_GPU_A100[0]) };
+    }
+    if (sections.CPUS_GPU_V100?.[0]) {
+      partitions['gpu-v100'] = { cpus: parseCpuString(sections.CPUS_GPU_V100[0]) };
     }
 
     // Parse nodes by state
@@ -1052,6 +1084,7 @@ ${fairshareCmd}echo "done"
       memory,
       nodes,
       gpus,
+      partitions: Object.keys(partitions).length > 0 ? partitions : null,
       runningJobs,
       pendingJobs,
       fairshare,
