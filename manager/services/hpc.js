@@ -385,8 +385,8 @@ export R_LIBS_SITE=${releasePaths.rLibsSite}
 export R_LIBS_USER=$HOME/R/bioc-${biocVersion}
 export TMPDIR=/tmp
 export TZ=America/Los_Angeles
-# Set reticulate Python to container's Python (prevents stale virtualenv issues)
-# FALLBACK=FALSE prevents auto-creation of ~/.virtualenvs/r-reticulate
+# Python config for reticulate
+export PYTHONPATH=${pythonSitePackages}
 export RETICULATE_PYTHON=/usr/bin/python3
 export RETICULATE_PYTHON_FALLBACK=FALSE
 exec /usr/lib/rstudio-server/bin/rsession "$@"
