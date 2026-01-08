@@ -65,6 +65,20 @@ export function HealthBars({ health }) {
 
   const bars = [];
 
+  // Fairshare bar (leftmost - most important for user)
+  if (typeof health.fairshare === 'number') {
+    bars.push(
+      <SingleBar
+        key="fairshare"
+        icon="gauge"
+        percent={Math.round(health.fairshare * 100)}
+        label="Priority"
+        detail="higher is better"
+        isFairshare
+      />
+    );
+  }
+
   // CPU bar
   if (health.cpus) {
     bars.push(
@@ -121,20 +135,6 @@ export function HealthBars({ health }) {
         percent={health.nodes.percent}
         label="Nodes"
         detail={`${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`}
-      />
-    );
-  }
-
-  // Fairshare bar
-  if (typeof health.fairshare === 'number') {
-    bars.push(
-      <SingleBar
-        key="fairshare"
-        icon="gauge"
-        percent={Math.round(health.fairshare * 100)}
-        label="Priority"
-        detail="higher is better"
-        isFairshare
       />
     );
   }
