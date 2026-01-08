@@ -85,44 +85,10 @@ export function HealthBars({ health, selectedGpu }) {
     );
   }
 
-  // CPU bar - shows partition-specific stats when GPU selected
-  if (effectiveCpus) {
-    const cpuLabel = selectedGpu ? `${selectedGpu.toUpperCase()} CPUs` : 'CPUs';
-    bars.push(
-      <SingleBar
-        key="cpu"
-        icon="cpu"
-        percent={effectiveCpus.percent}
-        label={cpuLabel}
-        detail={`${effectiveCpus.used}/${effectiveCpus.total} allocated`}
-      />
-    );
-  }
-
-  // GPU bar - only show when viewing cluster-wide (no GPU selected)
-  // When a specific GPU is selected, the CPU bar already shows that partition's usage
-  if (!selectedGpu && health.gpus && typeof health.gpus.percent !== 'undefined') {
-    const gpuDetails = Object.entries(health.gpus)
-      .filter(([type]) => type !== 'percent')
-      .map(([type, data]) => {
-        const total = data.total || ((data.idle || 0) + (data.busy || 0));
-        return `${type.toUpperCase()}: ${data.busy || 0}/${total}`;
-      })
-      .join(', ');
-
-    bars.push(
-      <SingleBar
-        key="gpu"
-        icon="gpu"
-        percent={health.gpus.percent}
-        label="GPUs"
-        detail={gpuDetails}
-      />
-    );
-  }
-
-  // When GPU is selected, show that specific GPU type's usage
+  // Second bar: CPU when no GPU selected, specific GPU when GPU selected
+  // The icon changes from CPU to GPU based on selection
   if (selectedGpu && health.gpus) {
+    // GPU selected: show that specific GPU type's usage with GPU icon
     const gpuType = selectedGpu.toUpperCase();
     const gpuData = health.gpus[gpuType];
     if (gpuData) {
@@ -130,7 +96,7 @@ export function HealthBars({ health, selectedGpu }) {
       const percent = total > 0 ? Math.round((gpuData.busy / total) * 100) : 0;
       bars.push(
         <SingleBar
-          key="gpu"
+          key="resource"
           icon="gpu"
           percent={percent}
           label={`${gpuType} GPUs`}
@@ -138,6 +104,17 @@ export function HealthBars({ health, selectedGpu }) {
         />
       );
     }
+  } else if (effectiveCpus) {
+    // No GPU selected: show cluster-wide CPU stats with CPU icon
+    bars.push(
+      <SingleBar
+        key="resource"
+        icon="cpu"
+        percent={effectiveCpus.percent}
+        label="CPUs"
+        detail={`${effectiveCpus.used}/${effectiveCpus.total} allocated`}
+      />
+    );
   }
 
   // Memory bar
