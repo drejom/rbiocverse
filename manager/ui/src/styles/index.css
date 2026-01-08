@@ -849,13 +849,33 @@ h1 {
   flex-shrink: 0;
 }
 
-/* Health bar container */
+/* Container for health bar + sparkline */
+.health-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Health bar */
 .health-bar {
   width: 40px;
   height: 6px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
   overflow: hidden;
+}
+
+/* Sparkline styles */
+.sparkline {
+  opacity: 0.6;
+  display: block;
+}
+
+/* CSS variables for sparkline colors */
+:root {
+  --color-low: #4ade80;
+  --color-medium: #fbbf24;
+  --color-high: #ef4444;
 }
 
 /* Health bar fill */

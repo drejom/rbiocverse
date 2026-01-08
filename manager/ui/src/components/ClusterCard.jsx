@@ -14,6 +14,7 @@ export function ClusterCard({
   hpc,
   ideStatuses,
   health,
+  history,
   config,
   countdown,
   stoppingJobs,
@@ -140,7 +141,7 @@ export function ClusterCard({
       <div className="cluster-header">
         <div className="cluster-header-left">
           <span className="cluster-name">{hpc.charAt(0).toUpperCase() + hpc.slice(1)}</span>
-          <HealthBars health={health} selectedGpu={selectedGpu} />
+          <HealthBars health={health} selectedGpu={selectedGpu} history={history} />
         </div>
         <div className="cluster-status">
           <span className={`status-dot ${cardStatus}`} />

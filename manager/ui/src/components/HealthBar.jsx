@@ -1,8 +1,9 @@
 /**
  * Health indicator bar component
- * Shows resource usage with color-coded fill
+ * Shows resource usage with color-coded fill and 24hr trend sparkline
  */
 import { Cpu, MemoryStick, Server, Gauge, Gpu, WifiOff } from 'lucide-react';
+import Sparkline from './Sparkline';
 
 // Resource usage thresholds (percent)
 const THRESHOLD_HIGH = 85;
@@ -33,7 +34,7 @@ const iconMap = {
   gpu: Gpu,
 };
 
-function SingleBar({ icon, percent, label, detail, isFairshare = false }) {
+function SingleBar({ icon, percent, label, detail, isFairshare = false, trend = null }) {
   const Icon = iconMap[icon] || Cpu;
   const safePercent = Math.min(100, Math.max(0, percent || 0));
   const level = isFairshare ? getFairshareLevel(safePercent) : getLevel(safePercent);
@@ -42,17 +43,22 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false }) {
   return (
     <span className="health-indicator" title={tooltip}>
       <Icon className="icon-xs" />
-      <div className="health-bar">
-        <div
-          className={`health-bar-fill ${level}`}
-          style={{ width: `${safePercent}%` }}
-        />
+      <div className="health-bar-container">
+        <div className="health-bar">
+          <div
+            className={`health-bar-fill ${level}`}
+            style={{ width: `${safePercent}%` }}
+          />
+        </div>
+        {trend && trend.length >= 2 && (
+          <Sparkline data={trend} width={32} height={8} />
+        )}
       </div>
     </span>
   );
 }
 
-export function HealthBars({ health, selectedGpu }) {
+export function HealthBars({ health, selectedGpu, history = [] }) {
   if (!health || !health.online) {
     return (
       <div className="health-indicators offline">
@@ -65,13 +71,19 @@ export function HealthBars({ health, selectedGpu }) {
 
   const bars = [];
 
+  // Extract trend data from history (last 24 entries = 24 hours)
+  const cpuTrend = history.map(h => h.cpus).slice(-24);
+  const memoryTrend = history.map(h => h.memory).slice(-24);
+  const nodesTrend = history.map(h => h.nodes).slice(-24);
+  const gpusTrend = history.map(h => h.gpus).filter(v => v !== null).slice(-24);
+
   // Determine which CPU stats to show based on GPU selection
   // When a GPU is selected, show that partition's CPU stats instead of cluster-wide
   const partitionKey = selectedGpu ? `gpu-${selectedGpu}` : null;
   const partitionData = partitionKey ? health.partitions?.[partitionKey] : null;
   const effectiveCpus = partitionData?.cpus || health.cpus;
 
-  // Fairshare bar (leftmost - most important for user)
+  // Fairshare bar (leftmost - most important for user) - no trend for fairshare
   if (typeof health.fairshare === 'number') {
     bars.push(
       <SingleBar
@@ -101,6 +113,7 @@ export function HealthBars({ health, selectedGpu }) {
           percent={percent}
           label={`${gpuType} GPUs`}
           detail={`${gpuData.busy || 0}/${total} in use`}
+          trend={gpusTrend}
         />
       );
     }
@@ -113,6 +126,7 @@ export function HealthBars({ health, selectedGpu }) {
         percent={effectiveCpus.percent}
         label="CPUs"
         detail={`${effectiveCpus.used}/${effectiveCpus.total} allocated`}
+        trend={cpuTrend}
       />
     );
   }
@@ -126,6 +140,7 @@ export function HealthBars({ health, selectedGpu }) {
         percent={health.memory.percent}
         label="Memory"
         detail={`${health.memory.used}/${health.memory.total} ${health.memory.unit}`}
+        trend={memoryTrend}
       />
     );
   }
@@ -139,6 +154,7 @@ export function HealthBars({ health, selectedGpu }) {
         percent={health.nodes.percent}
         label="Nodes"
         detail={`${health.nodes.idle} idle, ${health.nodes.busy} busy, ${health.nodes.down} down`}
+        trend={nodesTrend}
       />
     );
   }

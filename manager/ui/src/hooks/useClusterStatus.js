@@ -26,6 +26,10 @@ export function useClusterStatus() {
     gemini: null,
     apollo: null,
   });
+  const [history, setHistory] = useState({
+    gemini: [],
+    apollo: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -71,11 +75,15 @@ export function useClusterStatus() {
         apollo: data.apollo || {},
       });
 
-      // Update health
+      // Update health and history
       if (data.clusterHealth) {
         setHealth({
           gemini: data.clusterHealth.gemini?.current || null,
           apollo: data.clusterHealth.apollo?.current || null,
+        });
+        setHistory({
+          gemini: data.clusterHealth.gemini?.history || [],
+          apollo: data.clusterHealth.apollo?.history || [],
         });
       }
 
@@ -118,6 +126,7 @@ export function useClusterStatus() {
     status,
     config,
     health,
+    history,
     loading,
     error,
     lastUpdate,
