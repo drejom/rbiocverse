@@ -44,15 +44,15 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false, trend = 
     <span className="health-indicator" title={tooltip}>
       <Icon className="icon-xs" />
       <div className="health-bar-container">
+        {trend && trend.length >= 2 && (
+          <Sparkline data={trend} width={40} height={8} />
+        )}
         <div className="health-bar">
           <div
             className={`health-bar-fill ${level}`}
             style={{ width: `${safePercent}%` }}
           />
         </div>
-        {trend && trend.length >= 2 && (
-          <Sparkline data={trend} width={40} height={8} />
-        )}
       </div>
     </span>
   );
