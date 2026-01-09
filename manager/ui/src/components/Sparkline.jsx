@@ -7,8 +7,9 @@
 // Percentage point change threshold for trend coloring
 const TREND_THRESHOLD = 5;
 
-// Number of recent points to use for color (6 points @ 30min = ~3 hours)
-const RECENT_WINDOW = 6;
+// Number of recent points to use for color (4 points @ 30min = ~2 hours)
+// Analysis shows avg change of ~13% over 2hrs vs 10% over 1hr - good signal-to-noise
+const RECENT_WINDOW = 4;
 
 export function Sparkline({ data, width = 40, height = 12, className = '' }) {
   if (!data || data.length < 2) {
