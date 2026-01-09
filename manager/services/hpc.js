@@ -100,7 +100,7 @@ class HpcService {
 
       const child = exec(
         sshCmd,
-        { timeout: 30000 },
+        { timeout: 60000 }, // 60s to handle slow multi-hop SSH connections
         (error, stdout, stderr) => {
           // Filter out OpenSSH post-quantum warnings (not actual errors)
           const filteredStderr = stderr
@@ -110,7 +110,13 @@ class HpcService {
             ?.trim();
 
           if (error) {
-            const errorMsg = filteredStderr || error.message;
+            // Filter warnings from error.message too (exec includes stderr in error)
+            const filteredError = error.message
+              ?.replace(/\*\* WARNING:.*post-quantum.*\r?\n?/g, '')
+              ?.replace(/\*\* This session may be vulnerable.*\r?\n?/g, '')
+              ?.replace(/\*\* The server may need.*\r?\n?/g, '')
+              ?.trim();
+            const errorMsg = filteredStderr || filteredError || 'SSH command failed';
             log.error('SSH command failed', { cluster: this.clusterName, error: errorMsg });
             reject(new Error(errorMsg));
           } else {
