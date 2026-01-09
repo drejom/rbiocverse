@@ -21,6 +21,11 @@ All notable changes to the rbiocverse package collection will be documented in t
   - Users can create project environments with `pixi init` and install conda-forge packages
   - Native lockfile support for reproducible environments
 
+- **Documentation restructure**:
+  - New [USER_GUIDE.md](USER_GUIDE.md) - End-user documentation (JupyterLab, pixi, available packages, how-tos)
+  - New [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - Maintainer documentation (building, upgrading, adding packages)
+  - Streamlined [README.md](Readme.md) - High-level overview with links to guides
+
 ## [3.22.0] - 2026-01-03
 
 ### Added
