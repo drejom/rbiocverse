@@ -2,6 +2,25 @@
 
 All notable changes to the rbiocverse package collection will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **JupyterLab enhancements** (#18):
+  - `jupyter-server-proxy` - Native proxying for dev servers (Shiny, Streamlit, Gradio) through JupyterLab
+  - `jupyterlab-lsp` + `python-lsp-server[all]` - Code intelligence (autocomplete, go-to-definition, linting)
+  - `jupyterlab-code-formatter` + `black` + `isort` - Auto-format Python code
+  - `jupyterlab-spellchecker` - Spell check markdown cells
+  - `jupyterlab-execute-time` - Show cell execution time
+  - `jupytext` - Save notebooks as .py/.Rmd for better version control
+  - `jupyter-resource-usage` - Monitor CPU/RAM usage
+  - `octave_kernel` - GNU Octave kernel (free MATLAB alternative)
+
+- **pixi package manager** (#16):
+  - Fast conda/mamba alternative from prefix.dev (10x faster than conda)
+  - Installed system-wide to `/usr/local/bin/pixi`
+  - Users can create project environments with `pixi init` and install conda-forge packages
+  - Native lockfile support for reproducible environments
+
 ## [3.22.0] - 2026-01-03
 
 ### Added

@@ -95,6 +95,7 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     radian \
     dxpy \
     jupyterlab \
+    jupyter-server-proxy \
     ipykernel \
     ipywidgets \
     jupyterlab-git \
@@ -102,6 +103,16 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     numpy scipy scikit-learn umap-learn leidenalg \
     matplotlib seaborn plotly \
     rpy2 \
+    # Code intelligence & formatting (#18)
+    jupyterlab-lsp "python-lsp-server[all]" \
+    jupyterlab-code-formatter black isort \
+    # Productivity extensions (#18)
+    jupyterlab-spellchecker \
+    jupyterlab-execute-time \
+    jupytext \
+    jupyter-resource-usage \
+    # Additional kernels
+    octave_kernel \
     # SoS polyglot notebook (multi-language kernels in one notebook)
     sos sos-notebook jupyterlab-sos \
     sos-r sos-python sos-bash \
@@ -130,6 +141,11 @@ RUN curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-a
     && chmod +x code \
     && mv code /usr/local/bin/ \
     && rm vscode_cli.tar.gz
+
+# pixi - Fast conda/mamba alternative package manager (#16)
+# Installs to /usr/local/bin for system-wide availability
+# Users can create project environments with `pixi init` and install conda-forge packages
+RUN curl -fsSL https://pixi.sh/install.sh | PIXI_HOME=/usr/local PIXI_NO_PATH_UPDATE=1 bash
 
 # =============================================================================
 # VS Code Extensions (pre-installed for HPC Code Server bootstrap)
