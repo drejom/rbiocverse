@@ -47,6 +47,7 @@ gpu = [
 staged = [
     # Add packages here as they are installed between releases
     # At upgrade time, decide: promote to core, keep staged, or drop
+    "jupyter-server-proxy",  # Proxy dev servers (Shiny, Streamlit) through JupyterLab auth
 ]
 
 [build-system]
