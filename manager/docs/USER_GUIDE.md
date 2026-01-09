@@ -141,5 +141,6 @@ VS Code extensions are stored in your home directory. First launch may take long
 
 ## See Also
 
+- [USER_INTERFACE.md](USER_INTERFACE.md) - Complete UI reference (health indicators, forms, sessions)
 - [IDE_CUSTOMIZATIONS.md](IDE_CUSTOMIZATIONS.md) - Default settings and keybindings
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical documentation
