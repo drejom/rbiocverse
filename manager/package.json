@@ -16,7 +16,10 @@
     "test:all": "mocha 'test/**/*.test.js' --timeout 60000"
   },
   "c8": {
-    "reporter": ["text", "json-summary"],
+    "reporter": [
+      "text",
+      "json-summary"
+    ],
     "report-dir": "coverage"
   },
   "dependencies": {
@@ -27,9 +30,9 @@
   "devDependencies": {
     "c8": "^9.0.0",
     "chai": "^4.3.10",
-    "mocha": "^10.2.0",
+    "mocha": "^12.0.0-beta-5",
     "puppeteer": "^24.34.0",
-    "sinon": "^17.0.1",
+    "sinon": "^21.0.1",
     "sinon-chai": "^3.7.0",
     "supertest": "^6.3.3"
   }
