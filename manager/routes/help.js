@@ -1,6 +1,7 @@
 /**
  * Help Routes
  * Serves markdown help content from /content/help/
+ * Supports dynamic template syntax for embedding live data
  */
 
 const express = require('express');
@@ -10,6 +11,90 @@ const path = require('path');
 const { log } = require('../lib/logger');
 
 const HELP_CONTENT_DIR = path.join(__dirname, '../content/help');
+
+// StateManager will be injected via setStateManager()
+let stateManager = null;
+
+/**
+ * Set the state manager for accessing cluster health data
+ * @param {StateManager} sm - State manager instance
+ */
+function setStateManager(sm) {
+  stateManager = sm;
+}
+
+/**
+ * Get value from nested object using dot notation path
+ * @param {Object} obj - Object to traverse
+ * @param {string} path - Dot notation path (e.g., 'gemini.cpus.percent')
+ * @returns {*} Value at path or undefined
+ */
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((curr, key) => curr?.[key], obj);
+}
+
+/**
+ * Process template expressions in content
+ * Supports:
+ * - Simple paths: {{gemini.cpus.percent}}
+ * - Ternary expressions: {{gemini.online ? "🟢 Online" : "🔴 Offline"}}
+ *
+ * @param {string} content - Markdown content with template expressions
+ * @param {Object} data - Data context for substitutions
+ * @returns {string} Processed content
+ */
+function processTemplates(content, data) {
+  if (!content || !data) return content;
+
+  // Match {{...}} expressions
+  return content.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
+    const trimmed = expr.trim();
+
+    // Check for ternary expression: condition ? "trueVal" : "falseVal"
+    const ternaryMatch = trimmed.match(/^(.+?)\s*\?\s*["'](.+?)["']\s*:\s*["'](.+?)["']$/);
+    if (ternaryMatch) {
+      const [, condition, trueVal, falseVal] = ternaryMatch;
+      const conditionValue = getNestedValue(data, condition.trim());
+      return conditionValue ? trueVal : falseVal;
+    }
+
+    // Simple path substitution
+    const value = getNestedValue(data, trimmed);
+    if (value === undefined || value === null) {
+      return '-'; // Graceful fallback for missing data
+    }
+    return String(value);
+  });
+}
+
+/**
+ * Build data context for template processing
+ * Flattens cluster health data into a template-friendly format
+ * @returns {Object} Data context with paths like gemini.cpus.percent
+ */
+function buildTemplateContext() {
+  if (!stateManager) return {};
+
+  const clusterHealth = stateManager.getClusterHealth();
+  const context = {};
+
+  for (const [cluster, health] of Object.entries(clusterHealth)) {
+    if (!health?.current) continue;
+
+    const current = health.current;
+    context[cluster] = {
+      online: current.online ?? false,
+      cpus: current.cpus || {},
+      memory: current.memory || {},
+      nodes: current.nodes || {},
+      gpus: current.gpus || {},
+      runningJobs: current.runningJobs ?? 0,
+      pendingJobs: current.pendingJobs ?? 0,
+    };
+  }
+
+  return context;
+}
 
 /**
  * Load the help index manifest
@@ -127,6 +212,7 @@ router.get('/search', async (req, res) => {
 /**
  * GET /api/help/:section
  * Returns markdown content for a specific help section
+ * Processes template expressions ({{...}}) with live cluster data
  */
 router.get('/:section', async (req, res) => {
   const { section } = req.params;
@@ -140,7 +226,12 @@ router.get('/:section', async (req, res) => {
       return res.status(404).json({ error: `Help section '${section}' not found` });
     }
 
-    const content = await loadHelpSection(section);
+    let content = await loadHelpSection(section);
+
+    // Process templates with live cluster data
+    const templateContext = buildTemplateContext();
+    content = processTemplates(content, templateContext);
+
     res.json({
       id: sectionInfo.id,
       title: sectionInfo.title,
@@ -157,3 +248,4 @@ router.get('/:section', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.setStateManager = setStateManager;

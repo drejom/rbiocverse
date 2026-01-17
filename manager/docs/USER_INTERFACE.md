@@ -209,7 +209,28 @@ Your work is preserved - the SLURM job continues running on the cluster.
 - Check if you're running memory-intensive operations
 - Large files or many open tabs can slow VS Code
 
+## Help Panel
+
+Click the **?** icon (top-right) to open built-in documentation.
+
+### Features
+
+- **Search** - Find topics across all help sections
+- **Navigation** - Tabbed sections: Quick Start, Environment, IDEs, Support
+- **Live data** - Real-time cluster status embedded in help content
+- **Keyboard** - Press `Escape` to close
+
+### Live Cluster Data
+
+The Quick Start section displays current cluster metrics:
+- Online/offline status with emoji indicators
+- CPU, memory, and node utilization percentages
+- Live health bars matching the main launcher
+
+This helps you decide which cluster to use without leaving the help panel.
+
 ## See Also
 
 - [USER_GUIDE.md](USER_GUIDE.md) - Keyboard shortcuts, Python/R setup
 - [IDE_CUSTOMIZATIONS.md](IDE_CUSTOMIZATIONS.md) - Default settings and keybindings
+- [HELP_SYSTEM.md](HELP_SYSTEM.md) - Help system architecture (for developers)

@@ -67,7 +67,8 @@ function getSessionToken(ide) {
 // Mount auth routes (before general /api to avoid conflicts)
 app.use('/api/auth', authRouter);
 
-// Mount help routes
+// Mount help routes (inject stateManager for template processing)
+helpRouter.setStateManager(stateManager);
 app.use('/api/help', helpRouter);
 
 // Mount API routes (general /api/* - must come after more specific routes)

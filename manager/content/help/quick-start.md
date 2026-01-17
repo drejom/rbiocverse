@@ -10,6 +10,19 @@ Get up and running in minutes.
 4. **Adjust resources** if needed (defaults work for most tasks)
 5. **Click Launch** - Wait for the job to start
 
+## Current Cluster Status
+
+| Cluster | Status | CPU | Memory | Nodes |
+|---------|--------|-----|--------|-------|
+| Gemini  | {{gemini.online ? "🟢 Online" : "🔴 Offline"}} | {{gemini.cpus.percent}}% | {{gemini.memory.percent}}% | {{gemini.nodes.percent}}% |
+| Apollo  | {{apollo.online ? "🟢 Online" : "🔴 Offline"}} | {{apollo.cpus.percent}}% | {{apollo.memory.percent}}% | {{apollo.nodes.percent}}% |
+
+**Live health bars:**
+
+:::widget ClusterHealth cluster="gemini":::
+
+:::widget ClusterHealth cluster="apollo":::
+
 ## Check Cluster Health First
 
 Look at the health indicators before launching:

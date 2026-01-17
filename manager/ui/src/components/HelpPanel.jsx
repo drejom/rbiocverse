@@ -1,10 +1,13 @@
 /**
  * HelpPanel - Slide-out panel with markdown help content
+ * Supports dynamic widgets embedded in markdown via :::widget WidgetName prop="value"::: syntax
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-react';
 import { marked } from 'marked';
+import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders, parseWidgetProps } from './help-widgets';
 
 // Configure marked for safe HTML output
 marked.setOptions({
@@ -49,13 +52,53 @@ const menuStructure = [
   },
 ];
 
+/**
+ * Renders widgets into their placeholder elements using React portals
+ */
+function WidgetPortals({ widgets, containerRef }) {
+  const [mountPoints, setMountPoints] = useState([]);
+
+  useEffect(() => {
+    if (!containerRef.current || widgets.length === 0) {
+      setMountPoints([]);
+      return;
+    }
+
+    // Find all widget placeholder elements
+    const points = widgets.map(widget => {
+      const el = containerRef.current.querySelector(`[data-widget-id="${widget.id}"]`);
+      return el ? { widget, element: el } : null;
+    }).filter(Boolean);
+
+    setMountPoints(points);
+  }, [widgets, containerRef]);
+
+  return (
+    <>
+      {mountPoints.map(({ widget, element }) => {
+        const Component = widgetRegistry[widget.name];
+        if (!Component) {
+          console.warn(`Unknown help widget: ${widget.name}`);
+          return null;
+        }
+        return createPortal(
+          <Component key={widget.id} {...widget.props} />,
+          element
+        );
+      })}
+    </>
+  );
+}
+
 function HelpPanel({ isOpen, onClose }) {
   const [activeSection, setActiveSection] = useState('quick-start');
   const [expandedGroup, setExpandedGroup] = useState(null); // Only one group expanded at a time
   const [content, setContent] = useState('');
+  const [widgets, setWidgets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const contentRef = useRef(null);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -77,16 +120,24 @@ function HelpPanel({ isOpen, onClose }) {
 
     setLoading(true);
     setSearchResults(null);
+    setWidgets([]);
 
     fetch(`/api/help/${activeSection}`)
       .then(res => res.json())
       .then(data => {
-        setContent(data.content || '');
+        const rawContent = data.content || '';
+        // Parse widgets from content
+        const parsedWidgets = parseWidgets(rawContent);
+        setWidgets(parsedWidgets);
+        // Replace widget syntax with placeholder divs
+        const processedContent = replaceWidgetsWithPlaceholders(rawContent, parsedWidgets);
+        setContent(processedContent);
         setLoading(false);
       })
       .catch(err => {
         console.error('Failed to load help section:', err);
         setContent('Failed to load content.');
+        setWidgets([]);
         setLoading(false);
       });
   }, [activeSection, isOpen]);
@@ -299,38 +350,42 @@ function HelpPanel({ isOpen, onClose }) {
               <p>Loading...</p>
             </div>
           ) : (
-            <div
-              dangerouslySetInnerHTML={{ __html: marked.parse(content || '') }}
-              onClick={(e) => {
-                const link = e.target.closest('a');
-                if (link) {
-                  const href = link.getAttribute('href');
-                  const allSections = getAllSections();
+            <>
+              <div
+                ref={contentRef}
+                dangerouslySetInnerHTML={{ __html: marked.parse(content || '') }}
+                onClick={(e) => {
+                  const link = e.target.closest('a');
+                  if (link) {
+                    const href = link.getAttribute('href');
+                    const allSections = getAllSections();
 
-                  // Match /help/section or /api/help/section formats
-                  const helpMatch = href?.match(/^\/(?:api\/)?help\/(.+)$/);
-                  if (helpMatch) {
-                    e.preventDefault();
-                    const sectionId = helpMatch[1];
-                    setActiveSection(sectionId);
-                    const parent = menuStructure.find(m =>
-                      m.children?.some(c => c.id === sectionId)
-                    );
-                    if (parent) setExpandedGroup(parent.id);
-                  } else if (href?.startsWith('#')) {
-                    e.preventDefault();
-                    const sectionId = href.slice(1);
-                    if (allSections.find(s => s.id === sectionId)) {
+                    // Match /help/section or /api/help/section formats
+                    const helpMatch = href?.match(/^\/(?:api\/)?help\/(.+)$/);
+                    if (helpMatch) {
+                      e.preventDefault();
+                      const sectionId = helpMatch[1];
                       setActiveSection(sectionId);
                       const parent = menuStructure.find(m =>
                         m.children?.some(c => c.id === sectionId)
                       );
                       if (parent) setExpandedGroup(parent.id);
+                    } else if (href?.startsWith('#')) {
+                      e.preventDefault();
+                      const sectionId = href.slice(1);
+                      if (allSections.find(s => s.id === sectionId)) {
+                        setActiveSection(sectionId);
+                        const parent = menuStructure.find(m =>
+                          m.children?.some(c => c.id === sectionId)
+                        );
+                        if (parent) setExpandedGroup(parent.id);
+                      }
                     }
                   }
-                }
-              }}
-            />
+                }}
+              />
+              <WidgetPortals widgets={widgets} containerRef={contentRef} />
+            </>
           )}
         </div>
       </div>

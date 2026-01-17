@@ -64,7 +64,7 @@ The HPC Code Server Manager is a web application that provides browser-based IDE
 
 ```
 manager/
-├── server.js              # Main Express server (196 lines)
+├── server.js              # Main Express server
 ├── config/
 │   └── index.js           # Configuration and cluster definitions
 ├── lib/
@@ -77,15 +77,21 @@ manager/
 │   ├── hpc.js             # HpcService - SLURM operations via SSH
 │   └── tunnel.js          # TunnelService - SSH tunnel management
 ├── routes/
-│   └── api.js             # API endpoints (/api/*)
-├── public/
-│   ├── index.html         # Launcher page
-│   ├── css/style.css      # Styles
-│   └── js/launcher.js     # Frontend JavaScript
+│   ├── api.js             # API endpoints (/api/*)
+│   ├── auth.js            # Authentication endpoints
+│   └── help.js            # Help content with template processing
+├── content/
+│   └── help/              # Markdown help files + index.json
+├── ui/                    # React frontend (Vite)
+│   └── src/
+│       ├── components/    # React components
+│       │   ├── HelpPanel.jsx
+│       │   └── help-widgets/  # Embeddable help widgets
+│       └── hooks/         # Custom React hooks
+├── public/                # Static assets, wrapper pages
 ├── test/
 │   ├── unit/              # Unit tests (mocha + chai)
-│   ├── integration/       # API integration tests
-│   └── e2e/               # Puppeteer browser tests
+│   └── integration/       # API integration tests
 └── docs/                  # Documentation
 ```
 
@@ -407,3 +413,59 @@ state.sessions['gemini-vscode'] = {
   // ...
 };
 ```
+
+## Authentication
+
+Multi-user authentication with smart SSH key management.
+
+### Flow
+
+1. User logs in with credentials (dev: env vars, prod: LDAP)
+2. System tests SSH to both clusters
+3. If SSH works → mark setup complete, no managed key needed
+4. If SSH fails → generate managed RSA keypair, user installs public key
+
+### Key Management
+
+| State | Meaning |
+|-------|---------|
+| `publicKey: null` | No managed key - user's own SSH works |
+| `publicKey: "ssh-rsa..."` | Managed key exists - may need installation |
+| `setupComplete: true` | SSH verified working |
+| `setupComplete: false` | User needs to install managed key |
+
+### API Endpoints (`routes/auth.js`)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/auth/login` | Authenticate, test SSH, generate key if needed |
+| `POST /api/auth/test-connection-both` | Test SSH to both clusters |
+| `POST /api/auth/generate-key` | Generate managed key |
+| `POST /api/auth/remove-key` | Remove managed key (requires working SSH) |
+| `POST /api/auth/complete-setup` | Mark setup complete |
+
+### Security
+
+- Tokens: HMAC-SHA256 signed, configurable expiry
+- Passwords: PBKDF2-SHA512 with random salt (for future local auth)
+- User data: `data/users.json` (no secrets stored)
+
+## Help System
+
+Built-in documentation with live cluster data. See [HELP_SYSTEM.md](HELP_SYSTEM.md) for details.
+
+### Features
+
+- **Template syntax**: `{{gemini.cpus.percent}}` renders live values
+- **Ternary expressions**: `{{cluster.online ? "🟢" : "🔴"}}`
+- **Widget embedding**: `:::widget ClusterHealth cluster="gemini":::`
+- **Search**: Full-text search across all help sections
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `routes/help.js` | API + server-side template processing |
+| `ui/src/components/HelpPanel.jsx` | React panel + widget mounting |
+| `ui/src/components/help-widgets/` | Embeddable widget components |
+| `content/help/*.md` | Markdown content |
