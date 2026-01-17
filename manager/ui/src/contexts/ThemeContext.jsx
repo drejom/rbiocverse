@@ -7,7 +7,6 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 const ThemeContext = createContext(null);
 
-const STORAGE_KEY = 'rbiocverse-theme';
 const PREFERENCE_KEY = 'rbiocverse-theme-preference'; // 'dark', 'light', or 'auto'
 
 /**

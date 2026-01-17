@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function SetupWizard({ publicKey, onComplete }) {
@@ -26,7 +26,7 @@ function SetupWizard({ publicKey, onComplete }) {
   // Skip auto-test if ?skipAutoTest=1 in URL (for debugging)
   const skipAutoTest = new URLSearchParams(window.location.search).has('skipAutoTest');
   const [initialTestDone, setInitialTestDone] = useState(skipAutoTest);
-  const [autoCompleting, setAutoCompleting] = useState(false);
+  const [autoCompleting] = useState(false);
   // Track if SSH passed but user has a managed key to install
   const [existingKeysWork, setExistingKeysWork] = useState(false);
 

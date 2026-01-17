@@ -34,8 +34,8 @@ const config = {
   sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10) || 0,
   // Admin email for error notifications (optional)
   adminEmail: process.env.ADMIN_EMAIL || null,
-  // JWT secret for session tokens
-  jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
+  // JWT secret for session tokens (required in production)
+  jwtSecret: process.env.JWT_SECRET,
   // Session token expiry in days
   sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
 };

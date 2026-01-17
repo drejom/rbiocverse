@@ -5,13 +5,11 @@
 import { useState } from 'react';
 import { Hexagon, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import ClusterHealthCard from '../components/ClusterHealthCard';
 import ThemeToggle from '../components/ThemeToggle';
 
 function Login({ clusterHealth = {}, clusterHistory = {} }) {
   const { login, error, loading, clearError } = useAuth();
-  const { theme } = useTheme();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

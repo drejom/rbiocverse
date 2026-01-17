@@ -19,8 +19,9 @@ const { errorLogger } = require('../services/ErrorLogger');
 const USER_DATA_FILE = path.join(__dirname, '..', 'data', 'users.json');
 
 // Test credentials (for development - will be replaced by LDAP)
-const TEST_USERNAME = process.env.TEST_USERNAME || 'domeally';
-const TEST_PASSWORD = process.env.TEST_PASSWORD || 'biddy41$';
+// Must be set via environment variables - no defaults for security
+const TEST_USERNAME = process.env.TEST_USERNAME;
+const TEST_PASSWORD = process.env.TEST_PASSWORD;
 
 // Simple JWT-like token handling (no external dependency)
 // In production, consider using a proper JWT library
@@ -160,24 +161,6 @@ function saveUsers() {
 loadUsers();
 
 /**
- * Hash password with salt
- */
-function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const hash = crypto
-    .pbkdf2Sync(password, salt, 10000, 64, 'sha512')
-    .toString('hex');
-  return { hash, salt };
-}
-
-/**
- * Verify password
- */
-function verifyPassword(password, hash, salt) {
-  const result = hashPassword(password, salt);
-  return result.hash === hash;
-}
-
-/**
  * Middleware to require authentication
  */
 function requireAuth(req, res, next) {
@@ -246,6 +229,10 @@ router.post('/login', async (req, res) => {
   try {
     // Development: Verify against test credentials (env vars)
     // TODO: Replace with LDAP/AD authentication
+    if (!TEST_USERNAME || !TEST_PASSWORD) {
+      log.error('TEST_USERNAME and TEST_PASSWORD must be set in environment');
+      return res.status(500).json({ error: 'Authentication not configured' });
+    }
     if (username !== TEST_USERNAME || password !== TEST_PASSWORD) {
       await errorLogger.logWarning({
         user: username,

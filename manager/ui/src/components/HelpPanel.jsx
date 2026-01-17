@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-react';
 import { marked } from 'marked';
-import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders, parseWidgetProps } from './help-widgets';
+import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders } from './help-widgets';
 
 // Configure marked for safe HTML output
 marked.setOptions({

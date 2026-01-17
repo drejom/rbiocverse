@@ -5,7 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useClusterStatus } from './hooks/useClusterStatus';
 import { useCountdown } from './hooks/useCountdown';
 import { useLaunch } from './hooks/useLaunch';
-import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ClusterCard from './components/ClusterCard';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -198,7 +198,7 @@ function Launcher() {
  */
 function AppContent() {
   const { isAuthenticated, needsSetup, loading, user } = useAuth();
-  const { status, health, history } = useClusterStatus();
+  const { health, history } = useClusterStatus();
 
   // Show loading while checking auth
   if (loading) {
