@@ -668,13 +668,16 @@ class StateManager {
     // Start job polling immediately
     this.scheduleJobPoll();
 
-    // Start health polling - check if ALL clusters have fresh cached data
+    // Start health polling - check if ALL clusters have fresh AND successful cached data
     const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
     const clusterNames = Object.keys(clusters);
     const allClustersHaveFreshHealth = clusterNames.length > 0 &&
       clusterNames.every(hpc => {
         const h = this.state.clusterHealth?.[hpc];
-        return h?.current?.lastChecked && (Date.now() - h.current.lastChecked) < INTERVAL_MS;
+        // Require fresh data AND online status - refresh if any cluster is offline/errored
+        return h?.current?.lastChecked &&
+               h?.current?.online !== false &&
+               (Date.now() - h.current.lastChecked) < INTERVAL_MS;
       });
 
     if (allClustersHaveFreshHealth) {
