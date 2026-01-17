@@ -32,6 +32,12 @@ const config = {
   // Activity is tracked via proxy data events (HTTP requests, WebSocket messages).
   // The trailing || 0 handles NaN from invalid non-numeric values (e.g., "abc")
   sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10) || 0,
+  // Admin email for error notifications (optional)
+  adminEmail: process.env.ADMIN_EMAIL || null,
+  // JWT secret for session tokens
+  jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
+  // Session token expiry in days
+  sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
 };
 
 // VS Code global defaults - written to Machine settings, user settings override

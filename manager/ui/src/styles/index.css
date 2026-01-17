@@ -3,11 +3,19 @@
  * Migrated from public/css/style.css for React
  */
 
+/* Google Fonts - Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500&display=swap');
+
 /* Reset */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Ensure consistent font across all form elements */
+input, select, textarea, button {
+  font-family: inherit;
 }
 
 /* Lucide icon styling */
@@ -44,7 +52,7 @@
 }
 
 .time-pie-bg {
-  fill: rgba(255, 255, 255, 0.1);
+  fill: var(--bg-card);
   stroke: none;
 }
 
@@ -77,24 +85,25 @@
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 200;
+  background: var(--bg-primary);
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--text-primary);
   padding: 20px;
 }
 
 /* Launcher Container */
 .launcher {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: var(--bg-card);
+  backdrop-filter: var(--blur-card);
   border-radius: 20px;
   padding: 30px;
   width: min(800px, calc(100vw - 40px));
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-card);
 }
 
 h1 {
@@ -104,15 +113,15 @@ h1 {
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   margin-bottom: 25px;
   text-align: center;
 }
 
 /* Cluster Cards */
 .cluster-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-card);
+  border: 2px solid var(--border-subtle);
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 15px;
@@ -164,7 +173,7 @@ h1 {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--text-muted);
 }
 
 .status-dot.running {
@@ -187,7 +196,7 @@ h1 {
 }
 
 .cluster-info {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 12px;
 }
@@ -210,7 +219,7 @@ h1 {
 .resources {
   display: flex;
   gap: 15px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-size: 0.85rem;
   margin-top: 8px;
 }
@@ -248,7 +257,7 @@ h1 {
 .form-input label {
   display: block;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
@@ -256,16 +265,16 @@ h1 {
   width: 100%;
   height: 36px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-input);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--bg-input);
+  color: var(--text-primary);
   font-size: 0.9rem;
 }
 
 .form-input input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--border-focus);
 }
 
 /* Buttons */
@@ -288,32 +297,32 @@ h1 {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: #fff;
+  background: var(--gradient-button);
+  color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  box-shadow: var(--shadow-button);
 }
 
 .btn-success {
-  background: #4ade80;
-  color: #000;
+  background: var(--color-success);
+  color: var(--text-inverse);
 }
 
 .btn-success:hover:not(:disabled) {
-  background: #22c55e;
+  filter: brightness(1.1);
 }
 
 .btn-danger {
   background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: var(--color-danger-bg);
 }
 
 .btn-group {
@@ -324,12 +333,12 @@ h1 {
 
 /* Error Display */
 .error {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 15px;
-  color: #fca5a5;
+  color: var(--color-danger-text);
 }
 
 /* Spinner */
@@ -337,9 +346,9 @@ h1 {
   display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--border-subtle);
   border-radius: 50%;
-  border-top-color: #fff;
+  border-top-color: var(--text-primary);
   animation: spin 1s linear infinite;
 }
 
@@ -351,7 +360,7 @@ h1 {
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -360,7 +369,7 @@ h1 {
 
 .loading-content {
   text-align: center;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .loading-content .spinner {
@@ -379,29 +388,28 @@ h1 {
 
 .btn-secondary {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
-  color: #fff;
+  background: var(--bg-card);
+  border-color: var(--border-input);
+  color: var(--text-primary);
 }
 
 .btn-cancel {
   background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .btn-cancel:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.7);
+  background: var(--color-danger-bg);
 }
 
 .estimated-start {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 
@@ -429,7 +437,7 @@ h1 {
   align-items: center;
   gap: 8px;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -458,25 +466,25 @@ h1 {
   justify-content: center;
   gap: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-card);
+  border: 2px solid var(--border-subtle);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .ide-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
+  background: var(--bg-card-hover);
+  border-color: var(--border-input);
+  color: var(--text-primary);
 }
 
 .ide-btn.selected {
   background: rgba(59, 130, 246, 0.2);
-  border-color: #3b82f6;
-  color: #fff;
+  border-color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 .ide-btn:disabled {
@@ -486,8 +494,8 @@ h1 {
 
 /* IDE Session sections (when running) */
 .ide-session {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 12px;
   margin-bottom: 10px;
@@ -516,14 +524,14 @@ h1 {
 
 .ide-name {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
 }
 
 .ide-node {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
 }
@@ -538,7 +546,7 @@ h1 {
 .resources-inline {
   display: flex;
   gap: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-size: 0.8rem;
 }
 
@@ -572,7 +580,7 @@ h1 {
 .section-divider {
   text-align: center;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   margin: 15px 0 10px;
   position: relative;
 }
@@ -584,7 +592,7 @@ h1 {
   top: 50%;
   width: 30%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--border-subtle);
 }
 
 .section-divider::before {
@@ -619,12 +627,12 @@ h1 {
   font-size: 1.2rem;
   font-weight: 600;
   margin-bottom: 8px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .progress-step {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 15px;
   min-height: 1.2em;
 }
@@ -702,8 +710,8 @@ h1 {
   gap: 12px;
   margin-bottom: 14px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card);
   border-radius: 12px;
 }
 
@@ -727,7 +735,7 @@ h1 {
 .release-label {
   font-size: 0.85rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
   margin-top: 8px;
   margin-left: -2px;
 }
@@ -735,10 +743,10 @@ h1 {
 .release-dropdown {
   flex: 0 0 auto;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
   border-radius: 8px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -751,8 +759,8 @@ h1 {
 }
 
 .release-dropdown:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--border-subtle);
+  border-color: var(--border-input);
 }
 
 .release-dropdown:focus {
@@ -762,7 +770,7 @@ h1 {
 
 .release-dropdown option {
   background: #1a1a2e;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 /* GPU Selector - Segmented control (Apple-like) */
@@ -776,14 +784,14 @@ h1 {
   align-items: center;
   gap: 4px;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
 .gpu-toggle {
   display: flex;
   flex-wrap: nowrap;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-card);
   border-radius: 6px;
   padding: 2px;
   gap: 1px;
@@ -802,7 +810,7 @@ h1 {
   background: transparent;
   border: none;
   border-radius: 5px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
@@ -811,13 +819,13 @@ h1 {
 }
 
 .gpu-btn:hover {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background: var(--bg-card);
 }
 
 .gpu-btn.selected {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: var(--border-subtle);
+  color: var(--text-primary);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
@@ -862,7 +870,7 @@ h1 {
 .health-bar {
   width: 40px;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -961,7 +969,7 @@ h1 {
 
 .stop-progress-text {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 

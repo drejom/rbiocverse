@@ -1,13 +1,21 @@
 /**
- * HPC Code Server Launcher - Main App Component
+ * rbiocverse Launcher - Main App Component
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useClusterStatus } from './hooks/useClusterStatus';
 import { useCountdown } from './hooks/useCountdown';
 import { useLaunch } from './hooks/useLaunch';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ClusterCard from './components/ClusterCard';
 import LoadingOverlay from './components/LoadingOverlay';
+import Login from './pages/Login';
+import SetupWizard from './components/SetupWizard';
+import UserMenu from './components/UserMenu';
+import HelpPanel from './components/HelpPanel';
+import { HelpCircle, Hexagon } from 'lucide-react';
 import './styles/index.css';
+import './styles/themes.css';
 
 // Fallback timeout for stop operation (SLURM scancel + tunnel cleanup)
 const STOP_TIMEOUT_MS = 15000;
@@ -16,13 +24,17 @@ const STOP_TIMEOUT_MS = 15000;
 // Could be derived from API in future if dynamic clusters are needed
 const CLUSTER_NAMES = ['gemini', 'apollo'];
 
-function App() {
+/**
+ * Main launcher UI - shown after authentication
+ */
+function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
 
   const [stoppingJobs, setStoppingJobs] = useState({});
   const [error, setError] = useState(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Track active EventSources for cleanup on unmount
   const stopEventSourcesRef = useRef(new Map());
@@ -109,9 +121,25 @@ function App() {
     <>
       <div className="launcher">
         <div className="launcher-header">
-          <div>
-            <h1>HPC Code Server</h1>
-            <p className="subtitle">VS Code on SLURM compute nodes</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="login-logo-icon" style={{ width: 36, height: 36, borderRadius: 8 }}>
+              <Hexagon size={20} />
+            </div>
+            <div>
+              <h1 style={{ marginBottom: 0 }}>rbiocverse</h1>
+              <p className="subtitle" style={{ marginBottom: 0 }}>VS Code, RStudio, JupyterLab on HPC</p>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button
+              className="help-btn"
+              onClick={() => setHelpOpen(true)}
+              title="Help"
+              aria-label="Open help panel"
+            >
+              <HelpCircle size={18} />
+            </button>
+            <UserMenu />
           </div>
         </div>
 
@@ -146,7 +174,59 @@ function App() {
         onBack={backToMenu}
         onCancel={stopLaunch}
       />
+
+      <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
+  );
+}
+
+/**
+ * App wrapper - handles authentication flow
+ */
+function AppContent() {
+  const { isAuthenticated, needsSetup, loading, user } = useAuth();
+  const { status, health, history } = useClusterStatus();
+
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="launcher">
+        <div className="loading-content">
+          <div className="spinner" />
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated - show login
+  if (!isAuthenticated) {
+    return <Login clusterHealth={health} clusterHistory={history} />;
+  }
+
+  // First login - show setup wizard
+  if (needsSetup) {
+    return (
+      <div className="launcher" style={{ maxWidth: 650 }}>
+        <SetupWizard publicKey={user?.publicKey || ''} />
+      </div>
+    );
+  }
+
+  // Authenticated - show main launcher
+  return <Launcher />;
+}
+
+/**
+ * Root App component with providers
+ */
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
