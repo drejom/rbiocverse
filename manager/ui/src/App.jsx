@@ -31,10 +31,21 @@ function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
+  const { generateKey } = useAuth();
 
   const [stoppingJobs, setStoppingJobs] = useState({});
   const [error, setError] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Handle SSH key setup from error state
+  const handleSetupKeys = useCallback(async () => {
+    backToMenu(); // Clear the error state
+    // Generate a managed key which will trigger setup wizard
+    const result = await generateKey();
+    if (result.success) {
+      // User will be redirected to setup wizard via needsSetup
+    }
+  }, [backToMenu, generateKey]);
 
   // Track active EventSources for cleanup on unmount
   const stopEventSourcesRef = useRef(new Map());
@@ -171,8 +182,10 @@ function Launcher() {
         error={launchState.error}
         pending={launchState.pending}
         indeterminate={launchState.indeterminate}
+        isSshError={launchState.isSshError}
         onBack={backToMenu}
         onCancel={stopLaunch}
+        onSetupKeys={handleSetupKeys}
       />
 
       <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />

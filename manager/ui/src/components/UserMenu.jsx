@@ -2,17 +2,17 @@
  * UserMenu - User avatar dropdown with profile actions
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Key, LogOut, ChevronDown, Copy, Download, CheckCircle, Moon, Sun, Monitor } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Key, LogOut, ChevronDown, Moon, Sun, Monitor } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import KeyManagementModal from './KeyManagementModal';
 
 function UserMenu() {
   const { user, logout } = useAuth();
   const { preference, setPreference } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [copied, setCopied] = useState(false);
   const menuRef = useRef(null);
 
   // Close menu when clicking outside
@@ -33,32 +33,6 @@ function UserMenu() {
     const names = user.fullName.split(' ');
     return names.map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-
-  // Copy public key
-  const copyKey = useCallback(async () => {
-    if (!user?.publicKey) return;
-    try {
-      await navigator.clipboard.writeText(user.publicKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Copy failed:', err);
-    }
-  }, [user?.publicKey]);
-
-  // Download public key
-  const downloadKey = useCallback(() => {
-    if (!user?.publicKey) return;
-    const blob = new Blob([user.publicKey], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rbiocverse_id.pub';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [user?.publicKey]);
 
   if (!user) return null;
 
@@ -128,7 +102,7 @@ function UserMenu() {
             }}
           >
             <Key size={16} />
-            View Public Key
+            Manage Keys
           </button>
 
           <div className="user-menu-divider" />
@@ -146,85 +120,11 @@ function UserMenu() {
         </div>
       )}
 
-      {/* Public Key Modal */}
-      {showKeyModal && (
-        <div
-          className="loading-overlay"
-          onClick={() => setShowKeyModal(false)}
-        >
-          <div
-            style={{
-              background: 'var(--bg-panel)',
-              borderRadius: '16px',
-              padding: '24px',
-              width: 'min(500px, 90vw)',
-              maxHeight: '80vh',
-              overflow: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>
-              Your Public Key
-            </h3>
-            <p style={{ marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              This is the SSH public key used for HPC cluster authentication.
-            </p>
-
-            <div
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '12px',
-                marginBottom: '16px',
-                fontFamily: 'monospace',
-                fontSize: '0.8rem',
-                wordBreak: 'break-all',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {user?.publicKey || 'No public key available'}
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                className={`key-btn ${copied ? 'copied' : ''}`}
-                onClick={copyKey}
-                style={{ flex: 1 }}
-              >
-                {copied ? (
-                  <>
-                    <CheckCircle size={16} />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy size={16} />
-                    Copy
-                  </>
-                )}
-              </button>
-
-              <button
-                className="key-btn"
-                onClick={downloadKey}
-                style={{ flex: 1 }}
-              >
-                <Download size={16} />
-                Download
-              </button>
-
-              <button
-                className="key-btn"
-                onClick={() => setShowKeyModal(false)}
-                style={{ flex: 1 }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Key Management Modal */}
+      <KeyManagementModal
+        isOpen={showKeyModal}
+        onClose={() => setShowKeyModal(false)}
+      />
     </div>
   );
 }

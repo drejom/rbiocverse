@@ -106,17 +106,34 @@ function generateSshKeypair(username) {
 
 // Persistent user store (JSON file)
 // Structure: { username: { fullName, publicKey, setupComplete, createdAt } }
+// publicKey: null (no managed key) or "ssh-rsa ..." (managed key exists)
 let users = new Map();
 
 /**
- * Load users from disk
+ * Load users from disk with migration to remove keyMode
  */
 function loadUsers() {
   try {
     if (fs.existsSync(USER_DATA_FILE)) {
       const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
+
+      // Migrate: remove keyMode field if present (no longer used)
+      let needsSave = false;
+      for (const [username, user] of Object.entries(data)) {
+        if ('keyMode' in user) {
+          delete user.keyMode;
+          needsSave = true;
+          log.info('Migrated user: removed keyMode field', { username });
+        }
+      }
+
       users = new Map(Object.entries(data));
       log.info('Loaded user data', { count: users.size });
+
+      // Save migration changes
+      if (needsSave) {
+        saveUsers();
+      }
     }
   } catch (err) {
     log.error('Failed to load user data', { error: err.message });
@@ -181,8 +198,43 @@ function requireAuth(req, res, next) {
 }
 
 /**
+ * Test SSH connection to a cluster (internal helper)
+ * Returns { success: boolean, error?: string }
+ */
+async function testSshConnection(cluster) {
+  try {
+    const HpcService = require('../services/hpc');
+    const hpcService = new HpcService(cluster);
+    await hpcService.sshExec('echo "Connection successful"');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message || 'Connection failed' };
+  }
+}
+
+/**
+ * Test SSH to both clusters
+ * Returns { gemini: boolean, apollo: boolean, bothSucceeded: boolean }
+ */
+async function testBothClusters() {
+  const [geminiResult, apolloResult] = await Promise.all([
+    testSshConnection('gemini'),
+    testSshConnection('apollo'),
+  ]);
+
+  return {
+    gemini: geminiResult.success,
+    apollo: apolloResult.success,
+    bothSucceeded: geminiResult.success && apolloResult.success,
+    geminiError: geminiResult.error,
+    apolloError: apolloResult.error,
+  };
+}
+
+/**
  * POST /api/auth/login
  * Authenticate user and return token
+ * For new users: tests SSH first, only generates keys if SSH fails
  */
 router.post('/login', async (req, res) => {
   const { username, password, rememberMe = true } = req.body;
@@ -205,29 +257,45 @@ router.post('/login', async (req, res) => {
 
     // Get or create user record
     let user = users.get(username);
+    let sshTestResult = null;
 
     if (!user) {
-      // First login - create user record
-      const { publicKey } = generateSshKeypair(username);
+      // First login - test SSH to see if existing keys work
+      log.info('New user login - testing SSH', { username });
+      sshTestResult = await testBothClusters();
 
-      user = {
-        username,
-        fullName: 'Denis O\'Meally', // Placeholder - will come from LDAP
-        publicKey,
-        setupComplete: false,
-        createdAt: new Date().toISOString(),
-      };
+      if (sshTestResult.bothSucceeded) {
+        // SSH works - no need to generate keys
+        user = {
+          username,
+          fullName: 'Denis O\'Meally', // Placeholder - will come from LDAP
+          publicKey: null, // No managed key needed
+          setupComplete: true,
+          createdAt: new Date().toISOString(),
+        };
+        log.info('New user with working SSH', { username });
+      } else {
+        // SSH failed - generate managed key
+        const { publicKey } = generateSshKeypair(username);
+        user = {
+          username,
+          fullName: 'Denis O\'Meally', // Placeholder - will come from LDAP
+          publicKey,
+          setupComplete: false,
+          createdAt: new Date().toISOString(),
+        };
+        log.info('New user - generated managed key', { username });
+      }
 
       users.set(username, user);
       saveUsers();
-      log.info('New user created', { username });
     }
 
     // Generate token
     const expiresIn = rememberMe ? config.sessionExpiryDays * 24 * 60 * 60 : 24 * 60 * 60;
     const token = generateToken({ username, fullName: user.fullName }, expiresIn);
 
-    log.info('User logged in', { username });
+    log.info('User logged in', { username, hasPublicKey: !!user.publicKey });
 
     res.json({
       token,
@@ -237,6 +305,7 @@ router.post('/login', async (req, res) => {
         publicKey: user.publicKey,
         setupComplete: user.setupComplete,
       },
+      sshTestResult, // Include for new users so frontend knows SSH status
     });
   } catch (err) {
     await errorLogger.logError({
@@ -313,7 +382,7 @@ router.post('/complete-setup', requireAuth, (req, res) => {
 
 /**
  * POST /api/auth/test-connection/:cluster
- * Test SSH connection to cluster
+ * Test SSH connection to a single cluster
  */
 router.post('/test-connection/:cluster', async (req, res) => {
   const { cluster } = req.params;
@@ -322,28 +391,144 @@ router.post('/test-connection/:cluster', async (req, res) => {
     return res.status(400).json({ error: 'Invalid cluster' });
   }
 
-  try {
-    // Import HpcService to test SSH connection
-    const HpcService = require('../services/hpc');
-    const hpcService = new HpcService(cluster);
-
-    // Try a simple SSH command
-    await hpcService.sshExec('echo "Connection successful"');
-
+  const result = await testSshConnection(cluster);
+  if (result.success) {
     res.json({ success: true, cluster });
-  } catch (err) {
-    log.warn('Connection test failed', { cluster, error: err.message });
+  } else {
+    log.warn('Connection test failed', { cluster, error: result.error });
     res.json({
       success: false,
       cluster,
-      error: err.message || 'Connection failed',
+      error: result.error,
     });
   }
 });
 
 /**
+ * POST /api/auth/test-connection-both
+ * Test SSH connection to both clusters
+ */
+router.post('/test-connection-both', async (req, res) => {
+  const result = await testBothClusters();
+  res.json(result);
+});
+
+/**
+ * POST /api/auth/generate-key
+ * Generate a managed SSH key for the user
+ * Can be used even if user already has working SSH (as a backup)
+ */
+router.post('/generate-key', requireAuth, (req, res) => {
+  let user = users.get(req.user.username);
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+
+  // Generate new keypair
+  const { publicKey } = generateSshKeypair(req.user.username);
+
+  user.publicKey = publicKey;
+  user.setupComplete = false; // Need to install the new key
+  saveUsers();
+
+  log.info('Generated managed key for user', { username: user.username });
+
+  res.json({
+    success: true,
+    user: {
+      username: user.username,
+      fullName: user.fullName,
+      publicKey: user.publicKey,
+      setupComplete: user.setupComplete,
+    },
+  });
+});
+
+/**
+ * POST /api/auth/remove-key
+ * Remove the managed SSH key (user will rely on their own SSH setup)
+ * Only allowed if SSH test passes (user has working alternative)
+ */
+router.post('/remove-key', requireAuth, async (req, res) => {
+  const user = users.get(req.user.username);
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+
+  if (!user.publicKey) {
+    return res.json({
+      success: true,
+      message: 'No managed key to remove',
+      user: {
+        username: user.username,
+        fullName: user.fullName,
+        publicKey: user.publicKey,
+        setupComplete: user.setupComplete,
+      },
+    });
+  }
+
+  // Test SSH to ensure user has working alternative
+  const result = await testBothClusters();
+
+  if (!result.bothSucceeded) {
+    return res.json({
+      success: false,
+      error: 'Cannot remove managed key: SSH test failed. Ensure you have working SSH keys before removing the managed key.',
+      sshTestResult: result,
+    });
+  }
+
+  // SSH works - safe to remove managed key
+  user.publicKey = null;
+  saveUsers();
+
+  log.info('Removed managed key for user', { username: user.username });
+
+  res.json({
+    success: true,
+    user: {
+      username: user.username,
+      fullName: user.fullName,
+      publicKey: user.publicKey,
+      setupComplete: user.setupComplete,
+    },
+  });
+});
+
+/**
+ * POST /api/auth/regenerate-key
+ * Regenerate the managed SSH key
+ */
+router.post('/regenerate-key', requireAuth, (req, res) => {
+  let user = users.get(req.user.username);
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+
+  // Generate new keypair
+  const { publicKey } = generateSshKeypair(req.user.username);
+
+  user.publicKey = publicKey;
+  user.setupComplete = false; // Need to install new key
+  saveUsers();
+
+  log.info('Regenerated managed key for user', { username: user.username });
+
+  res.json({
+    success: true,
+    user: {
+      username: user.username,
+      fullName: user.fullName,
+      publicKey: user.publicKey,
+      setupComplete: user.setupComplete,
+    },
+  });
+});
+
+/**
  * GET /api/auth/public-key
- * Get user's public key
+ * Get user's managed public key (if any)
  */
 router.get('/public-key', requireAuth, (req, res) => {
   const user = users.get(req.user.username);

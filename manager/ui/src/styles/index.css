@@ -346,7 +346,7 @@ h1 {
   display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid var(--border-subtle);
+  border: 2px solid transparent;
   border-radius: 50%;
   border-top-color: var(--text-primary);
   animation: spin 1s linear infinite;
@@ -370,6 +370,10 @@ h1 {
 .loading-content {
   text-align: center;
   color: var(--text-primary);
+  background: var(--bg-panel);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 90vw;
 }
 
 .loading-content .spinner {

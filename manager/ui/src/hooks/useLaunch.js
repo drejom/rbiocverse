@@ -7,6 +7,26 @@ import { useState, useCallback, useRef } from 'react';
 // Duration to display error message before auto-dismissing
 const ERROR_DISPLAY_MS = 5000;
 
+// Patterns that indicate SSH authentication/connection issues
+const SSH_ERROR_PATTERNS = [
+  'permission denied',
+  'authentication failed',
+  'connection refused',
+  'host key verification failed',
+  'ssh connection',
+  'ssh error',
+  'ssh:',
+];
+
+/**
+ * Check if an error message indicates an SSH issue
+ */
+function isSshError(message) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return SSH_ERROR_PATTERNS.some(pattern => lower.includes(pattern));
+}
+
 export function useLaunch(ides, onRefresh) {
   const [launchState, setLaunchState] = useState({
     active: false,
@@ -19,6 +39,7 @@ export function useLaunch(ides, onRefresh) {
     error: null,
     pending: false,
     indeterminate: false,
+    isSshError: false, // Indicates SSH key issue
   });
 
   const eventSourceRef = useRef(null);
@@ -37,6 +58,7 @@ export function useLaunch(ides, onRefresh) {
       error: null,
       pending: false,
       indeterminate: false,
+      isSshError: false,
     });
   }, []);
 
@@ -62,6 +84,7 @@ export function useLaunch(ides, onRefresh) {
       error: null,
       pending: false,
       indeterminate: false,
+      isSshError: false,
     });
 
     // Build URL with params
@@ -114,14 +137,19 @@ export function useLaunch(ides, onRefresh) {
                 connectRef.current?.(hpc, ide);
               }
             } else {
+              const sshErr = isSshError(data.message);
               setLaunchState((prev) => ({
                 ...prev,
                 error: data.message,
                 header: 'Launch Failed',
+                isSshError: sshErr,
               }));
-              setTimeout(() => {
-                resetState();
-              }, ERROR_DISPLAY_MS);
+              // Don't auto-dismiss for SSH errors - user needs to take action
+              if (!sshErr) {
+                setTimeout(() => {
+                  resetState();
+                }, ERROR_DISPLAY_MS);
+              }
             }
             break;
         }
@@ -152,6 +180,7 @@ export function useLaunch(ides, onRefresh) {
       error: null,
       pending: false,
       indeterminate: false,
+      isSshError: false,
     });
 
     const url = `/api/launch/${hpc}/${ide}/stream`;
@@ -182,14 +211,19 @@ export function useLaunch(ides, onRefresh) {
 
           case 'error':
             closeEventSource();
+            const sshErr = isSshError(data.message);
             setLaunchState((prev) => ({
               ...prev,
               error: data.message,
               header: 'Connection Failed',
+              isSshError: sshErr,
             }));
-            setTimeout(() => {
-              resetState();
-            }, ERROR_DISPLAY_MS);
+            // Don't auto-dismiss for SSH errors - user needs to take action
+            if (!sshErr) {
+              setTimeout(() => {
+                resetState();
+              }, ERROR_DISPLAY_MS);
+            }
             break;
         }
       } catch (e) {

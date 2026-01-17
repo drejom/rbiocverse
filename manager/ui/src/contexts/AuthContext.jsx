@@ -155,6 +155,94 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
+  // Generate a managed SSH key
+  const generateKey = useCallback(async () => {
+    if (!token) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const res = await fetch('/api/auth/generate-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || 'Failed to generate key' };
+    } catch (err) {
+      console.error('Generate key failed:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, [token]);
+
+  // Remove the managed SSH key
+  const removeKey = useCallback(async () => {
+    if (!token) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const res = await fetch('/api/auth/remove-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        error: data.error,
+        sshTestResult: data.sshTestResult,
+      };
+    } catch (err) {
+      console.error('Remove key failed:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, [token]);
+
+  // Regenerate the managed SSH key
+  const regenerateKey = useCallback(async () => {
+    if (!token) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const res = await fetch('/api/auth/regenerate-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || 'Failed to regenerate key' };
+    } catch (err) {
+      console.error('Regenerate key failed:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, [token]);
+
   const value = {
     user,
     token,
@@ -167,6 +255,9 @@ export function AuthProvider({ children }) {
     checkSession,
     getAuthHeader,
     completeSetup,
+    generateKey,
+    removeKey,
+    regenerateKey,
     clearError: () => setError(null),
   };
 

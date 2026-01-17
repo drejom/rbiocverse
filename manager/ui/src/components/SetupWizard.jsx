@@ -3,12 +3,16 @@
  *
  * Flow:
  * 1. Auto-test connections on mount
- * 2. If any cluster connects → auto-complete setup (skip key dialog)
- * 3. If all fail → show SSH key setup instructions
+ * 2. If BOTH clusters connect AND no managed key → auto-complete (user's SSH works)
+ * 3. If BOTH clusters connect AND has managed key → show message that existing keys work,
+ *    but they should install the managed key if they want to use it
+ * 4. If any fail → show SSH key setup instructions
+ *
+ * Note: Requires BOTH clusters to pass for setup completion.
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Download, CheckCircle, XCircle, Loader, Key, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function SetupWizard({ publicKey, onComplete }) {
@@ -23,9 +27,11 @@ function SetupWizard({ publicKey, onComplete }) {
   const skipAutoTest = new URLSearchParams(window.location.search).has('skipAutoTest');
   const [initialTestDone, setInitialTestDone] = useState(skipAutoTest);
   const [autoCompleting, setAutoCompleting] = useState(false);
+  // Track if SSH passed but user has a managed key to install
+  const [existingKeysWork, setExistingKeysWork] = useState(false);
 
   // Generate one-liner for SSH key installation
-  const oneLiner = `echo "${publicKey}" >> ~/.ssh/authorized_keys`;
+  const oneLiner = publicKey ? `echo "${publicKey}" >> ~/.ssh/authorized_keys` : '';
 
   // Test connection to a cluster
   const testConnection = useCallback(async (cluster) => {
@@ -81,19 +87,16 @@ function SetupWizard({ publicKey, onComplete }) {
 
       setInitialTestDone(true);
 
-      // If any succeeded, auto-complete setup
-      if (geminiOk || apolloOk) {
-        setAutoCompleting(true);
-        const success = await completeSetup();
-        if (success && onComplete) {
-          onComplete();
-        }
-        setAutoCompleting(false);
+      // BOTH must succeed
+      if (geminiOk && apolloOk) {
+        // SSH works - show success message (don't auto-complete)
+        // User can choose to continue or generate managed key
+        setExistingKeysWork(true);
       }
     };
 
     runInitialTests();
-  }, [initialTestDone, testConnection, completeSetup, onComplete]);
+  }, [initialTestDone, testConnection]);
 
   // Copy to clipboard
   const copyToClipboard = useCallback(async (text, label) => {
@@ -119,9 +122,10 @@ function SetupWizard({ publicKey, onComplete }) {
     URL.revokeObjectURL(url);
   }, [publicKey]);
 
-  // Check if at least one connection succeeded
-  const hasSuccessfulConnection = tests.gemini.status === 'success' || tests.apollo.status === 'success';
-  const allTestsFailed = initialTestDone && !hasSuccessfulConnection;
+  // Check if BOTH connections succeeded (required for setup completion)
+  const bothConnected = tests.gemini.status === 'success' && tests.apollo.status === 'success';
+  const anyFailed = tests.gemini.status === 'error' || tests.apollo.status === 'error';
+  const needsKeySetup = initialTestDone && !bothConnected;
 
   // Handle completion
   const handleComplete = async () => {
@@ -146,25 +150,50 @@ function SetupWizard({ publicKey, onComplete }) {
     );
   }
 
-  // If tests passed, this component won't render (auto-complete redirects)
-  // Show key setup only if tests failed
+  // If tests passed and no managed key, this component won't render (auto-complete redirects)
+  // Show key setup if tests failed OR if user has a managed key to install
   return (
     <div className="setup-wizard">
       <h1>Welcome to rbiocverse</h1>
 
-      {allTestsFailed ? (
-        <p className="setup-wizard-intro">
-          We couldn't connect to the HPC clusters. You'll need to install your SSH key
-          before you can launch IDE sessions. This is a one-time setup.
-        </p>
-      ) : (
-        <p className="setup-wizard-intro">
-          Almost there! Test your connection to continue.
-        </p>
+      {/* Message when existing SSH works */}
+      {existingKeysWork && (
+        <div
+          style={{
+            background: 'var(--color-success-bg, rgba(34, 197, 94, 0.1))',
+            border: '1px solid var(--color-success, #22c55e)',
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 20,
+            display: 'flex',
+            gap: 12,
+            alignItems: 'flex-start',
+          }}
+        >
+          <CheckCircle size={20} style={{ color: 'var(--color-success, #22c55e)', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Your SSH keys are working
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+              {publicKey
+                ? 'You can continue with your current setup, or install the managed key below if you want rbiocverse to manage your SSH access.'
+                : 'You can continue with your current setup. You can also generate a managed key later from the user menu if needed.'}
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* SSH Key Section - only show if all tests failed */}
-      {allTestsFailed && (
+      {needsKeySetup && !existingKeysWork ? (
+        <p className="setup-wizard-intro">
+          {anyFailed
+            ? "We couldn't connect to both HPC clusters. You'll need to install your SSH key before you can launch IDE sessions. This is a one-time setup."
+            : 'Almost there! Test your connections to continue.'}
+        </p>
+      ) : null}
+
+      {/* SSH Key Section - show if we have a managed key to display */}
+      {publicKey && (
         <div className="setup-section">
           <h3>
             <Key size={18} style={{ marginRight: 8, verticalAlign: -3 }} />
@@ -264,7 +293,7 @@ function SetupWizard({ publicKey, onComplete }) {
       <div className="setup-section">
         <h3>
           <Terminal size={18} style={{ marginRight: 8, verticalAlign: -3 }} />
-          {allTestsFailed ? 'Test connection after installing key' : 'Connection Status'}
+          {needsKeySetup ? 'Test connection after installing key' : 'Connection Status'}
         </h3>
 
         {['gemini', 'apollo'].map(cluster => (
@@ -284,7 +313,7 @@ function SetupWizard({ publicKey, onComplete }) {
 
             {tests[cluster].status === 'testing' && (
               <span className="connection-test-status">
-                <Loader size={16} className="spinner" />
+                <span className="spinner" style={{ width: 16, height: 16 }} />
                 Testing...
               </span>
             )}
@@ -315,7 +344,7 @@ function SetupWizard({ publicKey, onComplete }) {
         ))}
 
         {/* Show error details */}
-        {allTestsFailed && (tests.gemini.error || tests.apollo.error) && (
+        {anyFailed && (tests.gemini.error || tests.apollo.error) && (
           <div
             style={{
               marginTop: 12,
@@ -336,10 +365,10 @@ function SetupWizard({ publicKey, onComplete }) {
       <button
         className="login-btn"
         onClick={handleComplete}
-        disabled={!hasSuccessfulConnection}
+        disabled={!bothConnected}
         style={{ marginTop: 20 }}
       >
-        {hasSuccessfulConnection ? 'Continue to Launcher' : 'Connect to a cluster to continue'}
+        {bothConnected ? 'Continue to Launcher' : 'Connect to both clusters to continue'}
       </button>
     </div>
   );
