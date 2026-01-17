@@ -49,15 +49,15 @@
 
 /* Light theme overrides */
 :root.light-theme {
-  --bg-primary: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  --bg-card: rgba(255, 255, 255, 0.8);
-  --bg-card-hover: rgba(255, 255, 255, 0.9);
-  --bg-input: rgba(255, 255, 255, 0.9);
-  --bg-input-hover: rgba(255, 255, 255, 1);
+  --bg-primary: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  --bg-card: #ffffff;
+  --bg-card-hover: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-input-hover: #e2e8f0;
   --bg-panel: #f1f5f9;
 
-  --border-subtle: rgba(0, 0, 0, 0.1);
-  --border-input: rgba(0, 0, 0, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.15);
+  --border-input: rgba(0, 0, 0, 0.2);
   --border-focus: #3b82f6;
 
   --text-primary: #1e293b;
