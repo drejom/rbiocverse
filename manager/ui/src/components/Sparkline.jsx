@@ -1,7 +1,7 @@
 /**
  * Sparkline component for 24hr trend visualization
  * - Shape shows full 24hr pattern (all data points)
- * - Color shows recent trend (~3hr) for "should I launch now?" decision
+ * - Color shows recent trend (~2hr) for "should I launch now?" decision
  */
 
 // Percentage point change threshold for trend coloring
@@ -29,7 +29,7 @@ export function Sparkline({ data, width = 40, height = 12, className = '' }) {
     return `${x},${y}`;
   }).join(' ');
 
-  // Determine trend color based on RECENT values (~3hr window)
+  // Determine trend color based on RECENT values (~2hr window)
   // This answers "is it getting better or worse right now?"
   const recentStart = Math.max(0, values.length - RECENT_WINDOW);
   const trend = values[values.length - 1] - values[recentStart];
