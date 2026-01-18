@@ -141,7 +141,7 @@ function Launcher() {
             </div>
             <div>
               <h1 style={{ marginBottom: 0 }}>rbiocverse</h1>
-              <p className="subtitle" style={{ marginBottom: 0 }}>VS Code, RStudio, JupyterLab on HPC</p>
+              <p className="subtitle" style={{ marginBottom: 0 }}>VS Code, RStudio, JupyterLab on HPRCC</p>
             </div>
           </div>
           <div className="header-actions">

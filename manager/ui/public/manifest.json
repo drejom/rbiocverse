@@ -1,7 +1,7 @@
 {
-  "name": "rbiocverse - HPC IDE Launcher",
+  "name": "rbiocverse - HPRCC IDE Launcher",
   "short_name": "rbiocverse",
-  "description": "Launch VS Code, RStudio, and JupyterLab on HPC clusters",
+  "description": "Launch VS Code, RStudio, and JupyterLab on HPRCC",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

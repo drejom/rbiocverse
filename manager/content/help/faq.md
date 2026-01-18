@@ -6,7 +6,7 @@ Frequently asked questions about rbiocverse.
 
 ### What is rbiocverse?
 
-rbiocverse provides browser-based access to VS Code, RStudio, and JupyterLab running on HPC clusters. Your code runs on powerful compute nodes while you work from any browser.
+rbiocverse provides browser-based access to VS Code, RStudio, and JupyterLab running on HPRCC. Your code runs on powerful compute nodes while you work from any browser.
 
 ### Which cluster should I use?
 
@@ -112,8 +112,8 @@ Contact support with:
 
 You're reading it! Browse the help sections for specific topics.
 
-### Where can I learn more about HPC?
+### Where can I learn more about HPRCC?
 
-- Cluster documentation from your HPC team
+- HPRCC documentation from the HPC team
 - SLURM documentation: https://slurm.schedmd.com/
 - Software Carpentry HPC lessons
