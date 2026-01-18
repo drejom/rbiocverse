@@ -288,7 +288,8 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <button className="help-panel-close" onClick={onClose}>
+            <button className="help-panel-close" onClick={onClose} title="Close (Esc)">
+              <span style={{ fontSize: '0.7rem', opacity: 0.6, marginRight: 4 }}>Esc</span>
               <X size={20} />
             </button>
           </div>
