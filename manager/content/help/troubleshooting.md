@@ -2,6 +2,32 @@
 
 Common issues and solutions.
 
+## Authentication Issues
+
+### "SSH connection failed" after password change
+
+If you changed your password (via HR/Active Directory), your managed SSH key can no longer be decrypted:
+
+1. Go to **Manage Keys** in the user menu
+2. Click **Regenerate Key** and enter your new password
+3. Copy the new public key to the clusters
+
+**Tip:** Use your own SSH keys to avoid this. See the [FAQ](/help/faq) for details.
+
+### Prompted to re-login after server restart
+
+Decrypted SSH keys are only held in memory for security. After a server restart:
+
+1. Your JWT token may still be valid
+2. But your private key needs re-decryption
+3. Enter your password to restore SSH access
+
+This only affects users with managed keys. Users with their own SSH keys aren't affected.
+
+### "Invalid password" when generating key
+
+You must enter your current COH password to generate or regenerate a key.
+
 ## Connection Problems
 
 ### "Connection lost" or blank screen

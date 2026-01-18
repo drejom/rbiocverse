@@ -6,6 +6,7 @@
 const { generateToken, verifyToken } = require('./token');
 const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('./ssh');
 const { loadUsers, saveUsers, getUser, setUser, getAllUsers, USER_DATA_FILE } = require('./user-store');
+const { setSessionKey, getSessionKey, clearSessionKey, hasSessionKey } = require('./session-keys');
 
 module.exports = {
   // Token functions
@@ -24,4 +25,10 @@ module.exports = {
   setUser,
   getAllUsers,
   USER_DATA_FILE,
+
+  // Session key store (in-memory decrypted keys)
+  setSessionKey,
+  getSessionKey,
+  clearSessionKey,
+  hasSessionKey,
 };

@@ -6,7 +6,6 @@
 const fs = require('fs');
 const path = require('path');
 const { log } = require('../logger');
-const { encryptPrivateKey } = require('./ssh');
 
 // Persistent user data file (tracks setupComplete, public keys, etc.)
 const USER_DATA_FILE = path.join(__dirname, '..', '..', 'data', 'users.json');
@@ -16,42 +15,20 @@ const USER_DATA_FILE = path.join(__dirname, '..', '..', 'data', 'users.json');
 // publicKey: null (no managed key) or "ssh-ed25519 ..." (managed key exists)
 // privateKey: null (no managed key) or encrypted private key (for SSH connections)
 //
-// Private keys are encrypted at rest using AES-256-GCM with a key derived from JWT_SECRET.
-// Format: "enc:v1:<iv_hex>:<authTag_hex>:<ciphertext_hex>"
+// Private keys are encrypted at rest using password-derived AES-256-GCM.
+// Format v2: "enc:v2:<salt_hex>:<iv_hex>:<authTag_hex>:<ciphertext_hex>"
+// Legacy v1 keys need re-encryption on next login.
 let users = new Map();
 
 /**
- * Load users from disk with migration for keyMode removal and key encryption
+ * Load users from disk
  */
 function loadUsers() {
   try {
     if (fs.existsSync(USER_DATA_FILE)) {
       const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
-
-      let needsSave = false;
-      for (const [username, user] of Object.entries(data)) {
-        // Migrate: remove keyMode field if present (no longer used)
-        if ('keyMode' in user) {
-          delete user.keyMode;
-          needsSave = true;
-          log.info('Migrated user: removed keyMode field', { username });
-        }
-
-        // Migrate: encrypt plaintext private keys
-        if (user.privateKey && user.privateKey.startsWith('-----BEGIN')) {
-          user.privateKey = encryptPrivateKey(user.privateKey);
-          needsSave = true;
-          log.info('Migrated user: encrypted private key', { username });
-        }
-      }
-
       users = new Map(Object.entries(data));
       log.info('Loaded user data', { count: users.size });
-
-      // Save migration changes
-      if (needsSave) {
-        saveUsers();
-      }
     }
   } catch (err) {
     log.error('Failed to load user data', { error: err.message });

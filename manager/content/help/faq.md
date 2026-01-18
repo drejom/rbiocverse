@@ -69,7 +69,49 @@ Yes! Install extensions normally - they persist in your home directory between s
 
 ### How does authentication work?
 
-Currently single-user mode. Multi-user authentication uses your COH credentials (coming soon).
+You log in with your COH credentials. On first login, the system tests SSH access to the clusters. If your existing SSH keys work, you're ready to go. If not, a managed SSH key is generated for you.
+
+### What about managed SSH keys?
+
+If you don't have working SSH keys, the system generates and manages one for you:
+
+1. A keypair is generated and the private key is encrypted with your password
+2. You copy the public key to `~/.ssh/authorized_keys` on the clusters
+3. On each login, your password decrypts the key for the session
+4. On logout, the decrypted key is cleared from memory
+
+**Important:** Your private key is encrypted with your password. Only you can decrypt it - not even server administrators.
+
+### What happens if I change my password?
+
+If your password changes (through HR/Active Directory), your encrypted SSH key can no longer be decrypted. You'll need to regenerate your key:
+
+1. Go to **Manage Keys** in the user menu
+2. Click **Regenerate Key**
+3. Enter your new password
+4. Copy the new public key to the clusters
+
+### Can I use my own SSH keys instead?
+
+Yes! If you already have SSH keys set up for the clusters, the system will use those instead of generating a managed key. This avoids the password change issue entirely.
+
+To set up your own keys:
+
+1. Generate a key: `ssh-keygen -t ed25519`
+2. Copy to clusters: `ssh-copy-id gemini.coh.org` and `ssh-copy-id apollo.coh.org`
+3. On your next login, the system will detect working SSH and skip managed key generation
+
+If you have a managed key and want to switch to your own:
+
+1. Set up your own SSH keys on the clusters
+2. Go to **Manage Keys** → **Remove Key**
+3. The system will use your own keys going forward
+
+### Why do I need to re-login after a server restart?
+
+For security, decrypted SSH keys are only held in memory during active sessions. After a server restart, you'll need to log in again to decrypt your key. Your JWT session token may still be valid, but you'll be prompted to re-enter your password.
+
+**Note:** If you use your own SSH keys (not managed), server restarts don't affect you - just log in normally.
 
 ### Where are IDE settings stored?
 
