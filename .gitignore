@@ -8,3 +8,4 @@ manager/data/users.json
 # Test artifacts
 manager/ui/test-results/
 manager/ui/playwright-report/
+.claude/settings.local.json
