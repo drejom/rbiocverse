@@ -133,8 +133,8 @@ function Launcher() {
       <div className="launcher">
         <div className="launcher-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="login-logo-icon" style={{ width: 36, height: 36, borderRadius: 8 }}>
-              <img src="/icons/icon.svg" alt="rbiocverse" width={20} height={20} />
+            <div className="login-logo-icon" style={{ width: 48, height: 48, borderRadius: 10 }}>
+              <img src="/icons/icon.svg" alt="rbiocverse" width={32} height={32} />
             </div>
             <div>
               <h1 style={{ marginBottom: 0 }}>rbiocverse</h1>
