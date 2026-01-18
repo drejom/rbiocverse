@@ -7,12 +7,21 @@ import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders } from './help-widgets';
 
 // Configure marked for safe HTML output
 marked.setOptions({
   gfm: true,
   breaks: false,
+});
+
+// Configure DOMPurify to allow data attributes for widget placeholders
+DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+  // Allow data-widget-* attributes for widget placeholders
+  if (data.attrName.startsWith('data-widget-')) {
+    data.forceKeepAttr = true;
+  }
 });
 
 // Icon mapping for sections
@@ -58,10 +67,15 @@ const menuStructure = [
  * Uses forwardRef to properly pass the ref to the div element
  */
 const MarkdownContent = memo(React.forwardRef(function MarkdownContent({ content, onLinkClick }, ref) {
+  // Parse markdown and sanitize HTML to prevent XSS attacks
+  const sanitizedHtml = DOMPurify.sanitize(marked.parse(content || ''), {
+    ADD_ATTR: ['target'], // Allow target="_blank" for links
+  });
+
   return (
     <div
       ref={ref}
-      dangerouslySetInnerHTML={{ __html: marked.parse(content || '') }}
+      dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
       onClick={onLinkClick}
     />
   );

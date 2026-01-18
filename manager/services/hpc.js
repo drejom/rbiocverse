@@ -6,7 +6,6 @@
 const { exec } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } = require('../config');
 const { log } = require('../lib/logger');

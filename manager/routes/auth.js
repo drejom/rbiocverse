@@ -369,7 +369,19 @@ router.post('/login', async (req, res) => {
       log.error('TEST_USERNAME and TEST_PASSWORD must be set in environment');
       return res.status(500).json({ error: 'Authentication not configured' });
     }
-    if (username !== TEST_USERNAME || password !== TEST_PASSWORD) {
+
+    // Use timing-safe comparison to prevent timing attacks
+    const expectedUserBuffer = Buffer.from(TEST_USERNAME);
+    const providedUserBuffer = Buffer.from(username);
+    const expectedPassBuffer = Buffer.from(TEST_PASSWORD);
+    const providedPassBuffer = Buffer.from(password);
+
+    const usernameValid = expectedUserBuffer.length === providedUserBuffer.length &&
+      crypto.timingSafeEqual(expectedUserBuffer, providedUserBuffer);
+    const passwordValid = expectedPassBuffer.length === providedPassBuffer.length &&
+      crypto.timingSafeEqual(expectedPassBuffer, providedPassBuffer);
+
+    if (!usernameValid || !passwordValid) {
       await errorLogger.logWarning({
         user: username,
         action: 'login',
