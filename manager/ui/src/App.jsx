@@ -13,7 +13,7 @@ import Login from './pages/Login';
 import SetupWizard from './components/SetupWizard';
 import UserMenu from './components/UserMenu';
 import HelpPanel from './components/HelpPanel';
-import { HelpCircle, Hexagon } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import './styles/index.css';
 import './styles/themes.css';
 
@@ -137,7 +137,7 @@ function Launcher() {
         <div className="launcher-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="login-logo-icon" style={{ width: 36, height: 36, borderRadius: 8 }}>
-              <Hexagon size={20} />
+              <img src="/icons/icon.svg" alt="rbiocverse" width={20} height={20} />
             </div>
             <div>
               <h1 style={{ marginBottom: 0 }}>rbiocverse</h1>
