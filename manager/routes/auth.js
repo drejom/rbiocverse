@@ -98,23 +98,36 @@ const { promisify } = require('util');
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
 
 async function generateSshKeypair(username) {
-  const { publicKey, privateKey } = await generateKeyPairAsync('rsa', {
-    modulusLength: 4096,
+  // Use Ed25519 - modern, fast, secure, short keys
+  const { publicKey, privateKey } = await generateKeyPairAsync('ed25519', {
     publicKeyEncoding: {
-      type: 'pkcs1',
+      type: 'spki',
       format: 'pem',
     },
     privateKeyEncoding: {
-      type: 'pkcs1',
+      type: 'pkcs8',
       format: 'pem',
     },
   });
 
-  // Convert PEM public key to OpenSSH format
-  // This is a simplified conversion - in production use ssh-keygen or a proper library
-  const pemLines = publicKey.split('\n').filter(l => !l.startsWith('----'));
-  const derB64 = pemLines.join('');
-  const openSshKey = `ssh-rsa ${derB64} rbiocverse-${username}`;
+  // Convert to OpenSSH format
+  // Ed25519 public key: extract the 32-byte key from SPKI structure
+  const spkiDer = Buffer.from(
+    publicKey.replace(/-----BEGIN PUBLIC KEY-----/, '')
+      .replace(/-----END PUBLIC KEY-----/, '')
+      .replace(/\n/g, ''),
+    'base64'
+  );
+  // SPKI for Ed25519: 12 bytes header + 32 bytes key
+  const ed25519PubKey = spkiDer.slice(-32);
+
+  // OpenSSH format: "ssh-ed25519" + key blob (length-prefixed "ssh-ed25519" + length-prefixed key)
+  const keyType = Buffer.from('ssh-ed25519');
+  const keyBlob = Buffer.concat([
+    Buffer.from([0, 0, 0, keyType.length]), keyType,
+    Buffer.from([0, 0, 0, ed25519PubKey.length]), ed25519PubKey,
+  ]);
+  const openSshKey = `ssh-ed25519 ${keyBlob.toString('base64')} rbiocverse-${username}`;
 
   return {
     publicKey: openSshKey,
@@ -124,8 +137,11 @@ async function generateSshKeypair(username) {
 
 // Persistent user store (JSON file)
 // Structure: { username: { fullName, publicKey, privateKey, setupComplete, createdAt } }
-// publicKey: null (no managed key) or "ssh-rsa ..." (managed key exists)
+// publicKey: null (no managed key) or "ssh-ed25519 ..." (managed key exists)
 // privateKey: null (no managed key) or PEM-encoded private key (for SSH connections)
+//
+// TODO: Encrypt private keys at rest using AES-256-GCM with JWT_SECRET as the key.
+// This provides defense-in-depth if users.json is accidentally exposed.
 let users = new Map();
 
 /**
