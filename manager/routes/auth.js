@@ -119,8 +119,9 @@ async function generateSshKeypair(username) {
       .replace(/\n/g, ''),
     'base64'
   );
-  // SPKI for Ed25519: 12 bytes header + 32 bytes key
-  const ed25519PubKey = spkiDer.slice(-32);
+  // SPKI for Ed25519: 12 bytes ASN.1 header + 32 bytes raw public key
+  const ED25519_KEY_SIZE = 32;
+  const ed25519PubKey = spkiDer.slice(-ED25519_KEY_SIZE);
 
   // OpenSSH format: "ssh-ed25519" + key blob (length-prefixed "ssh-ed25519" + length-prefixed key)
   const keyType = Buffer.from('ssh-ed25519');
@@ -489,23 +490,42 @@ router.get('/session', requireAuth, (req, res) => {
 router.post('/complete-setup', requireAuth, async (req, res) => {
   let user = users.get(req.user.username);
 
-  // Handle users created before persistence was added
+  // Handle users created before persistence was added (legacy migration)
   if (!user) {
-    const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
-    user = {
-      username: req.user.username,
-      fullName: req.user.fullName || req.user.username,
-      publicKey,
-      privateKey: encryptPrivateKey(privateKeyPem),
-      setupComplete: false,
-      createdAt: new Date().toISOString(),
-    };
-    users.set(req.user.username, user);
-  }
+    // Test if user's existing SSH keys work before generating new ones
+    const sshTestResult = await testBothClusters(req.user.username);
 
-  user.setupComplete = true;
-  saveUsers();
-  log.info('User setup completed', { username: user.username });
+    if (sshTestResult.bothSucceeded) {
+      // Existing SSH works - no managed key needed
+      user = {
+        username: req.user.username,
+        fullName: req.user.fullName || req.user.username,
+        publicKey: null,
+        privateKey: null,
+        setupComplete: true,
+        createdAt: new Date().toISOString(),
+      };
+      log.info('Legacy user with working SSH', { username: req.user.username });
+    } else {
+      // SSH failed - generate managed key
+      const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
+      user = {
+        username: req.user.username,
+        fullName: req.user.fullName || req.user.username,
+        publicKey,
+        privateKey: encryptPrivateKey(privateKeyPem),
+        setupComplete: false,
+        createdAt: new Date().toISOString(),
+      };
+      log.info('Legacy user - generated managed key', { username: req.user.username });
+    }
+    users.set(req.user.username, user);
+    saveUsers();
+  } else {
+    user.setupComplete = true;
+    saveUsers();
+    log.info('User setup completed', { username: user.username });
+  }
 
   res.json({
     user: {
