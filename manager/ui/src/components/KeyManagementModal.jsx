@@ -1,21 +1,20 @@
 /**
  * KeyManagementModal - SSH key management interface
  *
- * Shows different UI based on whether user has a managed key:
- * - If publicKey exists: Show key with Copy/Download/Regenerate/Remove
- * - If no publicKey: Offer to generate a managed key
+ * Shows different UI based on whether user has a key:
+ * - If publicKey exists: Show key with Copy/Download/Regenerate
+ * - If no publicKey: Prompt to generate a key
  */
 
 import { useState, useCallback } from 'react';
-import { Copy, Download, CheckCircle, RefreshCw, Key, XCircle, Trash2, Plus, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Download, CheckCircle, RefreshCw, Key, XCircle, Plus, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function KeyManagementModal({ isOpen, onClose }) {
-  const { user, generateKey, removeKey, regenerateKey } = useAuth();
+  const { user, generateKey, regenerateKey } = useAuth();
   const [copied, setCopied] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [testResult, setTestResult] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [password, setPassword] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(null); // 'generate' or 'regenerate'
@@ -74,27 +73,6 @@ function KeyManagementModal({ isOpen, onClose }) {
       onClose(); // Close modal - user will see setup wizard
     } else {
       setError(result.error || 'Failed to generate key');
-      setLoading(false);
-    }
-  };
-
-  // Handle remove key
-  const handleRemoveKey = async () => {
-    if (!confirm('Remove your managed SSH key? You\'ll need working personal SSH keys to continue using rbiocverse.')) {
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setTestResult(null);
-
-    const result = await removeKey();
-
-    if (result.success) {
-      setLoading(false);
-    } else {
-      setError(result.error || 'Failed to remove key');
-      setTestResult(result.sshTestResult);
       setLoading(false);
     }
   };
@@ -326,29 +304,6 @@ function KeyManagementModal({ isOpen, onClose }) {
               </div>
             )}
 
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-              <button
-                className="key-btn"
-                onClick={handleRemoveKey}
-                disabled={loading}
-                style={{ width: '100%', justifyContent: 'center', color: 'var(--color-danger)' }}
-              >
-                {loading ? (
-                  <>
-                    <span className="spinner" style={{ width: 16, height: 16 }} />
-                    Checking SSH...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={16} />
-                    Remove managed key
-                  </>
-                )}
-              </button>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
-                Only remove if you have personal SSH keys configured.
-              </p>
-            </div>
           </>
         ) : (
           // No managed key - offer to generate one
@@ -363,11 +318,10 @@ function KeyManagementModal({ isOpen, onClose }) {
               }}
             >
               <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                No managed key
+                No SSH key found
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-                Your SSH is working with your existing setup. You can optionally generate
-                a managed key as a backup or for easier key rotation.
+                Generate an SSH key to connect to the HPC clusters.
               </p>
             </div>
 
@@ -444,16 +398,10 @@ function KeyManagementModal({ isOpen, onClose }) {
               fontSize: '0.9rem',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: testResult ? '8px' : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <XCircle size={16} />
               {error}
             </div>
-            {testResult && (
-              <div style={{ fontSize: '0.85rem', marginTop: '8px' }}>
-                <div>Gemini: {testResult.gemini ? 'Connected' : `Failed - ${testResult.geminiError || 'Unknown'}`}</div>
-                <div>Apollo: {testResult.apollo ? 'Connected' : `Failed - ${testResult.apolloError || 'Unknown'}`}</div>
-              </div>
-            )}
           </div>
         )}
 
