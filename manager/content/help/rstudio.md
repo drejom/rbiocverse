@@ -1,4 +1,4 @@
-# RStudio
+# {{icon:rstudio}} RStudio
 
 RStudio Server settings optimized for HPC clusters.
 

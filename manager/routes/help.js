@@ -15,6 +15,28 @@ const HELP_CONTENT_DIR = path.join(__dirname, '../content/help');
 // StateManager will be injected via setStateManager()
 let stateManager = null;
 
+// Icons loaded from icons.json in help content folder
+let icons = {};
+
+/**
+ * Load icons from icons.json
+ * Called once at startup
+ */
+async function loadIcons() {
+  try {
+    const iconsPath = path.join(HELP_CONTENT_DIR, 'icons.json');
+    const content = await fs.readFile(iconsPath, 'utf8');
+    icons = JSON.parse(content);
+    log.info('Loaded help icons', { count: Object.keys(icons).length });
+  } catch (err) {
+    log.warn('Failed to load help icons:', err.message);
+    icons = {};
+  }
+}
+
+// Load icons on module load
+loadIcons();
+
 /**
  * Set the state manager for accessing cluster health data
  * @param {StateManager} sm - State manager instance
@@ -38,17 +60,30 @@ function getNestedValue(obj, path) {
  * Supports:
  * - Simple paths: {{gemini.cpus.percent}}
  * - Ternary expressions: {{gemini.online ? "🟢 Online" : "🔴 Offline"}}
+ * - Icons: {{icon:rocket}} or {{icon:rocket:24}}
  *
  * @param {string} content - Markdown content with template expressions
  * @param {Object} data - Data context for substitutions
  * @returns {string} Processed content
  */
 function processTemplates(content, data) {
-  if (!content || !data) return content;
+  if (!content) return content;
 
   // Match {{...}} expressions
   return content.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
     const trimmed = expr.trim();
+
+    // Check for icon syntax: {{icon:name}} or {{icon:name:size}}
+    const iconMatch = trimmed.match(/^icon:(\w+)(?::(\d+))?$/);
+    if (iconMatch) {
+      const [, iconName, sizeStr] = iconMatch;
+      const size = sizeStr || '20';
+      const svg = icons[iconName];
+      if (svg) {
+        return svg.replace(/SIZE/g, size);
+      }
+      return `[icon:${iconName}]`; // Fallback for unknown icons
+    }
 
     // Check for ternary expression: condition ? "trueVal" : "falseVal"
     const ternaryMatch = trimmed.match(/^(.+?)\s*\?\s*["'](.+?)["']\s*:\s*["'](.+?)["']$/);
@@ -59,6 +94,7 @@ function processTemplates(content, data) {
     }
 
     // Simple path substitution
+    if (!data) return match;
     const value = getNestedValue(data, trimmed);
     if (value === undefined || value === null) {
       return '-'; // Graceful fallback for missing data

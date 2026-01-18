@@ -1,4 +1,4 @@
-# FAQ
+# {{icon:question}} FAQ
 
 Frequently asked questions about rbiocverse.
 

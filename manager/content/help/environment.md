@@ -1,4 +1,4 @@
-# Environment
+# {{icon:box}} Environment
 
 Understanding your development environment on HPC clusters.
 

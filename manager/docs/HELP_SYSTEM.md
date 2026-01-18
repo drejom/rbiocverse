@@ -56,6 +56,14 @@ Memory: {{apollo.memory.percent}}%
 Status: {{gemini.online ? "🟢 Online" : "🔴 Offline"}}
 ```
 
+**Icons:**
+```markdown
+# {{icon:rocket}} Quick Start
+# {{icon:vscode}} VS Code
+```
+
+Icons are configured in `content/help/icons.json`. Supports Lucide SVG icons and devicons.
+
 **Available data paths:**
 ```
 {cluster}.online              # boolean
@@ -122,6 +130,7 @@ export const widgetRegistry = {
 | `ui/src/components/help-widgets/` | Widget components |
 | `content/help/*.md` | Markdown content files |
 | `content/help/index.json` | Section manifest |
+| `content/help/icons.json` | Icon SVG definitions |
 
 ### Adding Help Content
 

@@ -1,4 +1,4 @@
-# VS Code
+# {{icon:vscode}} VS Code
 
 VS Code settings and customizations for R/Python development.
 

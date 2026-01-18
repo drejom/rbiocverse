@@ -3,7 +3,7 @@
  * Supports dynamic widgets embedded in markdown via :::widget WidgetName prop="value"::: syntax
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-react';
 import { marked } from 'marked';
@@ -53,25 +53,46 @@ const menuStructure = [
 ];
 
 /**
- * Renders widgets into their placeholder elements using React portals
+ * Memoized markdown content - only re-renders when content changes
+ * This is critical: prevents portal targets from being destroyed on health/history updates
+ * Uses forwardRef to properly pass the ref to the div element
  */
-function WidgetPortals({ widgets, containerRef }) {
+const MarkdownContent = memo(React.forwardRef(function MarkdownContent({ content, onLinkClick }, ref) {
+  return (
+    <div
+      ref={ref}
+      dangerouslySetInnerHTML={{ __html: marked.parse(content || '') }}
+      onClick={onLinkClick}
+    />
+  );
+}), (prev, next) => prev.content === next.content);
+
+/**
+ * Renders widgets into their placeholder elements using React portals
+ * Uses a key-based approach to maintain stable references
+ */
+function WidgetPortals({ widgets, containerRef, contentKey, health, history }) {
   const [mountPoints, setMountPoints] = useState([]);
 
   useEffect(() => {
-    if (!containerRef.current || widgets.length === 0) {
-      setMountPoints([]);
-      return;
-    }
+    // Use setTimeout(0) to ensure we run after React has fully committed
+    // and the ref is definitely set
+    const timeoutId = setTimeout(() => {
+      if (!containerRef.current || widgets.length === 0) {
+        setMountPoints([]);
+        return;
+      }
 
-    // Find all widget placeholder elements
-    const points = widgets.map(widget => {
-      const el = containerRef.current.querySelector(`[data-widget-id="${widget.id}"]`);
-      return el ? { widget, element: el } : null;
-    }).filter(Boolean);
+      const points = widgets.map(widget => {
+        const el = containerRef.current?.querySelector(`[data-widget-id="${widget.id}"]`);
+        return el ? { widget, element: el } : null;
+      }).filter(Boolean);
 
-    setMountPoints(points);
-  }, [widgets, containerRef]);
+      setMountPoints(points);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [widgets, containerRef, contentKey]);
 
   return (
     <>
@@ -82,7 +103,7 @@ function WidgetPortals({ widgets, containerRef }) {
           return null;
         }
         return createPortal(
-          <Component key={widget.id} {...widget.props} />,
+          <Component key={widget.id} {...widget.props} health={health} history={history} />,
           element
         );
       })}
@@ -90,7 +111,7 @@ function WidgetPortals({ widgets, containerRef }) {
   );
 }
 
-function HelpPanel({ isOpen, onClose }) {
+function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
   const [activeSection, setActiveSection] = useState('quick-start');
   const [expandedGroup, setExpandedGroup] = useState(null); // Only one group expanded at a time
   const [content, setContent] = useState('');
@@ -351,10 +372,10 @@ function HelpPanel({ isOpen, onClose }) {
             </div>
           ) : (
             <>
-              <div
+              <MarkdownContent
                 ref={contentRef}
-                dangerouslySetInnerHTML={{ __html: marked.parse(content || '') }}
-                onClick={(e) => {
+                content={content}
+                onLinkClick={(e) => {
                   const link = e.target.closest('a');
                   if (link) {
                     const href = link.getAttribute('href');
@@ -384,7 +405,7 @@ function HelpPanel({ isOpen, onClose }) {
                   }
                 }}
               />
-              <WidgetPortals widgets={widgets} containerRef={contentRef} />
+              <WidgetPortals widgets={widgets} containerRef={contentRef} contentKey={activeSection} health={health} history={history} />
             </>
           )}
         </div>
@@ -393,4 +414,5 @@ function HelpPanel({ isOpen, onClose }) {
   );
 }
 
-export default HelpPanel;
+// Memoize to prevent re-renders from parent's useClusterStatus polling
+export default memo(HelpPanel);

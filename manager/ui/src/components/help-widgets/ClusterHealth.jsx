@@ -1,13 +1,11 @@
 /**
  * ClusterHealth widget for help documentation
  * Displays compact health bars for a specific cluster
+ * Receives health/history as props from parent (not via hook - prevents re-render issues)
  */
 import { HealthBars } from '../HealthBar';
-import { useClusterStatus } from '../../hooks/useClusterStatus';
 
-export function ClusterHealth({ cluster }) {
-  const { health, history } = useClusterStatus();
-
+export function ClusterHealth({ cluster, health = {}, history = {} }) {
   const clusterHealth = health[cluster];
   const clusterHistory = history[cluster] || [];
 

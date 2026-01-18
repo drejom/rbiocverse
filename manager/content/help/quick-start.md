@@ -1,4 +1,4 @@
-# Quick Start
+# {{icon:rocket}} Quick Start
 
 Get up and running in minutes.
 

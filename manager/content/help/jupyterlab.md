@@ -1,4 +1,4 @@
-# JupyterLab
+# {{icon:jupyter}} JupyterLab
 
 Interactive notebooks for Python, R, and more.
 

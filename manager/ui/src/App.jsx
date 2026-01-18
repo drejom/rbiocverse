@@ -37,6 +37,9 @@ function Launcher() {
   const [error, setError] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Stable callback for HelpPanel to prevent memo invalidation
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
+
   // Handle SSH key setup from error state
   const handleSetupKeys = useCallback(async () => {
     backToMenu(); // Clear the error state
@@ -188,7 +191,7 @@ function Launcher() {
         onSetupKeys={handleSetupKeys}
       />
 
-      <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      <HelpPanel isOpen={helpOpen} onClose={closeHelp} health={health} history={history} />
     </>
   );
 }

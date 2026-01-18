@@ -1,4 +1,4 @@
-# Troubleshooting
+# {{icon:wrench}} Troubleshooting
 
 Common issues and solutions.
 
