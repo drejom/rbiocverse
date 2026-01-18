@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+// Test credentials from environment variables
+const TEST_USERNAME = process.env.TEST_USERNAME || 'test-user';
+const TEST_PASSWORD = process.env.TEST_PASSWORD || 'test-password';
+
 test('Light theme cluster cards', async ({ page }) => {
   await page.goto('http://localhost:3000');
   await page.waitForLoadState('networkidle');
 
   // Login
-  await page.fill('input[type="text"], input[placeholder*="username"]', 'domeally');
-  await page.fill('input[type="password"]', 'biddy41$');
+  await page.fill('input[type="text"], input[placeholder*="username"]', TEST_USERNAME);
+  await page.fill('input[type="password"]', TEST_PASSWORD);
   await page.click('button:has-text("Sign in")');
 
   // Wait for launcher

@@ -53,13 +53,20 @@ function verifyToken(token) {
   const [payloadStr, signature] = token.split('.');
   if (!payloadStr || !signature) return null;
 
-  // Verify signature
+  // Verify signature using constant-time comparison to prevent timing attacks
   const expectedSig = crypto
     .createHmac('sha256', config.jwtSecret)
     .update(payloadStr)
     .digest('base64url');
 
-  if (signature !== expectedSig) return null;
+  // Use timingSafeEqual for cryptographic comparison
+  const expectedSigBuffer = Buffer.from(expectedSig, 'utf8');
+  const signatureBuffer = Buffer.from(signature, 'utf8');
+
+  if (expectedSigBuffer.length !== signatureBuffer.length ||
+      !crypto.timingSafeEqual(expectedSigBuffer, signatureBuffer)) {
+    return null;
+  }
 
   // Decode and check expiry
   try {
@@ -183,6 +190,9 @@ function requireAuth(req, res, next) {
 /**
  * Test SSH connection to a cluster (internal helper)
  * Returns { success: boolean, error?: string }
+ *
+ * Note: HpcService is required inline to avoid circular dependency
+ * (hpc.js may import auth middleware). This is a common Node.js pattern.
  */
 async function testSshConnection(cluster) {
   try {
@@ -255,7 +265,7 @@ router.post('/login', async (req, res) => {
         // SSH works - no need to generate keys
         user = {
           username,
-          fullName: 'Denis O\'Meally', // Placeholder - will come from LDAP
+          fullName: username, // Will be replaced by LDAP lookup
           publicKey: null, // No managed key needed
           setupComplete: true,
           createdAt: new Date().toISOString(),
@@ -266,7 +276,7 @@ router.post('/login', async (req, res) => {
         const { publicKey } = generateSshKeypair(username);
         user = {
           username,
-          fullName: 'Denis O\'Meally', // Placeholder - will come from LDAP
+          fullName: username, // Will be replaced by LDAP lookup
           publicKey,
           setupComplete: false,
           createdAt: new Date().toISOString(),

@@ -3,7 +3,7 @@
  * Supports dynamic widgets embedded in markdown via :::widget WidgetName prop="value"::: syntax
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-react';
 import { marked } from 'marked';

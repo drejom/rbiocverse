@@ -113,6 +113,10 @@ class ErrorLogger {
 
   /**
    * Append an entry to the error log file
+   *
+   * Note: This read-then-write approach is acceptable for error logging which
+   * is low-frequency. For high-frequency logging, consider switching to JSON Lines
+   * (.jsonl) format with append-only writes.
    */
   async appendEntry(entry) {
     await this.ensureLogDir();
@@ -138,8 +142,10 @@ class ErrorLogger {
         entries = entries.slice(-this.maxEntries);
       }
 
-      // Write back
-      await fs.writeFile(this.logFile, JSON.stringify(entries, null, 2));
+      // Write back atomically by writing to temp file first
+      const tempFile = `${this.logFile}.tmp`;
+      await fs.writeFile(tempFile, JSON.stringify(entries, null, 2));
+      await fs.rename(tempFile, this.logFile);
     } catch (err) {
       // Don't throw - error logging should never break the app
       log.error('Failed to persist error log:', { error: err.message });
