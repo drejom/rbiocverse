@@ -35,6 +35,7 @@ RUN npm ci --omit=dev --ignore-scripts
 # Copy backend source (explicit list, not wildcard)
 COPY --from=builder /app/server.js ./
 COPY --from=builder /app/config ./config
+COPY --from=builder /app/content ./content
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/routes ./routes
 COPY --from=builder /app/services ./services
