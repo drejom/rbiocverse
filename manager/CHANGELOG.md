@@ -22,6 +22,13 @@ All notable changes to the HPC Code Server Manager.
 - **Ed25519 Key Size** - Use named constant instead of magic number
 - **Legacy User Migration** - Test SSH before generating keys for existing users
 
+### Changed
+
+- **Auth Module Refactoring** - Split routes/auth.js (~700 lines) into focused modules
+  - `lib/auth/token.js` - JWT token generation and verification
+  - `lib/auth/ssh.js` - SSH key generation and encryption
+  - `lib/auth/user-store.js` - User data persistence
+
 ### Security
 
 - **Private Key Encryption** - AES-256-GCM encryption at rest

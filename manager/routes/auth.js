@@ -6,8 +6,6 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
 // Parse JSON bodies for auth routes
 router.use(express.json());
@@ -15,206 +13,15 @@ const { log } = require('../lib/logger');
 const { config } = require('../config');
 const { errorLogger } = require('../services/ErrorLogger');
 
-// Persistent user data file (tracks setupComplete, public keys, etc.)
-const USER_DATA_FILE = path.join(__dirname, '..', 'data', 'users.json');
+// Import auth modules
+const { generateToken, verifyToken } = require('../lib/auth/token');
+const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('../lib/auth/ssh');
+const { loadUsers, saveUsers, getUser, setUser } = require('../lib/auth/user-store');
 
 // Test credentials (for development - will be replaced by LDAP)
 // Must be set via environment variables - no defaults for security
 const TEST_USERNAME = process.env.TEST_USERNAME;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
-
-// Simple JWT-like token handling (no external dependency)
-// In production, consider using a proper JWT library
-
-/**
- * Generate a simple token
- * Format: base64(payload).base64(signature)
- */
-function generateToken(payload, expiresIn = config.sessionExpiryDays * 24 * 60 * 60) {
-  const data = {
-    ...payload,
-    iat: Date.now(),
-    exp: Date.now() + expiresIn * 1000,
-  };
-  const payloadStr = Buffer.from(JSON.stringify(data)).toString('base64url');
-  const signature = crypto
-    .createHmac('sha256', config.jwtSecret)
-    .update(payloadStr)
-    .digest('base64url');
-  return `${payloadStr}.${signature}`;
-}
-
-/**
- * Verify and decode a token
- */
-function verifyToken(token) {
-  if (!token) return null;
-
-  const [payloadStr, signature] = token.split('.');
-  if (!payloadStr || !signature) return null;
-
-  // Verify signature using constant-time comparison to prevent timing attacks
-  const expectedSig = crypto
-    .createHmac('sha256', config.jwtSecret)
-    .update(payloadStr)
-    .digest('base64url');
-
-  // Use timingSafeEqual for cryptographic comparison
-  const expectedSigBuffer = Buffer.from(expectedSig, 'utf8');
-  const signatureBuffer = Buffer.from(signature, 'utf8');
-
-  if (expectedSigBuffer.length !== signatureBuffer.length ||
-      !crypto.timingSafeEqual(expectedSigBuffer, signatureBuffer)) {
-    return null;
-  }
-
-  // Decode and check expiry
-  try {
-    const payload = JSON.parse(Buffer.from(payloadStr, 'base64url').toString());
-    if (payload.exp && payload.exp < Date.now()) {
-      return null; // Expired
-    }
-    return payload;
-  } catch (e) {
-    return null;
-  }
-}
-
-/**
- * Generate SSH keypair for user (async to avoid blocking event loop)
- * Returns Promise<{ publicKey, privateKeyPem }>
- *
- * The managed key workflow:
- * 1. User logs in, SSH test fails with shared key
- * 2. System generates Ed25519 keypair, stores both public and private keys
- * 3. User copies PUBLIC key to ~/.ssh/authorized_keys on HPC clusters
- * 4. User marks setup complete
- * 5. HpcService uses stored PRIVATE key for SSH connections on behalf of user
- *
- * Private keys are encrypted (AES-256-GCM) and stored in users.json.
- * Keys are written to data/ssh-keys/ as needed for SSH commands.
- * Users without managed keys fall back to the shared mounted SSH key.
- */
-const { promisify } = require('util');
-const generateKeyPairAsync = promisify(crypto.generateKeyPair);
-
-async function generateSshKeypair(username) {
-  // Use Ed25519 - modern, fast, secure, short keys
-  const { publicKey, privateKey } = await generateKeyPairAsync('ed25519', {
-    publicKeyEncoding: {
-      type: 'spki',
-      format: 'pem',
-    },
-    privateKeyEncoding: {
-      type: 'pkcs8',
-      format: 'pem',
-    },
-  });
-
-  // Convert to OpenSSH format
-  // Ed25519 public key: extract the 32-byte key from SPKI structure
-  const spkiDer = Buffer.from(
-    publicKey.replace(/-----BEGIN PUBLIC KEY-----/, '')
-      .replace(/-----END PUBLIC KEY-----/, '')
-      .replace(/\n/g, ''),
-    'base64'
-  );
-  // SPKI for Ed25519: 12 bytes ASN.1 header + 32 bytes raw public key
-  const ED25519_KEY_SIZE = 32;
-  const ed25519PubKey = spkiDer.slice(-ED25519_KEY_SIZE);
-
-  // OpenSSH format: "ssh-ed25519" + key blob (length-prefixed "ssh-ed25519" + length-prefixed key)
-  const keyType = Buffer.from('ssh-ed25519');
-  const keyBlob = Buffer.concat([
-    Buffer.from([0, 0, 0, keyType.length]), keyType,
-    Buffer.from([0, 0, 0, ed25519PubKey.length]), ed25519PubKey,
-  ]);
-  const openSshKey = `ssh-ed25519 ${keyBlob.toString('base64')} rbiocverse-${username}`;
-
-  return {
-    publicKey: openSshKey,
-    privateKeyPem: privateKey,
-  };
-}
-
-// Persistent user store (JSON file)
-// Structure: { username: { fullName, publicKey, privateKey, setupComplete, createdAt } }
-// publicKey: null (no managed key) or "ssh-ed25519 ..." (managed key exists)
-// privateKey: null (no managed key) or encrypted private key (for SSH connections)
-//
-// Private keys are encrypted at rest using AES-256-GCM with a key derived from JWT_SECRET.
-// Format: "enc:v1:<iv_hex>:<authTag_hex>:<ciphertext_hex>"
-let users = new Map();
-
-/**
- * Derive encryption key from JWT_SECRET using HKDF-like derivation
- * Returns a 32-byte key suitable for AES-256-GCM
- */
-function getEncryptionKey() {
-  // Use HMAC-SHA256 to derive a key from JWT_SECRET
-  // This provides key separation between JWT signing and encryption
-  return crypto
-    .createHmac('sha256', config.jwtSecret)
-    .update('private-key-encryption-v1')
-    .digest();
-}
-
-/**
- * Encrypt a private key using AES-256-GCM
- * @param {string} plaintext - PEM-encoded private key
- * @returns {string} Encrypted string in format "enc:v1:<iv>:<authTag>:<ciphertext>"
- */
-function encryptPrivateKey(plaintext) {
-  if (!plaintext) return null;
-
-  const key = getEncryptionKey();
-  const iv = crypto.randomBytes(12); // 96-bit IV for GCM
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-
-  return `enc:v1:${iv.toString('hex')}:${authTag}:${encrypted}`;
-}
-
-/**
- * Decrypt a private key encrypted with AES-256-GCM
- * @param {string} encrypted - Encrypted string or plaintext PEM (for migration)
- * @returns {string} PEM-encoded private key
- */
-function decryptPrivateKey(encrypted) {
-  if (!encrypted) return null;
-
-  // Check if already plaintext (for backwards compatibility during migration)
-  if (encrypted.startsWith('-----BEGIN')) {
-    return encrypted;
-  }
-
-  // Parse encrypted format: "enc:v1:<iv>:<authTag>:<ciphertext>"
-  const parts = encrypted.split(':');
-  if (parts.length !== 5 || parts[0] !== 'enc' || parts[1] !== 'v1') {
-    log.error('Invalid encrypted key format');
-    return null;
-  }
-
-  const [, , ivHex, authTagHex, ciphertext] = parts;
-
-  try {
-    const key = getEncryptionKey();
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    log.error('Failed to decrypt private key', { error: err.message });
-    return null;
-  }
-}
 
 /**
  * Get user's private key for SSH connections
@@ -223,67 +30,9 @@ function decryptPrivateKey(encrypted) {
  * @returns {string|null} PEM-encoded private key (decrypted) or null
  */
 function getUserPrivateKey(username) {
-  const user = users.get(username);
+  const user = getUser(username);
   if (!user?.privateKey) return null;
   return decryptPrivateKey(user.privateKey);
-}
-
-/**
- * Load users from disk with migration for keyMode removal and key encryption
- */
-function loadUsers() {
-  try {
-    if (fs.existsSync(USER_DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
-
-      let needsSave = false;
-      for (const [username, user] of Object.entries(data)) {
-        // Migrate: remove keyMode field if present (no longer used)
-        if ('keyMode' in user) {
-          delete user.keyMode;
-          needsSave = true;
-          log.info('Migrated user: removed keyMode field', { username });
-        }
-
-        // Migrate: encrypt plaintext private keys
-        if (user.privateKey && user.privateKey.startsWith('-----BEGIN')) {
-          user.privateKey = encryptPrivateKey(user.privateKey);
-          needsSave = true;
-          log.info('Migrated user: encrypted private key', { username });
-        }
-      }
-
-      users = new Map(Object.entries(data));
-      log.info('Loaded user data', { count: users.size });
-
-      // Save migration changes
-      if (needsSave) {
-        saveUsers();
-      }
-    }
-  } catch (err) {
-    log.error('Failed to load user data', { error: err.message });
-  }
-}
-
-/**
- * Save users to disk atomically
- * Uses temp file + rename to prevent corruption on crash/interrupt
- */
-function saveUsers() {
-  try {
-    const dir = path.dirname(USER_DATA_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const data = Object.fromEntries(users);
-    // Write to temp file first, then atomically rename
-    const tempFile = `${USER_DATA_FILE}.tmp.${process.pid}`;
-    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
-    fs.renameSync(tempFile, USER_DATA_FILE);
-  } catch (err) {
-    log.error('Failed to save user data', { error: err.message });
-  }
 }
 
 // Load users on startup
@@ -392,7 +141,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Get or create user record
-    let user = users.get(username);
+    let user = getUser(username);
     let sshTestResult = null;
 
     if (!user) {
@@ -424,7 +173,7 @@ router.post('/login', async (req, res) => {
         log.info('New user - generated managed key', { username });
       }
 
-      users.set(username, user);
+      setUser(username, user);
       saveUsers();
     }
 
@@ -468,7 +217,7 @@ router.post('/logout', requireAuth, (req, res) => {
  * Check session validity and return user info
  */
 router.get('/session', requireAuth, (req, res) => {
-  const user = users.get(req.user.username);
+  const user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -488,7 +237,7 @@ router.get('/session', requireAuth, (req, res) => {
  * Mark user setup as complete
  */
 router.post('/complete-setup', requireAuth, async (req, res) => {
-  let user = users.get(req.user.username);
+  let user = getUser(req.user.username);
 
   // Handle users created before persistence was added (legacy migration)
   if (!user) {
@@ -519,7 +268,7 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
       };
       log.info('Legacy user - generated managed key', { username: req.user.username });
     }
-    users.set(req.user.username, user);
+    setUser(req.user.username, user);
     saveUsers();
   } else {
     user.setupComplete = true;
@@ -588,7 +337,7 @@ router.post('/test-connection-both', async (req, res) => {
  * Can be used even if user already has working SSH (as a backup)
  */
 router.post('/generate-key', requireAuth, async (req, res) => {
-  let user = users.get(req.user.username);
+  let user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -620,7 +369,7 @@ router.post('/generate-key', requireAuth, async (req, res) => {
  * Only allowed if SSH test passes (user has working alternative)
  */
 router.post('/remove-key', requireAuth, async (req, res) => {
-  const user = users.get(req.user.username);
+  const user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -672,7 +421,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
  * Regenerate the managed SSH key
  */
 router.post('/regenerate-key', requireAuth, async (req, res) => {
-  let user = users.get(req.user.username);
+  let user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -703,7 +452,7 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
  * Get user's managed public key (if any)
  */
 router.get('/public-key', requireAuth, (req, res) => {
-  const user = users.get(req.user.username);
+  const user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
