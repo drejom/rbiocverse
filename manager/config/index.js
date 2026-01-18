@@ -40,9 +40,9 @@ const config = {
   sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
 };
 
-// Fail fast: JWT_SECRET is required for authentication
-// Check after config object is created but before any routes are set up
-if (!config.jwtSecret) {
+// Fail fast: JWT_SECRET is required for authentication in production
+// Skip check in test mode to allow unit tests to run
+if (!config.jwtSecret && process.env.NODE_ENV !== 'test') {
   console.error('FATAL: JWT_SECRET environment variable is required for authentication.');
   console.error('Set JWT_SECRET in your environment or Dokploy UI before starting the server.');
   process.exit(1);
