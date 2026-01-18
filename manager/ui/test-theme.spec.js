@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Test credentials from environment variables
 const TEST_USERNAME = process.env.TEST_USERNAME || 'test-user';
