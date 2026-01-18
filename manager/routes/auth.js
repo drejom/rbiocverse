@@ -86,12 +86,13 @@ function verifyToken(token) {
  *
  * The managed key workflow:
  * 1. User logs in, SSH test fails with shared key
- * 2. System generates RSA keypair, stores both public and private keys
+ * 2. System generates Ed25519 keypair, stores both public and private keys
  * 3. User copies PUBLIC key to ~/.ssh/authorized_keys on HPC clusters
  * 4. User marks setup complete
  * 5. HpcService uses stored PRIVATE key for SSH connections on behalf of user
  *
- * Private keys are stored in users.json and written to temp files as needed.
+ * Private keys are encrypted (AES-256-GCM) and stored in users.json.
+ * Keys are written to data/ssh-keys/ as needed for SSH commands.
  * Users without managed keys fall back to the shared mounted SSH key.
  */
 const { promisify } = require('util');

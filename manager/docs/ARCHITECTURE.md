@@ -476,7 +476,7 @@ Temp keys are stored in `/tmp/hpc-ssh-keys/` with secure permissions.
 - **Timing-safe verification**: `crypto.timingSafeEqual` prevents timing attacks
 - **Session expiry**: Configurable (default 7 days, 1 day without "remember me")
 - **User data**: `data/users.json` with atomic writes (temp file + rename)
-- **Private keys**: Stored in users.json (TODO: AES-256-GCM encryption with JWT_SECRET)
+- **Private keys**: Encrypted at rest with AES-256-GCM using key derived from JWT_SECRET
 
 ## Help System
 

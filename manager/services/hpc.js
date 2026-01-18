@@ -20,12 +20,12 @@ function loadAuthModule() {
   }
 }
 
-// Directory for temporary SSH key files
-const SSH_KEY_DIR = path.join(os.tmpdir(), 'hpc-ssh-keys');
+// Directory for SSH key files (inside data volume, persisted across restarts)
+const SSH_KEY_DIR = path.join(__dirname, '..', 'data', 'ssh-keys');
 
 /**
- * Get or create a temporary key file for a user
- * Keys are stored in /tmp/hpc-ssh-keys/<username>
+ * Get or create a key file for a user
+ * Keys are stored in data/ssh-keys/<username>.key
  * @param {string} username - Username
  * @param {string} privateKey - PEM-encoded private key
  * @returns {string} Path to the key file

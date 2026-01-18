@@ -17,7 +17,7 @@ All notable changes to the HPC Code Server Manager.
   - Generate managed keys if user's SSH doesn't work
   - Users copy public key to ~/.ssh/authorized_keys
   - HpcService uses per-user private keys for SSH connections
-  - Keys stored in users.json (TODO: AES-256-GCM encryption)
+  - Private keys encrypted at rest (AES-256-GCM with key derived from JWT_SECRET)
 
 - **Theme Support** - Light and dark themes
   - Theme toggle in header toolbar
