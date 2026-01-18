@@ -5,8 +5,62 @@
 
 const { exec } = require('child_process');
 const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } = require('../config');
 const { log } = require('../lib/logger');
+
+// Per-user SSH key support - lazy loaded to avoid circular dependency
+let getUserPrivateKey = null;
+function loadAuthModule() {
+  if (!getUserPrivateKey) {
+    const auth = require('../routes/auth');
+    getUserPrivateKey = auth.getUserPrivateKey;
+  }
+}
+
+// Directory for temporary SSH key files
+const SSH_KEY_DIR = path.join(os.tmpdir(), 'hpc-ssh-keys');
+
+/**
+ * Get or create a temporary key file for a user
+ * Keys are stored in /tmp/hpc-ssh-keys/<username>
+ * @param {string} username - Username
+ * @param {string} privateKey - PEM-encoded private key
+ * @returns {string} Path to the key file
+ */
+function getKeyFilePath(username, privateKey) {
+  // Ensure directory exists
+  if (!fs.existsSync(SSH_KEY_DIR)) {
+    fs.mkdirSync(SSH_KEY_DIR, { mode: 0o700, recursive: true });
+  }
+
+  const keyPath = path.join(SSH_KEY_DIR, `${username}.key`);
+
+  // Write key if it doesn't exist or has changed
+  // Use hash to detect changes without reading the file
+  const keyHash = crypto.createHash('sha256').update(privateKey).digest('hex').substring(0, 8);
+  const hashPath = path.join(SSH_KEY_DIR, `${username}.hash`);
+
+  let needsWrite = true;
+  if (fs.existsSync(hashPath)) {
+    try {
+      const existingHash = fs.readFileSync(hashPath, 'utf8').trim();
+      needsWrite = (existingHash !== keyHash);
+    } catch (e) {
+      // Ignore read errors, will rewrite
+    }
+  }
+
+  if (needsWrite) {
+    fs.writeFileSync(keyPath, privateKey, { mode: 0o600 });
+    fs.writeFileSync(hashPath, keyHash, { mode: 0o600 });
+    log.debug('Wrote SSH key file', { username, keyPath });
+  }
+
+  return keyPath;
+}
 
 /**
  * Generate a secure random token for IDE authentication
@@ -51,9 +105,14 @@ echo "export IDE_PORT=$PORT"
 }
 
 class HpcService {
-  constructor(clusterName) {
+  /**
+   * @param {string} clusterName - Cluster name ('gemini' or 'apollo')
+   * @param {string} [username] - Optional username for per-user SSH keys
+   */
+  constructor(clusterName, username = null) {
     this.clusterName = clusterName;
     this.cluster = clusters[clusterName];
+    this.username = username;
 
     if (!this.cluster) {
       throw new Error(`Unknown cluster: ${clusterName}`);
@@ -87,6 +146,7 @@ class HpcService {
   /**
    * Execute SSH command on cluster
    * Supports multi-line commands (heredocs) via stdin
+   * Uses per-user SSH key if available, falls back to shared mounted key
    * @param {string} command - Command to execute
    * @returns {Promise<string>} Command output
    */
@@ -95,8 +155,20 @@ class HpcService {
       log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
       log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
 
+      // Check for per-user SSH key
+      let keyOption = '';
+      if (this.username) {
+        loadAuthModule();
+        const privateKey = getUserPrivateKey(this.username);
+        if (privateKey) {
+          const keyPath = getKeyFilePath(this.username, privateKey);
+          keyOption = `-i ${keyPath} `;
+          log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
+        }
+      }
+
       // Use bash -s to read script from stdin - handles heredocs cleanly
-      const sshCmd = `ssh -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
+      const sshCmd = `ssh ${keyOption}-o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
 
       const child = exec(
         sshCmd,

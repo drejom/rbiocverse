@@ -74,7 +74,8 @@ function processTemplates(content, data) {
     const trimmed = expr.trim();
 
     // Check for icon syntax: {{icon:name}} or {{icon:name:size}}
-    const iconMatch = trimmed.match(/^icon:(\w+)(?::(\d+))?$/);
+    // Allow hyphens in icon names (e.g., help-circle, check-circle)
+    const iconMatch = trimmed.match(/^icon:([\w-]+)(?::(\d+))?$/);
     if (iconMatch) {
       const [, iconName, sizeStr] = iconMatch;
       const size = sizeStr || '20';

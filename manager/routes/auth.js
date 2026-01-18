@@ -82,8 +82,17 @@ function verifyToken(token) {
 
 /**
  * Generate SSH keypair for user (async to avoid blocking event loop)
- * Returns Promise<{ publicKey, privateKey }>
- * Note: In production, private keys should be securely stored server-side
+ * Returns Promise<{ publicKey, privateKeyPem }>
+ *
+ * The managed key workflow:
+ * 1. User logs in, SSH test fails with shared key
+ * 2. System generates RSA keypair, stores both public and private keys
+ * 3. User copies PUBLIC key to ~/.ssh/authorized_keys on HPC clusters
+ * 4. User marks setup complete
+ * 5. HpcService uses stored PRIVATE key for SSH connections on behalf of user
+ *
+ * Private keys are stored in users.json and written to temp files as needed.
+ * Users without managed keys fall back to the shared mounted SSH key.
  */
 const { promisify } = require('util');
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
@@ -114,9 +123,21 @@ async function generateSshKeypair(username) {
 }
 
 // Persistent user store (JSON file)
-// Structure: { username: { fullName, publicKey, setupComplete, createdAt } }
+// Structure: { username: { fullName, publicKey, privateKey, setupComplete, createdAt } }
 // publicKey: null (no managed key) or "ssh-rsa ..." (managed key exists)
+// privateKey: null (no managed key) or PEM-encoded private key (for SSH connections)
 let users = new Map();
+
+/**
+ * Get user's private key for SSH connections
+ * Used by HpcService for per-user SSH authentication
+ * @param {string} username - Username to get key for
+ * @returns {string|null} PEM-encoded private key or null
+ */
+function getUserPrivateKey(username) {
+  const user = users.get(username);
+  return user?.privateKey || null;
+}
 
 /**
  * Load users from disk with migration to remove keyMode
@@ -278,11 +299,12 @@ router.post('/login', async (req, res) => {
         log.info('New user with working SSH', { username });
       } else {
         // SSH failed - generate managed key
-        const { publicKey } = await generateSshKeypair(username);
+        const { publicKey, privateKeyPem } = await generateSshKeypair(username);
         user = {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey,
+          privateKey: privateKeyPem,
           setupComplete: false,
           createdAt: new Date().toISOString(),
         };
@@ -357,11 +379,12 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
 
   // Handle users created before persistence was added
   if (!user) {
-    const { publicKey } = await generateSshKeypair(req.user.username);
+    const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
     user = {
       username: req.user.username,
       fullName: req.user.fullName || req.user.username,
       publicKey,
+      privateKey: privateKeyPem,
       setupComplete: false,
       createdAt: new Date().toISOString(),
     };
@@ -427,9 +450,10 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   }
 
   // Generate new keypair
-  const { publicKey } = await generateSshKeypair(req.user.username);
+  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
+  user.privateKey = privateKeyPem;
   user.setupComplete = false; // Need to install the new key
   saveUsers();
 
@@ -483,6 +507,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
 
   // SSH works - safe to remove managed key
   user.publicKey = null;
+  user.privateKey = null;
   saveUsers();
 
   log.info('Removed managed key for user', { username: user.username });
@@ -509,9 +534,10 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   }
 
   // Generate new keypair
-  const { publicKey } = await generateSshKeypair(req.user.username);
+  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
+  user.privateKey = privateKeyPem;
   user.setupComplete = false; // Need to install new key
   saveUsers();
 
@@ -544,3 +570,4 @@ router.get('/public-key', requireAuth, (req, res) => {
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.verifyToken = verifyToken;
+module.exports.getUserPrivateKey = getUserPrivateKey;
