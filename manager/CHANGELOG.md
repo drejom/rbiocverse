@@ -2,6 +2,33 @@
 
 All notable changes to the HPC Code Server Manager.
 
+## [0.0.6] - 2026-01-17
+
+### Added
+
+- **PWA Support** - Install as standalone app on desktop/mobile
+  - Web app manifest with icons
+  - Service worker for offline caching of static assets
+  - Apple touch icon for iOS
+
+- **HPRCC Branding** - Updated facility name throughout
+  - UI subtitle: "VS Code, RStudio, JupyterLab on HPRCC"
+  - PWA manifest and meta descriptions
+
+### Fixed
+
+- **PWA File Serving** - Moved manifest/icons to manager/public for Express
+- **Bioconductor Logo** - Restored proper SVG (was accidentally simplified)
+- **Ed25519 Key Size** - Use named constant instead of magic number
+- **Legacy User Migration** - Test SSH before generating keys for existing users
+
+### Security
+
+- **Private Key Encryption** - AES-256-GCM encryption at rest
+- **Timing-Safe Comparisons** - For credentials and tokens
+- **XSS Prevention** - DOMPurify for help panel markdown
+- **JWT Secret Validation** - Minimum 32 character requirement
+
 ## [0.0.5] - 2026-01-17
 
 ### Added
