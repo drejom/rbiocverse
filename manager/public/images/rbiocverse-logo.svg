@@ -10,12 +10,12 @@
     </linearGradient>
   </defs>
   <!-- Corona glow -->
-  <circle cx="60" cy="60" r="52" fill="#f59e0b" fill-opacity="0.1"/>
-  <circle cx="60" cy="60" r="46" fill="#f59e0b" fill-opacity="0.15"/>
+  <circle cx="52" cy="52" r="50" fill="#f59e0b" fill-opacity="0.1"/>
+  <circle cx="52" cy="52" r="45" fill="#f59e0b" fill-opacity="0.15"/>
   <!-- Sun - Apollo -->
-  <circle cx="50" cy="50" r="28" fill="url(#sun)"/>
+  <circle cx="44" cy="44" r="32" fill="url(#sun)"/>
   <!-- Gemini -->
-  <circle cx="68" cy="68" r="36" fill="url(#gemini)"/>
+  <circle cx="66" cy="66" r="42" fill="url(#gemini)"/>
   <!-- Highlight -->
-  <circle cx="58" cy="58" r="5" fill="white" fill-opacity="0.25"/>
+  <circle cx="52" cy="52" r="5" fill="white" fill-opacity="0.25"/>
 </svg>
