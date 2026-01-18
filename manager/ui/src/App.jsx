@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import SetupWizard from './components/SetupWizard';
 import UserMenu from './components/UserMenu';
 import HelpPanel from './components/HelpPanel';
+import KeyManagementModal from './components/KeyManagementModal';
 import { HelpCircle } from 'lucide-react';
 import './styles/index.css';
 import './styles/themes.css';
@@ -31,24 +32,20 @@ function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
-  const { generateKey } = useAuth();
 
   const [stoppingJobs, setStoppingJobs] = useState({});
   const [error, setError] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
 
   // Stable callback for HelpPanel to prevent memo invalidation
   const closeHelp = useCallback(() => setHelpOpen(false), []);
 
-  // Handle SSH key setup from error state
-  const handleSetupKeys = useCallback(async () => {
+  // Handle SSH key setup from error state - opens modal instead of generating directly
+  const handleSetupKeys = useCallback(() => {
     backToMenu(); // Clear the error state
-    // Generate a managed key which will trigger setup wizard
-    const result = await generateKey();
-    if (result.success) {
-      // User will be redirected to setup wizard via needsSetup
-    }
-  }, [backToMenu, generateKey]);
+    setKeyModalOpen(true); // Open key management modal
+  }, [backToMenu]);
 
   // Track active EventSources for cleanup on unmount
   const stopEventSourcesRef = useRef(new Map());
@@ -192,6 +189,7 @@ function Launcher() {
       />
 
       <HelpPanel isOpen={helpOpen} onClose={closeHelp} health={health} history={history} />
+      <KeyManagementModal isOpen={keyModalOpen} onClose={() => setKeyModalOpen(false)} />
     </>
   );
 }
