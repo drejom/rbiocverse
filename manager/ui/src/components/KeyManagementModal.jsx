@@ -17,6 +17,8 @@ function KeyManagementModal({ isOpen, onClose }) {
   const [error, setError] = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPasswordInput, setShowPasswordInput] = useState(null); // 'generate' or 'regenerate'
 
   // Generate one-liner for SSH key installation
   const oneLiner = user?.publicKey ? `echo "${user.publicKey}" >> ~/.ssh/authorized_keys` : '';
@@ -48,13 +50,27 @@ function KeyManagementModal({ isOpen, onClose }) {
 
   // Handle generate key
   const handleGenerateKey = async () => {
+    if (!showPasswordInput) {
+      setShowPasswordInput('generate');
+      setPassword('');
+      setError(null);
+      return;
+    }
+
+    if (!password) {
+      setError('Password required');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    const result = await generateKey();
+    const result = await generateKey(password);
 
     if (result.success) {
       setLoading(false);
+      setPassword('');
+      setShowPasswordInput(null);
       onClose(); // Close modal - user will see setup wizard
     } else {
       setError(result.error || 'Failed to generate key');
@@ -85,22 +101,42 @@ function KeyManagementModal({ isOpen, onClose }) {
 
   // Handle key regeneration
   const handleRegenerate = async () => {
-    if (!confirm('Regenerate your SSH key? You will need to install the new key on the clusters.')) {
+    if (!showPasswordInput) {
+      if (!confirm('Regenerate your SSH key? You will need to install the new key on the clusters.')) {
+        return;
+      }
+      setShowPasswordInput('regenerate');
+      setPassword('');
+      setError(null);
+      return;
+    }
+
+    if (!password) {
+      setError('Password required');
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    const result = await regenerateKey();
+    const result = await regenerateKey(password);
 
     if (result.success) {
       setLoading(false);
+      setPassword('');
+      setShowPasswordInput(null);
       onClose(); // Close modal - user will see setup wizard
     } else {
       setError(result.error || 'Failed to regenerate key');
       setLoading(false);
     }
+  };
+
+  // Cancel password input
+  const cancelPasswordInput = () => {
+    setShowPasswordInput(null);
+    setPassword('');
+    setError(null);
   };
 
   if (!isOpen) return null;
@@ -195,21 +231,58 @@ function KeyManagementModal({ isOpen, onClose }) {
               </button>
             </div>
 
-            <button
-              className="key-btn"
-              onClick={handleRegenerate}
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', marginBottom: '10px' }}
-            >
-              {loading ? (
-                <span className="spinner" style={{ width: 16, height: 16 }} />
-              ) : (
-                <>
-                  <RefreshCw size={16} />
-                  Regenerate
-                </>
+            {showPasswordInput === 'regenerate' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Enter your password to encrypt the new key:
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your COH password"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRegenerate()}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              {showPasswordInput === 'regenerate' && (
+                <button
+                  className="key-btn"
+                  onClick={cancelPasswordInput}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  Cancel
+                </button>
               )}
-            </button>
+              <button
+                className="key-btn"
+                onClick={handleRegenerate}
+                disabled={loading}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                {loading ? (
+                  <span className="spinner" style={{ width: 16, height: 16 }} />
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    {showPasswordInput === 'regenerate' ? 'Confirm' : 'Regenerate'}
+                  </>
+                )}
+              </button>
+            </div>
 
             <button
               className="key-btn"
@@ -298,24 +371,61 @@ function KeyManagementModal({ isOpen, onClose }) {
               </p>
             </div>
 
-            <button
-              className="key-btn"
-              onClick={handleGenerateKey}
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center' }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner" style={{ width: 16, height: 16 }} />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Plus size={16} />
-                  Generate managed key
-                </>
+            {showPasswordInput === 'generate' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Enter your password to encrypt the key:
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your COH password"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGenerateKey()}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {showPasswordInput === 'generate' && (
+                <button
+                  className="key-btn"
+                  onClick={cancelPasswordInput}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  Cancel
+                </button>
               )}
-            </button>
+              <button
+                className="key-btn"
+                onClick={handleGenerateKey}
+                disabled={loading}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner" style={{ width: 16, height: 16 }} />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    {showPasswordInput === 'generate' ? 'Confirm' : 'Generate managed key'}
+                  </>
+                )}
+              </button>
+            </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
               Creates a key that rbiocverse manages for you.
             </p>

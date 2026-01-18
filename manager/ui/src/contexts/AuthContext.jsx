@@ -155,9 +155,10 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  // Generate a managed SSH key
-  const generateKey = useCallback(async () => {
+  // Generate a managed SSH key (requires password for encryption)
+  const generateKey = useCallback(async (password) => {
     if (!token) return { success: false, error: 'Not authenticated' };
+    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/generate-key', {
@@ -166,6 +167,7 @@ export function AuthProvider({ children }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ password }),
       });
 
       const data = await res.json();
@@ -215,9 +217,10 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  // Regenerate the managed SSH key
-  const regenerateKey = useCallback(async () => {
+  // Regenerate the managed SSH key (requires password for encryption)
+  const regenerateKey = useCallback(async (password) => {
     if (!token) return { success: false, error: 'Not authenticated' };
+    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/regenerate-key', {
@@ -226,6 +229,7 @@ export function AuthProvider({ children }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ password }),
       });
 
       const data = await res.json();
