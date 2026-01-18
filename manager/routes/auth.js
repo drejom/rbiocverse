@@ -138,38 +138,116 @@ async function generateSshKeypair(username) {
 // Persistent user store (JSON file)
 // Structure: { username: { fullName, publicKey, privateKey, setupComplete, createdAt } }
 // publicKey: null (no managed key) or "ssh-ed25519 ..." (managed key exists)
-// privateKey: null (no managed key) or PEM-encoded private key (for SSH connections)
+// privateKey: null (no managed key) or encrypted private key (for SSH connections)
 //
-// TODO: Encrypt private keys at rest using AES-256-GCM with JWT_SECRET as the key.
-// This provides defense-in-depth if users.json is accidentally exposed.
+// Private keys are encrypted at rest using AES-256-GCM with a key derived from JWT_SECRET.
+// Format: "enc:v1:<iv_hex>:<authTag_hex>:<ciphertext_hex>"
 let users = new Map();
+
+/**
+ * Derive encryption key from JWT_SECRET using HKDF-like derivation
+ * Returns a 32-byte key suitable for AES-256-GCM
+ */
+function getEncryptionKey() {
+  // Use HMAC-SHA256 to derive a key from JWT_SECRET
+  // This provides key separation between JWT signing and encryption
+  return crypto
+    .createHmac('sha256', config.jwtSecret)
+    .update('private-key-encryption-v1')
+    .digest();
+}
+
+/**
+ * Encrypt a private key using AES-256-GCM
+ * @param {string} plaintext - PEM-encoded private key
+ * @returns {string} Encrypted string in format "enc:v1:<iv>:<authTag>:<ciphertext>"
+ */
+function encryptPrivateKey(plaintext) {
+  if (!plaintext) return null;
+
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12); // 96-bit IV for GCM
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+
+  return `enc:v1:${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+/**
+ * Decrypt a private key encrypted with AES-256-GCM
+ * @param {string} encrypted - Encrypted string or plaintext PEM (for migration)
+ * @returns {string} PEM-encoded private key
+ */
+function decryptPrivateKey(encrypted) {
+  if (!encrypted) return null;
+
+  // Check if already plaintext (for backwards compatibility during migration)
+  if (encrypted.startsWith('-----BEGIN')) {
+    return encrypted;
+  }
+
+  // Parse encrypted format: "enc:v1:<iv>:<authTag>:<ciphertext>"
+  const parts = encrypted.split(':');
+  if (parts.length !== 5 || parts[0] !== 'enc' || parts[1] !== 'v1') {
+    log.error('Invalid encrypted key format');
+    return null;
+  }
+
+  const [, , ivHex, authTagHex, ciphertext] = parts;
+
+  try {
+    const key = getEncryptionKey();
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    log.error('Failed to decrypt private key', { error: err.message });
+    return null;
+  }
+}
 
 /**
  * Get user's private key for SSH connections
  * Used by HpcService for per-user SSH authentication
  * @param {string} username - Username to get key for
- * @returns {string|null} PEM-encoded private key or null
+ * @returns {string|null} PEM-encoded private key (decrypted) or null
  */
 function getUserPrivateKey(username) {
   const user = users.get(username);
-  return user?.privateKey || null;
+  if (!user?.privateKey) return null;
+  return decryptPrivateKey(user.privateKey);
 }
 
 /**
- * Load users from disk with migration to remove keyMode
+ * Load users from disk with migration for keyMode removal and key encryption
  */
 function loadUsers() {
   try {
     if (fs.existsSync(USER_DATA_FILE)) {
       const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
 
-      // Migrate: remove keyMode field if present (no longer used)
       let needsSave = false;
       for (const [username, user] of Object.entries(data)) {
+        // Migrate: remove keyMode field if present (no longer used)
         if ('keyMode' in user) {
           delete user.keyMode;
           needsSave = true;
           log.info('Migrated user: removed keyMode field', { username });
+        }
+
+        // Migrate: encrypt plaintext private keys
+        if (user.privateKey && user.privateKey.startsWith('-----BEGIN')) {
+          user.privateKey = encryptPrivateKey(user.privateKey);
+          needsSave = true;
+          log.info('Migrated user: encrypted private key', { username });
         }
       }
 
@@ -235,11 +313,14 @@ function requireAuth(req, res, next) {
  *
  * Note: HpcService is required inline to avoid circular dependency
  * (hpc.js may import auth middleware). This is a common Node.js pattern.
+ *
+ * @param {string} cluster - Cluster name ('gemini' or 'apollo')
+ * @param {string} [username] - Optional username for per-user SSH key testing
  */
-async function testSshConnection(cluster) {
+async function testSshConnection(cluster, username = null) {
   try {
     const HpcService = require('../services/hpc');
-    const hpcService = new HpcService(cluster);
+    const hpcService = new HpcService(cluster, username);
     await hpcService.sshExec('echo "Connection successful"');
     return { success: true };
   } catch (err) {
@@ -250,11 +331,13 @@ async function testSshConnection(cluster) {
 /**
  * Test SSH to both clusters
  * Returns { gemini: boolean, apollo: boolean, bothSucceeded: boolean }
+ *
+ * @param {string} [username] - Optional username for per-user SSH key testing
  */
-async function testBothClusters() {
+async function testBothClusters(username = null) {
   const [geminiResult, apolloResult] = await Promise.all([
-    testSshConnection('gemini'),
-    testSshConnection('apollo'),
+    testSshConnection('gemini', username),
+    testSshConnection('apollo', username),
   ]);
 
   return {
@@ -320,7 +403,7 @@ router.post('/login', async (req, res) => {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey,
-          privateKey: privateKeyPem,
+          privateKey: encryptPrivateKey(privateKeyPem),
           setupComplete: false,
           createdAt: new Date().toISOString(),
         };
@@ -400,7 +483,7 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
       username: req.user.username,
       fullName: req.user.fullName || req.user.username,
       publicKey,
-      privateKey: privateKeyPem,
+      privateKey: encryptPrivateKey(privateKeyPem),
       setupComplete: false,
       createdAt: new Date().toISOString(),
     };
@@ -448,9 +531,21 @@ router.post('/test-connection/:cluster', async (req, res) => {
 /**
  * POST /api/auth/test-connection-both
  * Test SSH connection to both clusters
+ * Optionally accepts Authorization header to test with per-user keys
  */
 router.post('/test-connection-both', async (req, res) => {
-  const result = await testBothClusters();
+  // Check for optional authentication to use per-user keys
+  let username = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const payload = verifyToken(token);
+    if (payload?.username) {
+      username = payload.username;
+    }
+  }
+
+  const result = await testBothClusters(username);
   res.json(result);
 });
 
@@ -469,7 +564,7 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
-  user.privateKey = privateKeyPem;
+  user.privateKey = encryptPrivateKey(privateKeyPem);
   user.setupComplete = false; // Need to install the new key
   saveUsers();
 
@@ -510,8 +605,8 @@ router.post('/remove-key', requireAuth, async (req, res) => {
     });
   }
 
-  // Test SSH to ensure user has working alternative
-  const result = await testBothClusters();
+  // Test SSH to ensure user has working alternative (use their managed key)
+  const result = await testBothClusters(req.user.username);
 
   if (!result.bothSucceeded) {
     return res.json({
@@ -553,7 +648,7 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
-  user.privateKey = privateKeyPem;
+  user.privateKey = encryptPrivateKey(privateKeyPem);
   user.setupComplete = false; // Need to install new key
   saveUsers();
 

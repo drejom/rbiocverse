@@ -42,10 +42,19 @@ const config = {
 
 // Fail fast: JWT_SECRET is required for authentication in production
 // Skip check in test mode to allow unit tests to run
-if (!config.jwtSecret && process.env.NODE_ENV !== 'test') {
-  console.error('FATAL: JWT_SECRET environment variable is required for authentication.');
-  console.error('Set JWT_SECRET in your environment or Dokploy UI before starting the server.');
-  process.exit(1);
+if (process.env.NODE_ENV !== 'test') {
+  if (!config.jwtSecret) {
+    console.error('FATAL: JWT_SECRET environment variable is required for authentication.');
+    console.error('Set JWT_SECRET in your environment or Dokploy UI before starting the server.');
+    process.exit(1);
+  }
+
+  // Validate JWT_SECRET quality - weak secrets allow token forgery
+  if (config.jwtSecret.length < 32) {
+    console.error('FATAL: JWT_SECRET must be at least 32 characters for security.');
+    console.error('Generate a strong secret with: openssl rand -base64 48');
+    process.exit(1);
+  }
 }
 
 // VS Code global defaults - written to Machine settings, user settings override

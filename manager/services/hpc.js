@@ -168,6 +168,7 @@ class HpcService {
       }
 
       // Use bash -s to read script from stdin - handles heredocs cleanly
+      // Note: keyOption includes trailing space when set, so concatenation is safe
       const sshCmd = `ssh ${keyOption}-o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
 
       const child = exec(
