@@ -40,6 +40,14 @@ const config = {
   sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
 };
 
+// Fail fast: JWT_SECRET is required for authentication
+// Check after config object is created but before any routes are set up
+if (!config.jwtSecret) {
+  console.error('FATAL: JWT_SECRET environment variable is required for authentication.');
+  console.error('Set JWT_SECRET in your environment or Dokploy UI before starting the server.');
+  process.exit(1);
+}
+
 // VS Code global defaults - written to Machine settings, user settings override
 const vscodeDefaults = {
   // Machine settings (lowest priority - user/workspace settings override)

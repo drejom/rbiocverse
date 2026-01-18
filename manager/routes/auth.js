@@ -81,14 +81,15 @@ function verifyToken(token) {
 }
 
 /**
- * Generate SSH keypair for user
- * Returns { publicKey, privateKey }
+ * Generate SSH keypair for user (async to avoid blocking event loop)
+ * Returns Promise<{ publicKey, privateKey }>
  * Note: In production, private keys should be securely stored server-side
  */
-function generateSshKeypair(username) {
-  const { generateKeyPairSync } = crypto;
+const { promisify } = require('util');
+const generateKeyPairAsync = promisify(crypto.generateKeyPair);
 
-  const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+async function generateSshKeypair(username) {
+  const { publicKey, privateKey } = await generateKeyPairAsync('rsa', {
     modulusLength: 4096,
     publicKeyEncoding: {
       type: 'pkcs1',
@@ -149,7 +150,8 @@ function loadUsers() {
 }
 
 /**
- * Save users to disk
+ * Save users to disk atomically
+ * Uses temp file + rename to prevent corruption on crash/interrupt
  */
 function saveUsers() {
   try {
@@ -158,7 +160,10 @@ function saveUsers() {
       fs.mkdirSync(dir, { recursive: true });
     }
     const data = Object.fromEntries(users);
-    fs.writeFileSync(USER_DATA_FILE, JSON.stringify(data, null, 2));
+    // Write to temp file first, then atomically rename
+    const tempFile = `${USER_DATA_FILE}.tmp.${process.pid}`;
+    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
+    fs.renameSync(tempFile, USER_DATA_FILE);
   } catch (err) {
     log.error('Failed to save user data', { error: err.message });
   }
@@ -273,7 +278,7 @@ router.post('/login', async (req, res) => {
         log.info('New user with working SSH', { username });
       } else {
         // SSH failed - generate managed key
-        const { publicKey } = generateSshKeypair(username);
+        const { publicKey } = await generateSshKeypair(username);
         user = {
           username,
           fullName: username, // Will be replaced by LDAP lookup
@@ -347,12 +352,12 @@ router.get('/session', requireAuth, (req, res) => {
  * POST /api/auth/complete-setup
  * Mark user setup as complete
  */
-router.post('/complete-setup', requireAuth, (req, res) => {
+router.post('/complete-setup', requireAuth, async (req, res) => {
   let user = users.get(req.user.username);
 
   // Handle users created before persistence was added
   if (!user) {
-    const { publicKey } = generateSshKeypair(req.user.username);
+    const { publicKey } = await generateSshKeypair(req.user.username);
     user = {
       username: req.user.username,
       fullName: req.user.fullName || req.user.username,
@@ -415,14 +420,14 @@ router.post('/test-connection-both', async (req, res) => {
  * Generate a managed SSH key for the user
  * Can be used even if user already has working SSH (as a backup)
  */
-router.post('/generate-key', requireAuth, (req, res) => {
+router.post('/generate-key', requireAuth, async (req, res) => {
   let user = users.get(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
 
   // Generate new keypair
-  const { publicKey } = generateSshKeypair(req.user.username);
+  const { publicKey } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
   user.setupComplete = false; // Need to install the new key
@@ -497,14 +502,14 @@ router.post('/remove-key', requireAuth, async (req, res) => {
  * POST /api/auth/regenerate-key
  * Regenerate the managed SSH key
  */
-router.post('/regenerate-key', requireAuth, (req, res) => {
+router.post('/regenerate-key', requireAuth, async (req, res) => {
   let user = users.get(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
 
   // Generate new keypair
-  const { publicKey } = generateSshKeypair(req.user.username);
+  const { publicKey } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
   user.setupComplete = false; // Need to install new key
