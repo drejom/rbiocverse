@@ -11,6 +11,9 @@ Browser-based IDE access to HPC SLURM clusters via SSH tunneling.
 - **RStudio** - RStudio Server for R development
 - **JupyterLab** - Jupyter notebooks with Python/R kernels
 - **GPU Support** - A100/V100 on Gemini cluster
+- **Multi-User Auth** - JWT authentication with per-user SSH keys
+- **Themes** - Light and dark mode with system preference detection
+- **Built-in Help** - Contextual documentation with live cluster data
 - **Floating Menu** - Switch IDEs, stop sessions without leaving the editor
 
 ## Architecture

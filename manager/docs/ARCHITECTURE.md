@@ -245,6 +245,7 @@ validateHpcName('invalid'); // Throws
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `JWT_SECRET` | (required) | Secret for signing JWT tokens. **Must be set** or server exits. |
 | `HPC_SSH_USER` | `domeally` | SSH username for HPC clusters |
 | `DEFAULT_HPC` | `gemini` | Default cluster for new sessions |
 | `CODE_SERVER_PORT` | `8000` | Port for code-server |
@@ -253,7 +254,10 @@ validateHpcName('invalid'); // Throws
 | `STATUS_CACHE_TTL` | `120000` | Cluster status cache TTL (ms) |
 | `LOG_LEVEL` | `info` | Winston log level |
 | `SESSION_IDLE_TIMEOUT` | `0` | Minutes of inactivity before auto-cancel (0 = disabled) |
+| `SESSION_EXPIRY_DAYS` | `7` | JWT token expiry (days) for "remember me" |
 | `ADDITIONAL_PORTS` | `5500` | Extra ports to tunnel (comma-separated) |
+| `TEST_USERNAME` | (dev only) | Test username for development auth |
+| `TEST_PASSWORD` | (dev only) | Test password for development auth |
 
 ### IDE Global Defaults (`config/index.js`)
 
@@ -416,39 +420,63 @@ state.sessions['gemini-vscode'] = {
 
 ## Authentication
 
-Multi-user authentication with smart SSH key management.
+Multi-user authentication with JWT tokens and per-user SSH key management.
 
 ### Flow
 
 1. User logs in with credentials (dev: env vars, prod: LDAP)
 2. System tests SSH to both clusters
 3. If SSH works → mark setup complete, no managed key needed
-4. If SSH fails → generate managed RSA keypair, user installs public key
+4. If SSH fails → generate Ed25519 keypair, user installs public key
+5. On subsequent SSH operations, HpcService uses user's private key
 
 ### Key Management
 
 | State | Meaning |
 |-------|---------|
 | `publicKey: null` | No managed key - user's own SSH works |
-| `publicKey: "ssh-rsa..."` | Managed key exists - may need installation |
+| `publicKey: "ssh-ed25519..."` | Managed key exists - may need installation |
+| `privateKey: "-----BEGIN..."` | Stored private key for SSH connections |
 | `setupComplete: true` | SSH verified working |
 | `setupComplete: false` | User needs to install managed key |
+
+**Per-User SSH Keys:**
+
+When a user has a managed key, HpcService writes the private key to a temp file with 600 permissions and uses `-i keyfile` for SSH connections. This allows multiple users to share the same Manager instance with isolated SSH access.
+
+```javascript
+// HpcService uses getUserPrivateKey() from auth.js
+const privateKey = getUserPrivateKey(username);
+if (privateKey) {
+  const keyPath = getKeyFilePath(username, privateKey);
+  sshCmd = `ssh -i ${keyPath} ...`;
+}
+```
+
+Temp keys are stored in `/tmp/hpc-ssh-keys/` with secure permissions.
 
 ### API Endpoints (`routes/auth.js`)
 
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /api/auth/login` | Authenticate, test SSH, generate key if needed |
+| `POST /api/auth/logout` | Invalidate session (for audit logging) |
+| `GET /api/auth/session` | Check session validity, return user info |
 | `POST /api/auth/test-connection-both` | Test SSH to both clusters |
-| `POST /api/auth/generate-key` | Generate managed key |
+| `POST /api/auth/test-connection/:cluster` | Test SSH to specific cluster |
+| `POST /api/auth/generate-key` | Generate managed Ed25519 key |
+| `POST /api/auth/regenerate-key` | Replace existing managed key |
 | `POST /api/auth/remove-key` | Remove managed key (requires working SSH) |
+| `GET /api/auth/public-key` | Get user's public key for copying |
 | `POST /api/auth/complete-setup` | Mark setup complete |
 
 ### Security
 
-- Tokens: HMAC-SHA256 signed, configurable expiry
-- Passwords: PBKDF2-SHA512 with random salt (for future local auth)
-- User data: `data/users.json` (no secrets stored)
+- **JWT Tokens**: HMAC-SHA256 signed with `JWT_SECRET` (required env var)
+- **Timing-safe verification**: `crypto.timingSafeEqual` prevents timing attacks
+- **Session expiry**: Configurable (default 7 days, 1 day without "remember me")
+- **User data**: `data/users.json` with atomic writes (temp file + rename)
+- **Private keys**: Stored in users.json (TODO: AES-256-GCM encryption with JWT_SECRET)
 
 ## Help System
 

@@ -2,6 +2,53 @@
 
 All notable changes to the HPC Code Server Manager.
 
+## [0.0.5] - 2026-01-17
+
+### Added
+
+- **Multi-User Authentication** - JWT-based login with session management
+  - Login/logout with test credentials (dev) or LDAP (prod)
+  - Session tokens with configurable expiry (7 days default)
+  - Timing-safe token verification to prevent timing attacks
+  - JWT_SECRET environment variable required (fail-fast on startup)
+
+- **Per-User SSH Key Management** - Ed25519 keypairs for cluster access
+  - Automatic SSH test on first login
+  - Generate managed keys if user's SSH doesn't work
+  - Users copy public key to ~/.ssh/authorized_keys
+  - HpcService uses per-user private keys for SSH connections
+  - Keys stored in users.json (TODO: AES-256-GCM encryption)
+
+- **Theme Support** - Light and dark themes
+  - Theme toggle in header toolbar
+  - System preference detection (prefers-color-scheme)
+  - Theme persisted in localStorage
+  - CSS custom properties for consistent styling
+
+- **Help System** - Built-in contextual documentation
+  - Markdown-based help content with template syntax
+  - Live cluster data embedding ({{gemini.cpus.percent}})
+  - Ternary expressions for conditional display
+  - SVG icons with size customization
+  - Full-text search across all help sections
+  - Widget embedding for React components
+
+### Changed
+
+- **SSH Key Algorithm** - Changed from RSA 4096-bit to Ed25519
+  - Modern, faster, smaller keys
+  - OpenSSH format for authorized_keys compatibility
+
+- **File Writes** - Atomic writes for data integrity
+  - users.json uses temp file + rename pattern
+  - ErrorLogger uses same atomic write pattern
+
+### Fixed
+
+- **JWT Token Security** - Added timing-safe signature comparison
+- **Icon Regex** - Allow hyphens in icon names (e.g., help-circle)
+- **Theme Borders** - Use CSS variable for light mode contrast
+
 ## [0.0.4] - 2026-01-08
 
 ### Added
