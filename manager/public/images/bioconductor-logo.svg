@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgba(255,255,255,0.6)">
-  <!-- Bioconductor logo - light version for dark backgrounds -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <!-- Bioconductor logo - uses currentColor for theme adaptation -->
   <g transform="matrix(0.10357386,0,0,0.10357386,4.0843293,30.580107)">
     <!-- Primary dots -->
     <path d="m 104.65198,-282.97394 c -2.68141,-0.76196 -4.48,-3.18043 -4.48,-6.02402 0,-4.67841 4.82102,-7.66492 8.9925,-5.57065 1.76795,0.88759 3.48393,3.63137 3.48393,5.57065 0,2.4681 -2.09707,5.18376 -4.57009,5.91817 -1.82846,0.54299 -1.88214,0.54465 -3.42634,0.10585 z"/>

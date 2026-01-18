@@ -32,7 +32,30 @@ const config = {
   // Activity is tracked via proxy data events (HTTP requests, WebSocket messages).
   // The trailing || 0 handles NaN from invalid non-numeric values (e.g., "abc")
   sessionIdleTimeout: parseInt(process.env.SESSION_IDLE_TIMEOUT || '0', 10) || 0,
+  // Admin email for error notifications (optional)
+  adminEmail: process.env.ADMIN_EMAIL || null,
+  // JWT secret for session tokens (required in production)
+  jwtSecret: process.env.JWT_SECRET,
+  // Session token expiry in days
+  sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
 };
+
+// Fail fast: JWT_SECRET is required for authentication in production
+// Skip check in test mode to allow unit tests to run
+if (process.env.NODE_ENV !== 'test') {
+  if (!config.jwtSecret) {
+    console.error('FATAL: JWT_SECRET environment variable is required for authentication.');
+    console.error('Set JWT_SECRET in your environment or Dokploy UI before starting the server.');
+    process.exit(1);
+  }
+
+  // Validate JWT_SECRET quality - weak secrets allow token forgery
+  if (config.jwtSecret.length < 32) {
+    console.error('FATAL: JWT_SECRET must be at least 32 characters for security.');
+    console.error('Generate a strong secret with: openssl rand -base64 48');
+    process.exit(1);
+  }
+}
 
 // VS Code global defaults - written to Machine settings, user settings override
 const vscodeDefaults = {

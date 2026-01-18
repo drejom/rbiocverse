@@ -64,7 +64,7 @@ The HPC Code Server Manager is a web application that provides browser-based IDE
 
 ```
 manager/
-├── server.js              # Main Express server (196 lines)
+├── server.js              # Main Express server
 ├── config/
 │   └── index.js           # Configuration and cluster definitions
 ├── lib/
@@ -77,15 +77,21 @@ manager/
 │   ├── hpc.js             # HpcService - SLURM operations via SSH
 │   └── tunnel.js          # TunnelService - SSH tunnel management
 ├── routes/
-│   └── api.js             # API endpoints (/api/*)
-├── public/
-│   ├── index.html         # Launcher page
-│   ├── css/style.css      # Styles
-│   └── js/launcher.js     # Frontend JavaScript
+│   ├── api.js             # API endpoints (/api/*)
+│   ├── auth.js            # Authentication endpoints
+│   └── help.js            # Help content with template processing
+├── content/
+│   └── help/              # Markdown help files + index.json
+├── ui/                    # React frontend (Vite)
+│   └── src/
+│       ├── components/    # React components
+│       │   ├── HelpPanel.jsx
+│       │   └── help-widgets/  # Embeddable help widgets
+│       └── hooks/         # Custom React hooks
+├── public/                # Static assets, wrapper pages
 ├── test/
 │   ├── unit/              # Unit tests (mocha + chai)
-│   ├── integration/       # API integration tests
-│   └── e2e/               # Puppeteer browser tests
+│   └── integration/       # API integration tests
 └── docs/                  # Documentation
 ```
 
@@ -239,6 +245,7 @@ validateHpcName('invalid'); // Throws
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `JWT_SECRET` | (required) | Secret for signing JWT tokens. **Must be set** or server exits. |
 | `HPC_SSH_USER` | `domeally` | SSH username for HPC clusters |
 | `DEFAULT_HPC` | `gemini` | Default cluster for new sessions |
 | `CODE_SERVER_PORT` | `8000` | Port for code-server |
@@ -247,7 +254,10 @@ validateHpcName('invalid'); // Throws
 | `STATUS_CACHE_TTL` | `120000` | Cluster status cache TTL (ms) |
 | `LOG_LEVEL` | `info` | Winston log level |
 | `SESSION_IDLE_TIMEOUT` | `0` | Minutes of inactivity before auto-cancel (0 = disabled) |
+| `SESSION_EXPIRY_DAYS` | `7` | JWT token expiry (days) for "remember me" |
 | `ADDITIONAL_PORTS` | `5500` | Extra ports to tunnel (comma-separated) |
+| `TEST_USERNAME` | (dev only) | Test username for development auth |
+| `TEST_PASSWORD` | (dev only) | Test password for development auth |
 
 ### IDE Global Defaults (`config/index.js`)
 
@@ -407,3 +417,83 @@ state.sessions['gemini-vscode'] = {
   // ...
 };
 ```
+
+## Authentication
+
+Multi-user authentication with JWT tokens and per-user SSH key management.
+
+### Flow
+
+1. User logs in with credentials (dev: env vars, prod: LDAP)
+2. System tests SSH to both clusters
+3. If SSH works → mark setup complete, no managed key needed
+4. If SSH fails → generate Ed25519 keypair, user installs public key
+5. On subsequent SSH operations, HpcService uses user's private key
+
+### Key Management
+
+| State | Meaning |
+|-------|---------|
+| `publicKey: null` | No managed key - user's own SSH works |
+| `publicKey: "ssh-ed25519..."` | Managed key exists - may need installation |
+| `privateKey: "-----BEGIN..."` | Stored private key for SSH connections |
+| `setupComplete: true` | SSH verified working |
+| `setupComplete: false` | User needs to install managed key |
+
+**Per-User SSH Keys:**
+
+When a user has a managed key, HpcService writes the private key to a temp file with 600 permissions and uses `-i keyfile` for SSH connections. This allows multiple users to share the same Manager instance with isolated SSH access.
+
+```javascript
+// HpcService uses getUserPrivateKey() from auth.js
+const privateKey = getUserPrivateKey(username);
+if (privateKey) {
+  const keyPath = getKeyFilePath(username, privateKey);
+  sshCmd = `ssh -i ${keyPath} ...`;
+}
+```
+
+Temp keys are stored in `/tmp/hpc-ssh-keys/` with secure permissions.
+
+### API Endpoints (`routes/auth.js`)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/auth/login` | Authenticate, test SSH, generate key if needed |
+| `POST /api/auth/logout` | Invalidate session (for audit logging) |
+| `GET /api/auth/session` | Check session validity, return user info |
+| `POST /api/auth/test-connection-both` | Test SSH to both clusters |
+| `POST /api/auth/test-connection/:cluster` | Test SSH to specific cluster |
+| `POST /api/auth/generate-key` | Generate managed Ed25519 key |
+| `POST /api/auth/regenerate-key` | Replace existing managed key |
+| `POST /api/auth/remove-key` | Remove managed key (requires working SSH) |
+| `GET /api/auth/public-key` | Get user's public key for copying |
+| `POST /api/auth/complete-setup` | Mark setup complete |
+
+### Security
+
+- **JWT Tokens**: HMAC-SHA256 signed with `JWT_SECRET` (required env var)
+- **Timing-safe verification**: `crypto.timingSafeEqual` prevents timing attacks
+- **Session expiry**: Configurable (default 7 days, 1 day without "remember me")
+- **User data**: `data/users.json` with atomic writes (temp file + rename)
+- **Private keys**: Encrypted at rest with AES-256-GCM using key derived from JWT_SECRET
+
+## Help System
+
+Built-in documentation with live cluster data. See [HELP_SYSTEM.md](HELP_SYSTEM.md) for details.
+
+### Features
+
+- **Template syntax**: `{{gemini.cpus.percent}}` renders live values
+- **Ternary expressions**: `{{cluster.online ? "🟢" : "🔴"}}`
+- **Widget embedding**: `:::widget ClusterHealth cluster="gemini":::`
+- **Search**: Full-text search across all help sections
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `routes/help.js` | API + server-side template processing |
+| `ui/src/components/HelpPanel.jsx` | React panel + widget mounting |
+| `ui/src/components/help-widgets/` | Embeddable widget components |
+| `content/help/*.md` | Markdown content |

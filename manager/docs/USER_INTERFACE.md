@@ -209,7 +209,74 @@ Your work is preserved - the SLURM job continues running on the cluster.
 - Check if you're running memory-intensive operations
 - Large files or many open tabs can slow VS Code
 
+## Theme Support
+
+The launcher supports light and dark themes.
+
+### Switching Themes
+
+Click the **sun/moon icon** in the header toolbar to toggle between themes.
+
+### Automatic Detection
+
+On first visit, the launcher detects your system preference:
+- **Dark mode** if your OS uses dark mode (`prefers-color-scheme: dark`)
+- **Light mode** otherwise
+
+### Persistence
+
+Your theme choice is saved in `localStorage` and persists across sessions.
+
+### Colors
+
+| Element | Light Theme | Dark Theme |
+|---------|-------------|------------|
+| Background | White/gray | Dark gray (#1a1a2e) |
+| Text | Dark gray | Light gray |
+| Primary accent | Blue | Blue |
+| Health bars | Green/yellow/red | Same |
+| Cards | White with shadow | Dark with border |
+
+### CSS Implementation
+
+Themes use CSS custom properties defined in `themes.css`:
+
+```css
+[data-theme="light"] {
+  --color-background: #f5f5f5;
+  --color-surface: #ffffff;
+  --color-text: #1a1a2e;
+}
+
+[data-theme="dark"] {
+  --color-background: #1a1a2e;
+  --color-surface: #252540;
+  --color-text: #e0e0e0;
+}
+```
+
+## Help Panel
+
+Click the **?** icon (top-right) to open built-in documentation.
+
+### Features
+
+- **Search** - Find topics across all help sections
+- **Navigation** - Tabbed sections: Quick Start, Environment, IDEs, Support
+- **Live data** - Real-time cluster status embedded in help content
+- **Keyboard** - Press `Escape` to close
+
+### Live Cluster Data
+
+The Quick Start section displays current cluster metrics:
+- Online/offline status with emoji indicators
+- CPU, memory, and node utilization percentages
+- Live health bars matching the main launcher
+
+This helps you decide which cluster to use without leaving the help panel.
+
 ## See Also
 
 - [USER_GUIDE.md](USER_GUIDE.md) - Keyboard shortcuts, Python/R setup
 - [IDE_CUSTOMIZATIONS.md](IDE_CUSTOMIZATIONS.md) - Default settings and keybindings
+- [HELP_SYSTEM.md](HELP_SYSTEM.md) - Help system architecture (for developers)

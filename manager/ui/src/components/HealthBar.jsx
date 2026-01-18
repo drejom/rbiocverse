@@ -58,7 +58,7 @@ function SingleBar({ icon, percent, label, detail, isFairshare = false, trend = 
   );
 }
 
-export function HealthBars({ health, selectedGpu, history = [] }) {
+export function HealthBars({ health, selectedGpu, history = [], showFairshare = true }) {
   if (!health || !health.online) {
     return (
       <div className="health-indicators offline">
@@ -85,7 +85,8 @@ export function HealthBars({ health, selectedGpu, history = [] }) {
   const effectiveCpus = partitionData?.cpus || health.cpus;
 
   // Fairshare bar (leftmost - most important for user) - no trend for fairshare
-  if (typeof health.fairshare === 'number') {
+  // Only show when showFairshare is true (not on login page - it's per-user)
+  if (showFairshare && typeof health.fairshare === 'number') {
     bars.push(
       <SingleBar
         key="fairshare"

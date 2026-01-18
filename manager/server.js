@@ -15,6 +15,8 @@ const { StateManager } = require('./lib/state');
 const { config, ides } = require('./config');
 const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
+const authRouter = require('./routes/auth');
+const helpRouter = require('./routes/help');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
@@ -62,7 +64,14 @@ function getSessionToken(ide) {
   return state.sessions[sessionKey]?.token || null;
 }
 
-// Mount API routes
+// Mount auth routes (before general /api to avoid conflicts)
+app.use('/api/auth', authRouter);
+
+// Mount help routes (inject stateManager for template processing)
+helpRouter.setStateManager(stateManager);
+app.use('/api/help', helpRouter);
+
+// Mount API routes (general /api/* - must come after more specific routes)
 app.use('/api', createApiRouter(stateManager));
 
 // Serve static files from public directory (images, wrapper pages)

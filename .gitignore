@@ -1,3 +1,11 @@
 .env
 *.log
 node_modules/
+
+# User data (generated at runtime)
+manager/data/users.json
+
+# Test artifacts
+manager/ui/test-results/
+manager/ui/playwright-report/
+.claude/settings.local.json

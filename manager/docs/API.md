@@ -2,7 +2,301 @@
 
 Base URL: `https://hpc.omeally.com/api`
 
-## Endpoints
+## Authentication
+
+Most endpoints require JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+Tokens are obtained via the login endpoint and expire after 7 days (or 1 day without "remember me").
+
+---
+
+## Auth Endpoints
+
+### Login
+
+```
+POST /api/auth/login
+```
+
+Authenticate user and obtain JWT token. On first login, tests SSH connectivity and generates managed keys if needed.
+
+**Request Body:**
+```json
+{
+  "username": "jdoe",
+  "password": "secret",
+  "rememberMe": true
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "token": "eyJ...",
+  "user": {
+    "username": "jdoe",
+    "fullName": "jdoe",
+    "publicKey": "ssh-ed25519 AAAA... rbiocverse-jdoe",
+    "setupComplete": false
+  },
+  "sshTestResult": {
+    "gemini": true,
+    "apollo": false,
+    "bothSucceeded": false
+  }
+}
+```
+
+**Notes:**
+- `publicKey` is null if user's existing SSH works (no managed key needed)
+- `sshTestResult` only included for new users
+- `setupComplete: false` means user needs to install public key
+
+---
+
+### Logout
+
+```
+POST /api/auth/logout
+```
+
+Invalidate session for audit logging. Requires authentication.
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### Check Session
+
+```
+GET /api/auth/session
+```
+
+Verify token validity and return current user info. Requires authentication.
+
+**Response:**
+```json
+{
+  "user": {
+    "username": "jdoe",
+    "fullName": "jdoe",
+    "publicKey": "ssh-ed25519 AAAA...",
+    "setupComplete": true
+  }
+}
+```
+
+---
+
+### Test SSH Connection
+
+```
+POST /api/auth/test-connection/:cluster
+POST /api/auth/test-connection-both
+```
+
+Test SSH connectivity to clusters. Does not require authentication.
+
+**Response (single cluster):**
+```json
+{
+  "success": true,
+  "cluster": "gemini"
+}
+```
+
+**Response (both clusters):**
+```json
+{
+  "gemini": true,
+  "apollo": false,
+  "bothSucceeded": false,
+  "apolloError": "Connection refused"
+}
+```
+
+---
+
+### Generate SSH Key
+
+```
+POST /api/auth/generate-key
+```
+
+Generate a new Ed25519 keypair for the user. Requires authentication.
+
+**Response:**
+```json
+{
+  "success": true,
+  "user": {
+    "username": "jdoe",
+    "publicKey": "ssh-ed25519 AAAA... rbiocverse-jdoe",
+    "setupComplete": false
+  }
+}
+```
+
+---
+
+### Regenerate SSH Key
+
+```
+POST /api/auth/regenerate-key
+```
+
+Replace existing managed key with a new one. Requires authentication.
+
+**Response:** Same as generate-key.
+
+---
+
+### Remove SSH Key
+
+```
+POST /api/auth/remove-key
+```
+
+Remove managed key. Only succeeds if SSH test passes (user has working alternative). Requires authentication.
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "user": {
+    "username": "jdoe",
+    "publicKey": null,
+    "setupComplete": true
+  }
+}
+```
+
+**Failure Response (SSH test failed):**
+```json
+{
+  "success": false,
+  "error": "Cannot remove managed key: SSH test failed...",
+  "sshTestResult": { ... }
+}
+```
+
+---
+
+### Get Public Key
+
+```
+GET /api/auth/public-key
+```
+
+Get user's public key for copying to authorized_keys. Requires authentication.
+
+**Response:**
+```json
+{
+  "publicKey": "ssh-ed25519 AAAA... rbiocverse-jdoe"
+}
+```
+
+---
+
+### Complete Setup
+
+```
+POST /api/auth/complete-setup
+```
+
+Mark user setup as complete (after installing public key). Requires authentication.
+
+**Response:**
+```json
+{
+  "user": {
+    "username": "jdoe",
+    "publicKey": "ssh-ed25519 AAAA...",
+    "setupComplete": true
+  }
+}
+```
+
+---
+
+## Help Endpoints
+
+### Get Help Index
+
+```
+GET /api/help
+```
+
+Returns list of available help sections.
+
+**Response:**
+```json
+{
+  "sections": [
+    { "id": "quick-start", "title": "Quick Start", "icon": "rocket" },
+    { "id": "environment", "title": "Environment", "icon": "settings" }
+  ]
+}
+```
+
+---
+
+### Get Help Section
+
+```
+GET /api/help/:section
+```
+
+Returns processed markdown for a help section. Templates ({{...}}) are replaced with live cluster data.
+
+**Response:**
+```json
+{
+  "id": "quick-start",
+  "title": "Quick Start",
+  "icon": "rocket",
+  "content": "# Quick Start\n\nGemini CPU: 72%..."
+}
+```
+
+---
+
+### Search Help
+
+```
+GET /api/help/search?q=query
+```
+
+Search across all help content.
+
+**Response:**
+```json
+{
+  "query": "gpu",
+  "results": [
+    {
+      "sectionId": "quick-start",
+      "sectionTitle": "Quick Start",
+      "snippet": "...select A100 or V100 GPU...",
+      "matchIndex": 15
+    }
+  ]
+}
+```
+
+---
+
+## Cluster Endpoints
 
 ### Health Check
 

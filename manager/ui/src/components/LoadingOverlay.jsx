@@ -1,8 +1,9 @@
 /**
  * Loading overlay component
  * Shows launch progress with SSE streaming
+ * Includes SSH error detection with option to set up keys
  */
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, X, Key } from 'lucide-react';
 
 const STEP_ESTIMATES = {
   connecting: 10,
@@ -22,8 +23,10 @@ export function LoadingOverlay({
   error,
   pending,
   indeterminate,
+  isSshError,
   onBack,
   onCancel,
+  onSetupKeys,
 }) {
   if (!visible) return null;
 
@@ -52,16 +55,32 @@ export function LoadingOverlay({
             <div className={estimateClass} style={{ width: estimateWidth }} />
             <div className={fillClass} style={{ width: fillWidth }} />
           </div>
-          {error && <div className="progress-error">{error}</div>}
+          {error && (
+            <div className="progress-error">
+              {error}
+              {isSshError && (
+                <p style={{ fontSize: '0.85rem', marginTop: '8px', opacity: 0.8 }}>
+                  This may be an SSH key issue. Try setting up your keys.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="launch-actions">
+          {isSshError && onSetupKeys && (
+            <button className="btn btn-primary" onClick={onSetupKeys}>
+              <Key className="icon-sm" /> Set up SSH Keys
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={onBack}>
             <ArrowLeft className="icon-sm" /> Back to Menu
           </button>
-          <button className="btn btn-cancel" onClick={onCancel}>
-            <X className="icon-sm" /> Stop
-          </button>
+          {!isSshError && (
+            <button className="btn btn-cancel" onClick={onCancel}>
+              <X className="icon-sm" /> Stop
+            </button>
+          )}
         </div>
       </div>
     </div>

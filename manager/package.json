@@ -1,6 +1,6 @@
 {
   "name": "hpc-code-server-manager",
-  "version": "1.0.0",
+  "version": "0.0.6",
   "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
   "main": "server.js",
   "scripts": {
@@ -9,11 +9,11 @@
     "dev:ui": "cd ui && npm run dev",
     "build": "cd ui && npm run build",
     "postinstall": "cd ui && npm install",
-    "test": "mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:watch": "mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:coverage": "c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:e2e": "mocha 'test/e2e/**/*.test.js' --timeout 60000",
-    "test:all": "mocha 'test/**/*.test.js' --timeout 60000"
+    "test": "NODE_ENV=test mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:watch": "NODE_ENV=test mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:coverage": "NODE_ENV=test c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:e2e": "NODE_ENV=test mocha 'test/e2e/**/*.test.js' --timeout 60000",
+    "test:all": "NODE_ENV=test mocha 'test/**/*.test.js' --timeout 60000"
   },
   "c8": {
     "reporter": [
