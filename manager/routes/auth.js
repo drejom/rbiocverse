@@ -463,7 +463,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   // SSH works - safe to remove managed key
   user.publicKey = null;
   user.privateKey = null;
-  // setUser saves immediately to SQLite
+  setUser(req.user.username, user);
 
   // Clear from session
   clearSessionKey(req.user.username);
