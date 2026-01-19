@@ -16,6 +16,7 @@ const asyncHandler = require('../lib/asyncHandler');
 const { log } = require('../lib/logger');
 const analytics = require('../lib/db/analytics');
 const dbHealth = require('../lib/db/health');
+const { parseQueryInt } = require('../lib/validation');
 
 // StateManager injected via setStateManager()
 let stateManager = null;
@@ -82,7 +83,7 @@ router.get('/clusters', asyncHandler(async (req, res) => {
  * Aggregate stats without usernames or PII.
  */
 router.get('/usage', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '7', 10);
+  const days = parseQueryInt(req.query, 'days', 7, { min: 1, max: 365 });
 
   // Get aggregate stats (no usernames)
   const releases = analytics.getReleaseUsage(days);
@@ -195,7 +196,7 @@ router.get('/variables', asyncHandler(async (req, res) => {
  */
 router.get('/queue/:cluster', asyncHandler(async (req, res) => {
   const { cluster } = req.params;
-  const days = parseInt(req.query.days || '7', 10);
+  const days = parseQueryInt(req.query, 'days', 7, { min: 1, max: 365 });
 
   const queueWaitByCluster = analytics.getQueueWaitTimesByCluster(days);
   const clusterStats = queueWaitByCluster[cluster];

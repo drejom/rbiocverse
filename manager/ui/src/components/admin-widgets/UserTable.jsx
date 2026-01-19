@@ -3,27 +3,28 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Trash2, Key, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useAdminApi } from '../../hooks/useApi';
 
-export function UserTable({ getAuthHeader }) {
+export function UserTable() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState(null);
+  const api = useAdminApi();
 
   const loadUsers = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/users', {
-        headers: getAuthHeader(),
-      });
-      const data = await res.json();
+      setError(null);
+      const data = await api.get('/users');
       setUsers(data.users || []);
-      setLoading(false);
     } catch (err) {
-      console.error('Failed to load users:', err);
+      setError(err.message || 'Failed to load users');
+    } finally {
       setLoading(false);
     }
-  }, [getAuthHeader]);
+  }, [api]);
 
   useEffect(() => {
     loadUsers();
@@ -34,13 +35,10 @@ export function UserTable({ getAuthHeader }) {
 
     setActionLoading(username);
     try {
-      await fetch(`/api/admin/users/${username}/key`, {
-        method: 'DELETE',
-        headers: getAuthHeader(),
-      });
+      await api.del(`/users/${username}/key`);
       await loadUsers();
     } catch (err) {
-      console.error('Failed to delete key:', err);
+      setError(err.message || 'Failed to delete key');
     }
     setActionLoading(null);
   };
@@ -50,13 +48,10 @@ export function UserTable({ getAuthHeader }) {
 
     setActionLoading(username);
     try {
-      await fetch(`/api/admin/users/${username}`, {
-        method: 'DELETE',
-        headers: getAuthHeader(),
-      });
+      await api.del(`/users/${username}`);
       await loadUsers();
     } catch (err) {
-      console.error('Failed to delete user:', err);
+      setError(err.message || 'Failed to delete user');
     }
     setActionLoading(null);
   };
@@ -69,21 +64,14 @@ export function UserTable({ getAuthHeader }) {
 
     setActionLoading('bulk');
     try {
-      await fetch('/api/admin/users/bulk', {
-        method: 'POST',
-        headers: {
-          ...getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action,
-          usernames: Array.from(selectedUsers),
-        }),
+      await api.post('/users/bulk', {
+        action,
+        usernames: Array.from(selectedUsers),
       });
       setSelectedUsers(new Set());
       await loadUsers();
     } catch (err) {
-      console.error('Bulk action failed:', err);
+      setError(err.message || 'Bulk action failed');
     }
     setActionLoading(null);
   };
@@ -122,6 +110,13 @@ export function UserTable({ getAuthHeader }) {
 
   return (
     <div className="admin-user-table">
+      {/* Error display */}
+      {error && (
+        <div className="admin-error-banner" onClick={() => setError(null)}>
+          {error}
+        </div>
+      )}
+
       {/* Search and bulk actions */}
       <div className="admin-table-toolbar">
         <div className="admin-table-search">

@@ -22,9 +22,15 @@ const { errorLogger } = require('../services/ErrorLogger');
 // Import auth modules
 const { generateToken, verifyToken } = require('../lib/auth/token');
 const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('../lib/auth/ssh');
-const { loadUsers, saveUsers, getUser, setUser } = require('../lib/auth/user-store');
+const dbUsers = require('../lib/db/users');
+const { initializeDb } = require('../lib/db');
+const { checkAndMigrate } = require('../lib/db/migrate');
 const { setSessionKey, getSessionKey, clearSessionKey } = require('../lib/auth/session-keys');
 const { isAdmin } = require('../lib/auth/admin');
+
+// Database-backed user operations (replaced user-store.js)
+const getUser = (username) => dbUsers.getUser(username);
+const setUser = (username, user) => dbUsers.setUser(username, user);
 
 // Test credentials (for development - will be replaced by LDAP)
 // Must be set via environment variables - no defaults for security
@@ -64,8 +70,9 @@ function getUserPrivateKey(username) {
   return getSessionKey(username);
 }
 
-// Load users on startup
-loadUsers();
+// Initialize database on startup
+initializeDb();
+checkAndMigrate();
 
 /**
  * Middleware to require authentication
@@ -195,7 +202,7 @@ router.post('/login', async (req, res) => {
       }
 
       setUser(username, user);
-      saveUsers();
+      // setUser saves immediately to SQLite
     } else {
       // Existing user - decrypt private key if they have one
       if (user.privateKey) {
@@ -309,10 +316,10 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
       log.info('Legacy user needs to regenerate key', { username: req.user.username });
     }
     setUser(req.user.username, user);
-    saveUsers();
+    // setUser saves immediately to SQLite
   } else {
     user.setupComplete = true;
-    saveUsers();
+    // setUser saves immediately to SQLite
     log.info('User setup completed', { username: user.username });
   }
 
@@ -399,7 +406,7 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install the new key
-  saveUsers();
+  // setUser saves immediately to SQLite
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
@@ -456,7 +463,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   // SSH works - safe to remove managed key
   user.publicKey = null;
   user.privateKey = null;
-  saveUsers();
+  // setUser saves immediately to SQLite
 
   // Clear from session
   clearSessionKey(req.user.username);
@@ -502,7 +509,7 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install new key
-  saveUsers();
+  // setUser saves immediately to SQLite
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;

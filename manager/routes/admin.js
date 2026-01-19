@@ -19,7 +19,7 @@ const dbHealth = require('../lib/db/health');
 const dbSessions = require('../lib/db/sessions');
 const asyncHandler = require('../lib/asyncHandler');
 const ContentManager = require('../lib/content');
-const { schemas, validate } = require('../lib/validation');
+const { schemas, validate, parseQueryInt, parseQueryParams } = require('../lib/validation');
 
 // Parse JSON bodies for admin routes
 router.use(express.json());
@@ -388,7 +388,7 @@ router.get('/reports/clusters', asyncHandler(async (req, res) => {
  * Bioconductor version popularity
  */
 router.get('/analytics/releases', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getReleaseUsage(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -398,7 +398,7 @@ router.get('/analytics/releases', asyncHandler(async (req, res) => {
  * Resource request patterns (CPU, memory, time)
  */
 router.get('/analytics/resources', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getResourcePatterns(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -408,7 +408,7 @@ router.get('/analytics/resources', asyncHandler(async (req, res) => {
  * IDE popularity
  */
 router.get('/analytics/ides', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getIdePopularity(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -418,7 +418,7 @@ router.get('/analytics/ides', asyncHandler(async (req, res) => {
  * Shiny/Live Server usage rates
  */
 router.get('/analytics/features', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getFeatureUsage(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -429,7 +429,7 @@ router.get('/analytics/features', asyncHandler(async (req, res) => {
  */
 router.get('/analytics/users/:username', asyncHandler(async (req, res) => {
   const { username } = req.params;
-  const days = parseInt(req.query.days || '90', 10);
+  const days = parseQueryInt(req.query, 'days', 90, { min: 1, max: 365 });
   const data = analytics.getUserUsageSummary(username, days);
   res.json({ data, username, days, generatedAt: new Date().toISOString() });
 }));
@@ -439,7 +439,7 @@ router.get('/analytics/users/:username', asyncHandler(async (req, res) => {
  * Users with large/long job patterns (training candidates)
  */
 router.get('/analytics/power-users', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getPowerUsers(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -449,7 +449,7 @@ router.get('/analytics/power-users', asyncHandler(async (req, res) => {
  * Users with no activity in 90+ days (cleanup candidates)
  */
 router.get('/analytics/inactive', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '90', 10);
+  const days = parseQueryInt(req.query, 'days', 90, { min: 1, max: 365 });
   const data = analytics.getInactiveUsers(days);
   res.json({ data, inactiveDays: days, generatedAt: new Date().toISOString() });
 }));
@@ -459,7 +459,7 @@ router.get('/analytics/inactive', asyncHandler(async (req, res) => {
  * New user success rate
  */
 router.get('/analytics/new-users', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getNewUserSuccessRate(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -469,7 +469,7 @@ router.get('/analytics/new-users', asyncHandler(async (req, res) => {
  * Peak concurrent sessions, resource saturation, growth rate
  */
 router.get('/analytics/capacity', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getCapacityMetrics(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -479,7 +479,7 @@ router.get('/analytics/capacity', asyncHandler(async (req, res) => {
  * Queue wait time stats
  */
 router.get('/analytics/queue', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getQueueWaitTimesByCluster(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -489,7 +489,7 @@ router.get('/analytics/queue', asyncHandler(async (req, res) => {
  * Daily session counts for GitHub-style heatmap
  */
 router.get('/analytics/heatmap/sessions', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '365', 10);
+  const days = parseQueryInt(req.query, 'days', 365, { min: 1, max: 365 });
   const data = analytics.getDailySessionCounts(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -500,7 +500,7 @@ router.get('/analytics/heatmap/sessions', asyncHandler(async (req, res) => {
  */
 router.get('/analytics/heatmap/cluster/:hpc', asyncHandler(async (req, res) => {
   const { hpc } = req.params;
-  const days = parseInt(req.query.days || '365', 10);
+  const days = parseQueryInt(req.query, 'days', 365, { min: 1, max: 365 });
   const data = dbHealth.getDailyHealthAggregates(hpc, days);
   res.json({ data, hpc, days, generatedAt: new Date().toISOString() });
 }));
@@ -520,7 +520,7 @@ router.get('/analytics/adoption/:version', asyncHandler(async (req, res) => {
  * Month-over-month session/user growth
  */
 router.get('/analytics/growth', asyncHandler(async (req, res) => {
-  const months = parseInt(req.query.months || '12', 10);
+  const months = parseQueryInt(req.query, 'months', 12, { min: 1, max: 24 });
   const data = analytics.getGrowthTrends(months);
   res.json({ data, months, generatedAt: new Date().toISOString() });
 }));
@@ -530,7 +530,7 @@ router.get('/analytics/growth', asyncHandler(async (req, res) => {
  * Usage breakdown by Slurm account/PI
  */
 router.get('/analytics/by-account', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.getUsageByAccount(days);
   res.json({ data, days, generatedAt: new Date().toISOString() });
 }));
@@ -540,7 +540,7 @@ router.get('/analytics/by-account', asyncHandler(async (req, res) => {
  * CSV download: one row per session
  */
 router.get('/analytics/export/raw', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.exportRawSessions(days);
 
   // Convert to CSV
@@ -575,7 +575,7 @@ router.get('/analytics/export/raw', asyncHandler(async (req, res) => {
  * CSV download: aggregated by user/account/IDE
  */
 router.get('/analytics/export/summary', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
+  const { days } = parseQueryParams(req.query);
   const data = analytics.exportSummary(days);
 
   // Convert to CSV
@@ -610,9 +610,7 @@ router.get('/analytics/export/summary', asyncHandler(async (req, res) => {
  * Get session history (paginated)
  */
 router.get('/analytics/sessions', asyncHandler(async (req, res) => {
-  const days = parseInt(req.query.days || '30', 10);
-  const limit = parseInt(req.query.limit || '100', 10);
-  const offset = parseInt(req.query.offset || '0', 10);
+  const { days, limit, offset } = parseQueryParams(req.query);
   const { user, hpc, ide } = req.query;
 
   const data = dbSessions.getSessionHistory({ days, user, hpc, ide, limit, offset });

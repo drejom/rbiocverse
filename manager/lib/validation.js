@@ -111,6 +111,59 @@ function isJoiAvailable() {
   return Joi !== null;
 }
 
+// ============================================
+// Query Parameter Helpers
+// ============================================
+
+/**
+ * Parse integer query parameter with default value
+ * @param {Object} query - Express req.query object
+ * @param {string} name - Parameter name
+ * @param {number} defaultValue - Default if missing or invalid
+ * @param {Object} [options]
+ * @param {number} [options.min] - Minimum allowed value
+ * @param {number} [options.max] - Maximum allowed value
+ * @returns {number}
+ */
+function parseQueryInt(query, name, defaultValue, options = {}) {
+  const raw = query?.[name];
+  if (raw === undefined || raw === null || raw === '') {
+    return defaultValue;
+  }
+
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed)) {
+    return defaultValue;
+  }
+
+  // Apply bounds if specified
+  if (options.min !== undefined && parsed < options.min) {
+    return options.min;
+  }
+  if (options.max !== undefined && parsed > options.max) {
+    return options.max;
+  }
+
+  return parsed;
+}
+
+/**
+ * Extract common pagination/filter params from query
+ * @param {Object} query - Express req.query object
+ * @param {Object} [defaults]
+ * @param {number} [defaults.days=30]
+ * @param {number} [defaults.limit=100]
+ * @param {number} [defaults.offset=0]
+ * @returns {{ days: number, limit: number, offset: number }}
+ */
+function parseQueryParams(query, defaults = {}) {
+  return {
+    days: parseQueryInt(query, 'days', defaults.days ?? 30, { min: 1, max: 365 }),
+    limit: parseQueryInt(query, 'limit', defaults.limit ?? 100, { min: 1, max: 1000 }),
+    offset: parseQueryInt(query, 'offset', defaults.offset ?? 0, { min: 0 }),
+  };
+}
+
 /**
  * Parse time string to seconds
  * @param {string} time - Time in format "HH:MM:SS" or "D-HH:MM:SS"
@@ -233,4 +286,8 @@ module.exports = {
   schemas,
   validate,
   isJoiAvailable,
+
+  // Query parameter helpers
+  parseQueryInt,
+  parseQueryParams,
 };
