@@ -1,10 +1,13 @@
 /**
  * Cluster Health Database Operations
  * Handles cluster cache and health history
+ *
+ * Uses healthSchema.js for all field mappings (DRY principle)
  */
 
 const { getDb } = require('../db');
 const { log } = require('../logger');
+const schema = require('./healthSchema');
 
 // ============================================
 // Cluster Cache (Current Health)
@@ -18,39 +21,7 @@ const { log } = require('../logger');
 function getClusterCache(hpc) {
   const db = getDb();
   const row = db.prepare('SELECT * FROM cluster_cache WHERE hpc = ?').get(hpc);
-  if (!row) return null;
-
-  return {
-    online: !!row.online,
-    cpus: row.cpus_total ? {
-      used: row.cpus_used,
-      idle: row.cpus_idle,
-      total: row.cpus_total,
-      percent: row.cpus_percent,
-    } : null,
-    memory: row.memory_total ? {
-      used: row.memory_used,
-      total: row.memory_total,
-      percent: row.memory_percent,
-    } : null,
-    nodes: row.nodes_total ? {
-      idle: row.nodes_idle,
-      busy: row.nodes_busy,
-      down: row.nodes_down,
-      total: row.nodes_total,
-      percent: row.nodes_percent,
-    } : null,
-    gpus: row.gpus_json ? JSON.parse(row.gpus_json) : null,
-    partitions: row.partitions_json ? JSON.parse(row.partitions_json) : null,
-    jobs: {
-      running: row.running_jobs || 0,
-      pending: row.pending_jobs || 0,
-    },
-    fairshare: row.fairshare,
-    lastChecked: row.last_checked,
-    consecutiveFailures: row.consecutive_failures || 0,
-    error: row.error,
-  };
+  return schema.rowToHealth(row);
 }
 
 /**
@@ -70,30 +41,7 @@ function saveClusterCache(hpc, health) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(
-    hpc,
-    health.online ? 1 : 0,
-    health.cpus?.used || null,
-    health.cpus?.idle || null,
-    health.cpus?.total || null,
-    health.cpus?.percent || null,
-    health.memory?.used || null,
-    health.memory?.total || null,
-    health.memory?.percent || null,
-    health.nodes?.idle || null,
-    health.nodes?.busy || null,
-    health.nodes?.down || null,
-    health.nodes?.total || null,
-    health.nodes?.percent || null,
-    health.gpus ? JSON.stringify(health.gpus) : null,
-    health.partitions ? JSON.stringify(health.partitions) : null,
-    health.jobs?.running || 0,
-    health.jobs?.pending || 0,
-    health.fairshare || null,
-    health.lastChecked || Date.now(),
-    health.consecutiveFailures || 0,
-    health.error || null
-  );
+  stmt.run(...schema.healthToRow(hpc, health));
 }
 
 /**
@@ -137,20 +85,11 @@ function addHealthSnapshot(hpc, health) {
   const stmt = db.prepare(`
     INSERT INTO cluster_health (
       hpc, timestamp, cpus_percent, memory_percent, nodes_percent, gpus_percent,
-      running_jobs, pending_jobs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      running_jobs, pending_jobs, a100_cpus_percent, v100_cpus_percent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(
-    hpc,
-    Date.now(),
-    health.cpus?.percent || null,
-    health.memory?.percent || null,
-    health.nodes?.percent || null,
-    health.gpus?.percent || null,
-    health.jobs?.running || 0,
-    health.jobs?.pending || 0
-  );
+  stmt.run(...schema.healthToHistoryRow(hpc, health));
 }
 
 /**
@@ -205,15 +144,7 @@ function getAllHealthHistory(options = {}) {
     if (!history[row.hpc]) {
       history[row.hpc] = [];
     }
-    history[row.hpc].push({
-      timestamp: row.timestamp,
-      cpus: row.cpus_percent,
-      memory: row.memory_percent,
-      nodes: row.nodes_percent,
-      gpus: row.gpus_percent,
-      runningJobs: row.running_jobs,
-      pendingJobs: row.pending_jobs,
-    });
+    history[row.hpc].push(schema.historyRowToEntry(row));
   }
 
   return history;
@@ -253,6 +184,8 @@ function getDailyHealthAggregates(hpc, days = 365) {
       AVG(memory_percent) as avg_memory,
       AVG(nodes_percent) as avg_nodes,
       AVG(gpus_percent) as avg_gpus,
+      AVG(a100_cpus_percent) as avg_a100,
+      AVG(v100_cpus_percent) as avg_v100,
       MAX(cpus_percent) as max_cpus,
       MAX(memory_percent) as max_memory,
       SUM(running_jobs) as total_running,
@@ -270,6 +203,8 @@ function getDailyHealthAggregates(hpc, days = 365) {
     avgMemory: Math.round(row.avg_memory || 0),
     avgNodes: Math.round(row.avg_nodes || 0),
     avgGpus: row.avg_gpus ? Math.round(row.avg_gpus) : null,
+    avgA100: row.avg_a100 ? Math.round(row.avg_a100) : null,
+    avgV100: row.avg_v100 ? Math.round(row.avg_v100) : null,
     maxCpus: row.max_cpus,
     maxMemory: row.max_memory,
     totalRunning: row.total_running,

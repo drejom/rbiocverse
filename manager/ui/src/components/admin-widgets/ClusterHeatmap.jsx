@@ -49,21 +49,40 @@ export function ClusterHeatmap({ getAuthHeader, hpc = 'gemini', data: externalDa
       dateMap,
       colorScale,
       getValue: (dayData) => dayData[metric] || 0,
-      getTooltipHtml: (date, dayData) => `
-        <strong>${date.toLocaleDateString()}</strong><br/>
-        CPU: ${dayData?.avgCpus || 0}% (max: ${dayData?.maxCpus || 0}%)<br/>
-        Memory: ${dayData?.avgMemory || 0}%<br/>
-        Jobs: ${dayData?.totalRunning || 0} running, ${dayData?.totalPending || 0} pending
-      `,
+      getTooltipHtml: (date, dayData) => {
+        let html = `<strong>${date.toLocaleDateString()}</strong><br/>
+          CPU: ${dayData?.avgCpus || 0}% (max: ${dayData?.maxCpus || 0}%)<br/>`;
+        if (hpc === 'gemini' && (dayData?.avgA100 !== null || dayData?.avgV100 !== null)) {
+          html += `A100: ${dayData?.avgA100 ?? 'N/A'}%<br/>`;
+          html += `V100: ${dayData?.avgV100 ?? 'N/A'}%<br/>`;
+        }
+        html += `Memory: ${dayData?.avgMemory || 0}%<br/>
+          Jobs: ${dayData?.totalRunning || 0} running, ${dayData?.totalPending || 0} pending`;
+        return html;
+      },
       tooltipElement: d3.select(tooltipRef.current),
     });
   }, [data, metric]);
 
-  const metrics = [
+  // Build metrics list - include GPU partitions only for Gemini
+  const baseMetrics = [
     { value: 'avgCpus', label: 'CPU' },
-    { value: 'avgMemory', label: 'Memory' },
-    { value: 'avgNodes', label: 'Nodes' },
   ];
+
+  // Add GPU partition metrics for Gemini only
+  if (hpc === 'gemini') {
+    baseMetrics.push(
+      { value: 'avgA100', label: 'A100' },
+      { value: 'avgV100', label: 'V100' }
+    );
+  }
+
+  baseMetrics.push(
+    { value: 'avgMemory', label: 'Memory' },
+    { value: 'avgNodes', label: 'Nodes' }
+  );
+
+  const metrics = baseMetrics;
 
   return (
     <div className="cluster-heatmap">

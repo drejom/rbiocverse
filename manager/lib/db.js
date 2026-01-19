@@ -126,7 +126,10 @@ function initializeDb(dbPath = DEFAULT_DB_PATH) {
       nodes_percent INTEGER,
       gpus_percent INTEGER,
       running_jobs INTEGER,
-      pending_jobs INTEGER
+      pending_jobs INTEGER,
+      -- Partition-specific CPU percentages (for GPU partitions)
+      a100_cpus_percent INTEGER,
+      v100_cpus_percent INTEGER
     );
 
     -- Cluster cache (replaces state.json clusterHealth.current)
@@ -170,7 +173,28 @@ function initializeDb(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user);
   `);
 
+  // Run migrations for existing databases (add new columns if they don't exist)
+  runMigrations(db);
+
   return db;
+}
+
+/**
+ * Run database migrations for schema changes
+ * @param {Database} database - The database connection
+ */
+function runMigrations(database) {
+  // Check if partition columns exist in cluster_health
+  const tableInfo = database.prepare('PRAGMA table_info(cluster_health)').all();
+  const columns = new Set(tableInfo.map(col => col.name));
+
+  // Migration: Add partition CPU columns
+  if (!columns.has('a100_cpus_percent')) {
+    database.exec('ALTER TABLE cluster_health ADD COLUMN a100_cpus_percent INTEGER');
+  }
+  if (!columns.has('v100_cpus_percent')) {
+    database.exec('ALTER TABLE cluster_health ADD COLUMN v100_cpus_percent INTEGER');
+  }
 }
 
 /**

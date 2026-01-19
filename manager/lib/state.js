@@ -1275,10 +1275,27 @@ class StateManager {
 
   /**
    * Get cluster health data for API responses
-   * @returns {Object} Cluster health data
+   * Combines current state with history from database
+   * @returns {Object} Cluster health data with current and history
    */
   getClusterHealth() {
-    return this.state.clusterHealth || {};
+    const clusterHealth = this.state.clusterHealth || {};
+
+    // If SQLite enabled, replace in-memory history with database history
+    if (this.useSqlite) {
+      try {
+        const dbHistory = dbHealth.getAllHealthHistory({ days: 1 });
+        for (const hpc of Object.keys(clusterHealth)) {
+          if (clusterHealth[hpc]) {
+            clusterHealth[hpc].history = dbHistory[hpc] || [];
+          }
+        }
+      } catch (err) {
+        log.error('Failed to get cluster history from SQLite', { error: err.message });
+      }
+    }
+
+    return clusterHealth;
   }
 
   /**

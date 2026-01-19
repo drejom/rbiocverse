@@ -15,7 +15,18 @@ function getLevel(percent) {
   return 'low';
 }
 
-function SimpleSimpleHealthBar({ percent }) {
+function formatMemory(gb) {
+  if (!gb) return '0 GB';
+  if (gb >= 1024 * 1024) {
+    return `${(gb / (1024 * 1024)).toFixed(1)} PB`;
+  }
+  if (gb >= 1024) {
+    return `${(gb / 1024).toFixed(1)} TB`;
+  }
+  return `${gb} GB`;
+}
+
+function SimpleHealthBar({ percent }) {
   const safePercent = Math.min(100, Math.max(0, percent || 0));
   const level = getLevel(safePercent);
 
@@ -30,7 +41,8 @@ function SimpleSimpleHealthBar({ percent }) {
 }
 
 export function ClusterDetail({ cluster, health = {}, history = {} }) {
-  const clusterHealth = health[cluster]?.current;
+  // health[cluster] is already the "current" health object (not wrapped)
+  const clusterHealth = health[cluster];
   const clusterHistory = history[cluster];
 
   if (!clusterHealth) {
@@ -94,7 +106,7 @@ export function ClusterDetail({ cluster, health = {}, history = {} }) {
           <div className="admin-metric-content">
             <SimpleHealthBar percent={memory?.percent || 0} />
             <div className="admin-metric-values">
-              <span>{formatBytes(memory?.usedBytes)} / {formatBytes(memory?.totalBytes)}</span>
+              <span>{formatMemory(memory?.used)} / {formatMemory(memory?.total)}</span>
               <span className="admin-metric-percent">{memory?.percent || 0}%</span>
             </div>
             {clusterHistory?.memory && (
@@ -112,10 +124,10 @@ export function ClusterDetail({ cluster, health = {}, history = {} }) {
             <span>Node Status</span>
           </div>
           <div className="admin-metric-content">
-            <SimpleHealthBar percent={nodes?.activePercent || 0} />
+            <SimpleHealthBar percent={nodes?.percent || 0} />
             <div className="admin-metric-values">
-              <span>{nodes?.active || 0} / {nodes?.total || 0} active</span>
-              <span className="admin-metric-percent">{nodes?.activePercent || 0}%</span>
+              <span>{nodes?.busy || 0} / {nodes?.total || 0} busy</span>
+              <span className="admin-metric-percent">{nodes?.percent || 0}%</span>
             </div>
           </div>
         </div>
@@ -141,14 +153,3 @@ export function ClusterDetail({ cluster, health = {}, history = {} }) {
   );
 }
 
-function formatBytes(bytes) {
-  if (!bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  let value = bytes;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i++;
-  }
-  return `${value.toFixed(1)} ${units[i]}`;
-}

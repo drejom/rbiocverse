@@ -27,9 +27,61 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 const ADMIN_CONTENT_DIR = path.join(__dirname, '../content/admin');
+const CONTENT_DIR = path.join(__dirname, '../content');
 
 // StateManager will be injected via setStateManager()
 let stateManager = null;
+
+// Icons loaded from shared icons.json
+let icons = {};
+
+/**
+ * Load icons from shared icons.json
+ * Called once at startup
+ */
+async function loadIcons() {
+  try {
+    const iconsPath = path.join(CONTENT_DIR, 'icons.json');
+    const content = await fs.readFile(iconsPath, 'utf8');
+    icons = JSON.parse(content);
+    log.info('Loaded admin icons', { count: Object.keys(icons).length });
+  } catch (err) {
+    log.warn('Failed to load admin icons:', err.message);
+    icons = {};
+  }
+}
+
+// Load icons on module load
+loadIcons();
+
+/**
+ * Process icon expressions in content
+ * Supports: {{icon:rocket}} or {{icon:rocket:24}}
+ *
+ * @param {string} content - Markdown content with icon expressions
+ * @returns {string} Processed content
+ */
+function processIcons(content) {
+  if (!content) return content;
+
+  return content.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
+    const trimmed = expr.trim();
+
+    // Check for icon syntax: {{icon:name}} or {{icon:name:size}}
+    const iconMatch = trimmed.match(/^icon:([\w-]+)(?::(\d+))?$/);
+    if (iconMatch) {
+      const [, iconName, sizeStr] = iconMatch;
+      const size = sizeStr || '20';
+      const svg = icons[iconName];
+      if (svg) {
+        return svg.replace(/SIZE/g, size);
+      }
+      return `[icon:${iconName}]`; // Fallback for unknown icons
+    }
+
+    return match; // Return unchanged if not an icon expression
+  });
+}
 
 /**
  * Set the state manager for accessing cluster health data
@@ -145,6 +197,20 @@ router.get('/search', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/index
+ * Returns the admin content index (same as /)
+ */
+router.get('/index', async (req, res) => {
+  try {
+    const index = await loadAdminIndex();
+    res.json(index);
+  } catch (err) {
+    log.error('Failed to load admin index:', err);
+    res.status(500).json({ error: 'Failed to load admin index' });
+  }
+});
+
+/**
  * GET /api/admin/content/:section
  * Returns markdown content for an admin section
  */
@@ -159,7 +225,9 @@ router.get('/content/:section', async (req, res) => {
       return res.status(404).json({ error: `Admin section '${section}' not found` });
     }
 
-    const content = await loadAdminSection(section);
+    let content = await loadAdminSection(section);
+    // Process icon expressions in content
+    content = processIcons(content);
 
     res.json({
       id: sectionInfo.id,

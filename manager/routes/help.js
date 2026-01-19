@@ -11,20 +11,21 @@ const path = require('path');
 const { log } = require('../lib/logger');
 
 const HELP_CONTENT_DIR = path.join(__dirname, '../content/help');
+const CONTENT_DIR = path.join(__dirname, '../content');
 
 // StateManager will be injected via setStateManager()
 let stateManager = null;
 
-// Icons loaded from icons.json in help content folder
+// Icons loaded from shared icons.json
 let icons = {};
 
 /**
- * Load icons from icons.json
+ * Load icons from shared icons.json
  * Called once at startup
  */
 async function loadIcons() {
   try {
-    const iconsPath = path.join(HELP_CONTENT_DIR, 'icons.json');
+    const iconsPath = path.join(CONTENT_DIR, 'icons.json');
     const content = await fs.readFile(iconsPath, 'utf8');
     icons = JSON.parse(content);
     log.info('Loaded help icons', { count: Object.keys(icons).length });

@@ -5,11 +5,12 @@
 
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Search, LayoutDashboard, Server, Users, BarChart } from 'lucide-react';
+import { X, Search, LayoutDashboard, Server, Users, BarChart, Activity } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { useAuth } from '../contexts/AuthContext';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders } from './admin-widgets';
+import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive } from '../lib/menuUtils';
 
 // Configure marked for safe HTML output
 marked.setOptions({
@@ -30,15 +31,8 @@ const iconMap = {
   server: Server,
   users: Users,
   'bar-chart': BarChart,
+  activity: Activity,
 };
-
-// Menu structure for admin panel
-const menuStructure = [
-  { id: 'overview', title: 'Overview', icon: 'layout-dashboard' },
-  { id: 'cluster-status', title: 'Clusters', icon: 'server' },
-  { id: 'users', title: 'Users', icon: 'users' },
-  { id: 'reports', title: 'Reports', icon: 'bar-chart' },
-];
 
 /**
  * Memoized markdown content
@@ -106,7 +100,9 @@ function WidgetPortals({ widgets, containerRef, contentKey, health, history }) {
 }
 
 function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
+  const [menuStructure, setMenuStructure] = useState([]);
   const [activeSection, setActiveSection] = useState('overview');
+  const [expandedGroup, setExpandedGroup] = useState(null);
   const [content, setContent] = useState('');
   const [widgets, setWidgets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -114,6 +110,22 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
   const [searchResults, setSearchResults] = useState(null);
   const contentRef = useRef(null);
   const { getAuthHeader } = useAuth();
+
+  // Fetch menu structure on mount
+  useEffect(() => {
+    fetch('/api/admin/index', {
+      headers: getAuthHeader(),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.sections) {
+          setMenuStructure(buildMenuStructure(data.sections));
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load admin index:', err);
+      });
+  }, [getAuthHeader]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -193,6 +205,35 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
     return <Icon size={14} />;
   };
 
+  // Handle top-level item click
+  const handleTopLevelClick = (item) => {
+    if (item.children) {
+      // Toggle expansion, select first child if expanding
+      if (expandedGroup === item.id) {
+        setExpandedGroup(null);
+      } else {
+        setExpandedGroup(item.id);
+        setActiveSection(item.children[0].id);
+      }
+    } else {
+      // Direct section - select it and collapse any expanded group
+      setExpandedGroup(null);
+      setActiveSection(item.id);
+    }
+    setSearchQuery('');
+  };
+
+  // Check if a top-level item is "active"
+  const isTopLevelActive = (item) => isItemActive(item, activeSection);
+
+  // Get expanded group's children
+  const expandedChildren = expandedGroup
+    ? menuStructure.find(m => m.id === expandedGroup)?.children || []
+    : [];
+
+  // Get all leaf sections for link interception
+  const getAllSections = () => getAllLeafSections(menuStructure);
+
   return (
     <>
       {/* Backdrop */}
@@ -233,23 +274,39 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation - Top Row */}
         <div className="admin-panel-nav">
           <div className="admin-nav-row">
             {menuStructure.map(item => (
               <button
                 key={item.id}
-                className={`admin-nav-item ${activeSection === item.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveSection(item.id);
-                  setSearchQuery('');
-                }}
+                className={`admin-nav-item ${isTopLevelActive(item) ? 'active' : ''}`}
+                onClick={() => handleTopLevelClick(item)}
               >
                 {getIcon(item.icon)}
                 <span>{item.title}</span>
               </button>
             ))}
           </div>
+
+          {/* Second Row - Children of expanded group */}
+          {expandedChildren.length > 0 && (
+            <div className="admin-nav-row admin-nav-row-children">
+              {expandedChildren.map(child => (
+                <button
+                  key={child.id}
+                  className={`admin-nav-item ${activeSection === child.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveSection(child.id);
+                    setSearchQuery('');
+                  }}
+                >
+                  {getIcon(child.icon)}
+                  <span>{child.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -277,6 +334,9 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
                     onClick={() => {
                       setActiveSection(result.sectionId);
                       setSearchQuery('');
+                      // Expand the parent group if needed
+                      const parentId = findParentId(menuStructure, result.sectionId);
+                      if (parentId) setExpandedGroup(parentId);
                     }}
                   >
                     <div style={{ fontWeight: 500, marginBottom: 4 }}>
@@ -311,12 +371,23 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
                   const link = e.target.closest('a');
                   if (link) {
                     const href = link.getAttribute('href');
-                    if (href?.startsWith('#')) {
+                    const allSections = getAllSections();
+
+                    // Match /admin/section or /api/admin/content/section formats
+                    const adminMatch = href?.match(/^\/(?:api\/)?admin(?:\/content)?\/(.+)$/);
+                    if (adminMatch) {
+                      e.preventDefault();
+                      const sectionId = adminMatch[1];
+                      setActiveSection(sectionId);
+                      const parentId = findParentId(menuStructure, sectionId);
+                      if (parentId) setExpandedGroup(parentId);
+                    } else if (href?.startsWith('#')) {
                       e.preventDefault();
                       const sectionId = href.slice(1);
-                      const section = menuStructure.find(s => s.id === sectionId);
-                      if (section) {
+                      if (allSections.find(s => s.id === sectionId)) {
                         setActiveSection(sectionId);
+                        const parentId = findParentId(menuStructure, sectionId);
+                        if (parentId) setExpandedGroup(parentId);
                       }
                     }
                   }

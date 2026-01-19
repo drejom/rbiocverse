@@ -1,7 +1,9 @@
 {
   "sections": [
     { "id": "overview", "title": "Overview", "icon": "layout-dashboard" },
-    { "id": "cluster-status", "title": "Cluster Status", "icon": "server" },
+    { "id": "clusters", "title": "Clusters", "icon": "server" },
+    { "id": "gemini", "title": "Gemini", "icon": "server", "parent": "clusters" },
+    { "id": "apollo", "title": "Apollo", "icon": "server", "parent": "clusters" },
     { "id": "users", "title": "Users", "icon": "users" },
     { "id": "reports", "title": "Reports", "icon": "bar-chart" }
   ]

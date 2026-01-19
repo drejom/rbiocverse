@@ -9,6 +9,7 @@ import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor } from 'lucide-reac
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders } from './help-widgets';
+import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive } from '../lib/menuUtils';
 
 // Configure marked for safe HTML output
 marked.setOptions({
@@ -36,30 +37,6 @@ const iconMap = {
   'devicon-jupyter': () => <i className="devicon-jupyter-plain" style={{ fontSize: 14 }} />,
 };
 
-// Menu structure - top level items, some with children
-const menuStructure = [
-  { id: 'quick-start', title: 'Quick Start', icon: 'rocket' },
-  { id: 'environment', title: 'Environment', icon: 'box' },
-  {
-    id: 'ides',
-    title: 'IDEs',
-    icon: 'monitor',
-    children: [
-      { id: 'vscode', title: 'VS Code', icon: 'devicon-vscode' },
-      { id: 'rstudio', title: 'RStudio', icon: 'devicon-rstudio' },
-      { id: 'jupyterlab', title: 'JupyterLab', icon: 'devicon-jupyter' },
-    ]
-  },
-  {
-    id: 'support',
-    title: 'Support',
-    icon: 'question',
-    children: [
-      { id: 'troubleshooting', title: 'Troubleshooting', icon: 'wrench' },
-      { id: 'faq', title: 'FAQ', icon: 'question' },
-    ]
-  },
-];
 
 /**
  * Memoized markdown content - only re-renders when content changes
@@ -126,6 +103,7 @@ function WidgetPortals({ widgets, containerRef, contentKey, health, history }) {
 }
 
 function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
+  const [menuStructure, setMenuStructure] = useState([]);
   const [activeSection, setActiveSection] = useState('quick-start');
   const [expandedGroup, setExpandedGroup] = useState(null); // Only one group expanded at a time
   const [content, setContent] = useState('');
@@ -134,6 +112,20 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const contentRef = useRef(null);
+
+  // Fetch menu structure on mount
+  useEffect(() => {
+    fetch('/api/help')
+      .then(res => res.json())
+      .then(data => {
+        if (data.sections) {
+          setMenuStructure(buildMenuStructure(data.sections));
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load help index:', err);
+      });
+  }, []);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -230,12 +222,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
   };
 
   // Check if a top-level item is "active" (either it's selected, or one of its children is)
-  const isTopLevelActive = (item) => {
-    if (item.children) {
-      return item.children.some(child => child.id === activeSection);
-    }
-    return item.id === activeSection;
-  };
+  const isTopLevelActive = (item) => isItemActive(item, activeSection);
 
   // Get expanded group's children
   const expandedChildren = expandedGroup
@@ -243,17 +230,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
     : [];
 
   // Get all leaf sections for link interception
-  const getAllSections = () => {
-    const sections = [];
-    menuStructure.forEach(item => {
-      if (item.children) {
-        sections.push(...item.children);
-      } else {
-        sections.push(item);
-      }
-    });
-    return sections;
-  };
+  const getAllSections = () => getAllLeafSections(menuStructure);
 
   return (
     <>
@@ -356,10 +333,8 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
                       setActiveSection(result.sectionId);
                       setSearchQuery('');
                       // Expand the parent group if needed
-                      const parent = menuStructure.find(m =>
-                        m.children?.some(c => c.id === result.sectionId)
-                      );
-                      if (parent) setExpandedGroup(parent.id);
+                      const parentId = findParentId(menuStructure, result.sectionId);
+                      if (parentId) setExpandedGroup(parentId);
                     }}
                   >
                     <div style={{ fontWeight: 500, marginBottom: 4 }}>
@@ -402,19 +377,15 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }) {
                       e.preventDefault();
                       const sectionId = helpMatch[1];
                       setActiveSection(sectionId);
-                      const parent = menuStructure.find(m =>
-                        m.children?.some(c => c.id === sectionId)
-                      );
-                      if (parent) setExpandedGroup(parent.id);
+                      const parentId = findParentId(menuStructure, sectionId);
+                      if (parentId) setExpandedGroup(parentId);
                     } else if (href?.startsWith('#')) {
                       e.preventDefault();
                       const sectionId = href.slice(1);
                       if (allSections.find(s => s.id === sectionId)) {
                         setActiveSection(sectionId);
-                        const parent = menuStructure.find(m =>
-                          m.children?.some(c => c.id === sectionId)
-                        );
-                        if (parent) setExpandedGroup(parent.id);
+                        const parentId = findParentId(menuStructure, sectionId);
+                        if (parentId) setExpandedGroup(parentId);
                       }
                     }
                   }
