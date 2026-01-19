@@ -302,6 +302,11 @@ class StateManager {
           this.state.clusterHealth = loadedState.clusterHealth ?? {};
 
           for (const [key, session] of Object.entries(loadedState.sessions)) {
+            // Skip legacy keys that don't match user-hpc-ide format
+            if (!parseSessionKey(key)) {
+              log.warn('Skipping legacy session key', { key });
+              continue;
+            }
             if (session) {
               session.tunnelProcess = null;
             }
