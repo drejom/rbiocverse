@@ -13,8 +13,24 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Default database path (can be overridden for testing)
-const DEFAULT_DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'app.db');
+// Database path priority:
+// 1. DB_PATH env var (for testing or custom paths)
+// 2. /data/app.db (Docker volume mount - production)
+// 3. ./data/app.db (local development fallback)
+function getDefaultDbPath() {
+  if (process.env.DB_PATH) return process.env.DB_PATH;
+
+  // In production (Docker), use the mounted /data volume
+  const dockerPath = '/data/app.db';
+  if (fs.existsSync('/data') || process.env.NODE_ENV === 'production') {
+    return dockerPath;
+  }
+
+  // Local development fallback
+  return path.join(__dirname, '..', 'data', 'app.db');
+}
+
+const DEFAULT_DB_PATH = getDefaultDbPath();
 
 let db = null;
 
