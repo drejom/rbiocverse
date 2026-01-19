@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="manager/public/images/rbiocverse-logo.svg" alt="Rbiocverse Logo" width="120" height="120">
+</p>
+
 # HPC Code Server Stack
 
 [![Tests](https://github.com/drejom/omhq-hpc-code-server-stack/actions/workflows/test.yml/badge.svg)](https://github.com/drejom/omhq-hpc-code-server-stack/actions/workflows/test.yml)
