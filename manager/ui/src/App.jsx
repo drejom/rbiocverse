@@ -16,6 +16,7 @@ import HelpPanel from './components/HelpPanel';
 import AdminPanel from './components/AdminPanel';
 import KeyManagementModal from './components/KeyManagementModal';
 import { HelpCircle, Settings } from 'lucide-react';
+import AppFooter from './components/AppFooter';
 import './styles/index.css';
 import './styles/themes.css';
 
@@ -254,6 +255,7 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <AppContent />
+        <AppFooter />
       </AuthProvider>
     </ThemeProvider>
   );

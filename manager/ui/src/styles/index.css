@@ -997,3 +997,26 @@ h1 {
   0% { left: -30%; }
   100% { left: 100%; }
 }
+
+/* App Footer - version and GitHub link */
+.app-footer {
+  position: fixed;
+  bottom: 12px;
+  right: 16px;
+  z-index: 10;
+}
+
+.app-footer a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.app-footer a:hover {
+  opacity: 1;
+}

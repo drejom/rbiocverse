@@ -302,15 +302,21 @@ class StateManager {
           this.state.clusterHealth = loadedState.clusterHealth ?? {};
 
           for (const [key, session] of Object.entries(loadedState.sessions)) {
-            // Skip legacy keys that don't match user-hpc-ide format
+            let sessionKey = key;
+            // TODO: Remove this migration before v0.1.0 release
+            // Migrate legacy keys without user prefix (e.g., "gemini-vscode" -> "domeally-gemini-vscode")
             if (!parseSessionKey(key)) {
-              log.warn('Skipping legacy session key', { key });
-              continue;
+              sessionKey = `domeally-${key}`;
+              log.warn('Migrating legacy session key', { old: key, new: sessionKey });
+              if (!parseSessionKey(sessionKey)) {
+                log.warn('Skipping invalid session key', { key });
+                continue;
+              }
             }
             if (session) {
               session.tunnelProcess = null;
             }
-            this.state.sessions[key] = session;
+            this.state.sessions[sessionKey] = session;
           }
         }
       } catch (e) {
