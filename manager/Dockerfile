@@ -20,7 +20,8 @@ RUN cd ui && npm run build
 FROM node:20-alpine
 
 # Install SSH client for tunnel management
-RUN apk add --no-cache openssh-client curl
+# Install build tools for native modules (better-sqlite3)
+RUN apk add --no-cache openssh-client curl python3 make g++
 
 # Create apps user with UID 568 (matches TrueNAS apps user)
 RUN addgroup -g 568 apps && adduser -u 568 -G apps -h /home/apps -D apps
@@ -28,9 +29,12 @@ RUN addgroup -g 568 apps && adduser -u 568 -G apps -h /home/apps -D apps
 WORKDIR /app
 
 # Copy package files and install production dependencies only
-# --ignore-scripts skips postinstall (which installs ui deps - not needed in prod)
+# better-sqlite3 requires native compilation, so we can't skip scripts
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
+
+# Remove build tools after native modules are compiled (reduce image size)
+RUN apk del python3 make g++
 
 # Copy backend source (explicit list, not wildcard)
 COPY --from=builder /app/server.js ./
