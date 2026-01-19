@@ -42,7 +42,7 @@ class ErrorBoundary extends React.Component {
           {process.env.NODE_ENV !== 'production' && this.state.error && (
             <details>
               <summary>Error details</summary>
-              <pre>{this.state.error.toString()}</pre>
+              <pre>{String(this.state.error)}</pre>
             </details>
           )}
           <button

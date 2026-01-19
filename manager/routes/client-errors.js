@@ -46,9 +46,13 @@ router.post('/', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    const payload = verifyToken(token);
-    if (payload?.username) {
-      username = payload.username;
+    try {
+      const payload = verifyToken(token);
+      if (payload?.username) {
+        username = payload.username;
+      }
+    } catch {
+      // Invalid token - continue with anonymous user
     }
   }
 

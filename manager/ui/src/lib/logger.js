@@ -132,14 +132,17 @@ const log = {
 
   /**
    * Warning level logging
+   * Note: Only reports to backend in development to avoid noise
    */
   warn(message, meta = {}) {
     if (!isLevelEnabled('warn')) return;
     console.warn(formatMessage('warn', message, meta));
 
-    // Report warnings to backend
-    const entry = createErrorEntry('warn', message, meta);
-    reportToBackend(entry);
+    // Only report warnings to backend in development (errors always reported)
+    if (process.env.NODE_ENV !== 'production') {
+      const entry = createErrorEntry('warn', message, meta);
+      reportToBackend(entry);
+    }
   },
 
   /**

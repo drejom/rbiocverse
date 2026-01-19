@@ -1018,7 +1018,7 @@ function createApiRouter(stateManager) {
         log.error('Failed to cancel job', { hpc, ide, error: e.message });
       }
     } else {
-      log.audit('Session stopped', { user, hpc, ide, cancelled: false });
+      log.audit('Session stopped', { user, hpc, ide, jobId: session?.jobId, cancelled: false });
     }
 
     // Clear session and active session if needed

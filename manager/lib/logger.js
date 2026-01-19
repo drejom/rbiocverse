@@ -103,11 +103,9 @@ const log = {
 
   // Audit logging for sensitive actions (always logged at info level)
   // Use for: key generation, session start/stop, user deletion, admin actions
+  // Note: winston already adds timestamp via format.timestamp()
   audit: (action, meta = {}) => {
-    logger.info(`[Audit] ${action}`, {
-      ...meta,
-      timestamp: new Date().toISOString(),
-    });
+    logger.info(`[Audit] ${action}`, meta);
   },
 
   // Performance timing helper
