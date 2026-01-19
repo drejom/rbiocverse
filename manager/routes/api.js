@@ -897,6 +897,14 @@ function createApiRouter(stateManager) {
       // Invalidate cache for this cluster
       invalidateStatusCache(hpc);
 
+      // Audit log session launch
+      log.audit('Session started', {
+        user, hpc, ide, jobId, node,
+        cpus, mem, time,
+        gpu: jobGpu || 'none',
+        releaseVersion: jobReleaseVersion,
+      });
+
       const ideConfig = ides[ide];
       sendComplete({
         status: 'running',
@@ -1003,11 +1011,14 @@ function createApiRouter(stateManager) {
         if (jobId) {
           await hpcService.cancelJob(jobId);
           log.job(`Cancelled`, { hpc, ide, jobId });
+          log.audit('Session stopped', { user, hpc, ide, jobId, cancelled: true });
           jobCancelled = true;
         }
       } catch (e) {
         log.error('Failed to cancel job', { hpc, ide, error: e.message });
       }
+    } else {
+      log.audit('Session stopped', { user, hpc, ide, cancelled: false });
     }
 
     // Clear session and active session if needed

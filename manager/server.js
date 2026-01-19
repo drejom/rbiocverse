@@ -19,6 +19,7 @@ const authRouter = require('./routes/auth');
 const helpRouter = require('./routes/help');
 const adminRouter = require('./routes/admin');
 const statsRouter = require('./routes/stats');
+const clientErrorsRouter = require('./routes/client-errors');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
@@ -80,6 +81,9 @@ app.use('/api/admin', adminRouter);
 // Mount public stats API (no auth required, inject stateManager)
 statsRouter.setStateManager(stateManager);
 app.use('/api/stats', statsRouter);
+
+// Mount client error reporting (for frontend error logging)
+app.use('/api/client-errors', clientErrorsRouter);
 
 // Mount API routes (general /api/* - must come after more specific routes)
 app.use('/api', createApiRouter(stateManager));

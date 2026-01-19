@@ -92,6 +92,45 @@ const log = {
   // Proxy events - debug level for routine operations (connection refused is expected)
   proxy: (action, meta = {}) => logger.debug(`[Proxy] ${action}`, meta),
   proxyError: (msg, meta = {}) => logger.debug(`[Proxy] ${msg}`, meta),
+
+  // Database operations - debug level for routine queries
+  // Enable with DEBUG_COMPONENTS=db or LOG_LEVEL=debug
+  db: (action, meta = {}) => {
+    if (logger.isLevelEnabled('debug') && isDebugEnabled('db')) {
+      logger.debug(`[DB] ${action}`, meta);
+    }
+  },
+
+  // Audit logging for sensitive actions (always logged at info level)
+  // Use for: key generation, session start/stop, user deletion, admin actions
+  audit: (action, meta = {}) => {
+    logger.info(`[Audit] ${action}`, {
+      ...meta,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  // Performance timing helper
+  // Usage:
+  //   const timer = log.startTimer('operation');
+  //   // ... do work ...
+  //   timer.done({ extraMeta: 'value' });
+  startTimer: (label) => {
+    const start = process.hrtime.bigint();
+    return {
+      done: (meta = {}) => {
+        const end = process.hrtime.bigint();
+        const durationMs = Number(end - start) / 1_000_000;
+        if (logger.isLevelEnabled('debug') && isDebugEnabled('perf')) {
+          logger.debug(`[Perf] ${label}`, { durationMs: durationMs.toFixed(2), ...meta });
+        }
+        return durationMs;
+      },
+    };
+  },
+
+  // Check if debug is enabled for a component
+  isDebugEnabled,
 };
 
 module.exports = { logger, log };
