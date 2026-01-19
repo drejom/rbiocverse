@@ -17,6 +17,8 @@ const HpcService = require('./services/hpc');
 const createApiRouter = require('./routes/api');
 const authRouter = require('./routes/auth');
 const helpRouter = require('./routes/help');
+const adminRouter = require('./routes/admin');
+const statsRouter = require('./routes/stats');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
@@ -70,6 +72,14 @@ app.use('/api/auth', authRouter);
 // Mount help routes (inject stateManager for template processing)
 helpRouter.setStateManager(stateManager);
 app.use('/api/help', helpRouter);
+
+// Mount admin routes (inject stateManager for cluster data)
+adminRouter.setStateManager(stateManager);
+app.use('/api/admin', adminRouter);
+
+// Mount public stats API (no auth required, inject stateManager)
+statsRouter.setStateManager(stateManager);
+app.use('/api/stats', statsRouter);
 
 // Mount API routes (general /api/* - must come after more specific routes)
 app.use('/api', createApiRouter(stateManager));
@@ -682,7 +692,7 @@ stateManager.load().then(() => {
             const hpcService = new HpcService(hpc);
             await hpcService.cancelJob(session.jobId);
             // Clear session using StateManager API
-            await stateManager.clearSession(hpc, ide);
+            await stateManager.clearSession(hpc, ide, { endReason: 'timeout' });
             log.info(`Idle session ${sessionKey} cancelled successfully`);
           } catch (err) {
             log.error(`Failed to cancel idle session ${sessionKey}`, { error: err.message });

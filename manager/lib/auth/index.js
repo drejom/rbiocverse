@@ -1,11 +1,13 @@
 /**
  * Auth Module Index
  * Re-exports all auth-related functions for convenient importing
+ *
+ * Note: User data functions are now in lib/db/users.js (SQLite-backed).
+ * Import from there directly for user operations.
  */
 
 const { generateToken, verifyToken } = require('./token');
 const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('./ssh');
-const { loadUsers, saveUsers, getUser, setUser, getAllUsers, USER_DATA_FILE } = require('./user-store');
 const { setSessionKey, getSessionKey, clearSessionKey, hasSessionKey } = require('./session-keys');
 
 module.exports = {
@@ -17,14 +19,6 @@ module.exports = {
   generateSshKeypair,
   encryptPrivateKey,
   decryptPrivateKey,
-
-  // User store functions
-  loadUsers,
-  saveUsers,
-  getUser,
-  setUser,
-  getAllUsers,
-  USER_DATA_FILE,
 
   // Session key store (in-memory decrypted keys)
   setSessionKey,

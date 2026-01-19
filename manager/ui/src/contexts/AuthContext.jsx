@@ -1,6 +1,30 @@
 /**
  * AuthContext - User authentication state management
  * Handles login, logout, session persistence, and first-login detection
+ *
+ * SECURITY NOTE: Token Storage Decision
+ * =====================================
+ * Tokens are stored in localStorage, which is accessible to JavaScript.
+ * This is an acceptable trade-off for this application because:
+ *
+ * 1. VPN-only access: The application is only accessible from the internal
+ *    hospital network via VPN. Public internet access is blocked.
+ *
+ * 2. HTTPS-only: All traffic is encrypted via Let's Encrypt certificates.
+ *
+ * 3. No sensitive PHI: This app launches HPC sessions; it doesn't store
+ *    patient data directly.
+ *
+ * 4. UX benefits: localStorage persists across tabs and browser restarts,
+ *    avoiding frustrating re-authentication for users running long HPC jobs.
+ *
+ * Alternative (httpOnly cookies) would provide XSS protection but:
+ * - Requires additional backend CSRF handling
+ * - Complicates token refresh for long-running sessions
+ * - Adds complexity for this internal-only tool
+ *
+ * If this app were public-facing, httpOnly cookies with CSRF tokens would
+ * be the recommended approach.
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';

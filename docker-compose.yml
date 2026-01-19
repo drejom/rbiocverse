@@ -21,9 +21,10 @@ services:
       - DEFAULT_CPUS=${DEFAULT_CPUS:-2}
       - DEFAULT_MEM=${DEFAULT_MEM:-40G}
       - DEFAULT_TIME=${DEFAULT_TIME:-12:00:00}
-      # State persistence (Phase 1.4)
+      # Data persistence
+      - DB_PATH=/data/app.db
       - STATE_FILE=/data/state.json
-      - ENABLE_STATE_PERSISTENCE=${ENABLE_STATE_PERSISTENCE:-false}
+      - ENABLE_STATE_PERSISTENCE=${ENABLE_STATE_PERSISTENCE:-true}
       # Logging level and component debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # DEBUG_COMPONENTS: comma-separated list (vscode,ssh,cache,tunnel,state,ui,rstudio,liveserver) or 'all'

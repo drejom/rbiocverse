@@ -62,7 +62,7 @@ Status: {{gemini.online ? "🟢 Online" : "🔴 Offline"}}
 # {{icon:vscode}} VS Code
 ```
 
-Icons are configured in `content/help/icons.json`. Supports Lucide SVG icons and devicons.
+Icons are configured in `content/icons.json` (shared by help and admin panels). Supports Lucide SVG icons and devicons.
 
 **Available data paths:**
 ```
@@ -130,7 +130,7 @@ export const widgetRegistry = {
 | `ui/src/components/help-widgets/` | Widget components |
 | `content/help/*.md` | Markdown content files |
 | `content/help/index.json` | Section manifest |
-| `content/help/icons.json` | Icon SVG definitions |
+| `content/icons.json` | Shared icon SVG definitions |
 
 ### Adding Help Content
 
