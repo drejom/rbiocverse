@@ -13,9 +13,7 @@
 const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../lib/asyncHandler');
-const { log } = require('../lib/logger');
 const analytics = require('../lib/db/analytics');
-const dbHealth = require('../lib/db/health');
 const { parseQueryInt } = require('../lib/validation');
 
 // StateManager injected via setStateManager()

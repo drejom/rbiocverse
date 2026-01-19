@@ -134,10 +134,16 @@ describe('ContentManager', () => {
     });
 
     it('should limit matches per section', async () => {
-      const results = await contentManager.search('t', { maxMatchesPerSection: 1 });
-      // With maxMatchesPerSection=1, we should have at most 1 per section
-      const introCounts = results.filter(r => r.sectionId === 'intro').length;
-      // Note: 't' won't match because query must be >= 2 chars
+      // Use a query >= 2 chars that appears multiple times
+      const results = await contentManager.search('the', { maxMatchesPerSection: 1 });
+      // With maxMatchesPerSection=1, each section should have at most 1 match
+      const sectionCounts = {};
+      for (const r of results) {
+        sectionCounts[r.sectionId] = (sectionCounts[r.sectionId] || 0) + 1;
+      }
+      for (const count of Object.values(sectionCounts)) {
+        expect(count).to.be.at.most(1);
+      }
     });
 
     it('should include snippets with context', async () => {
