@@ -55,7 +55,8 @@ services:
 
 volumes:
   data:
-    driver: local
+    # Volume created by Dokploy setup, not Compose - mark as external to silence warning
+    external: true
 
 networks:
   dokploy-network:
