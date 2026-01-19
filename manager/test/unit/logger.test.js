@@ -53,4 +53,59 @@ describe('Logger', () => {
       expect(() => log.portCheck(3000, true, { extra: 'data' })).to.not.throw();
     });
   });
+
+  describe('audit logging', () => {
+    it('should have audit method', () => {
+      expect(log.audit).to.be.a('function');
+    });
+
+    it('should log audit events without throwing', () => {
+      expect(() => {
+        log.audit('Test action', { user: 'testuser', detail: 'test' });
+      }).to.not.throw();
+    });
+  });
+
+  describe('database logging', () => {
+    it('should have db method', () => {
+      expect(log.db).to.be.a('function');
+    });
+
+    it('should not throw when logging db operations', () => {
+      expect(() => {
+        log.db('Test query', { table: 'users' });
+      }).to.not.throw();
+    });
+  });
+
+  describe('performance timing', () => {
+    it('should have startTimer method', () => {
+      expect(log.startTimer).to.be.a('function');
+    });
+
+    it('should return timer object with done method', () => {
+      const timer = log.startTimer('test-operation');
+      expect(timer).to.have.property('done');
+      expect(timer.done).to.be.a('function');
+    });
+
+    it('should measure elapsed time', async () => {
+      const timer = log.startTimer('test-delay');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const durationMs = timer.done();
+      expect(durationMs).to.be.a('number');
+      expect(durationMs).to.be.at.least(40); // Allow some variance
+    });
+  });
+
+  describe('isDebugEnabled', () => {
+    it('should have isDebugEnabled method', () => {
+      expect(log.isDebugEnabled).to.be.a('function');
+    });
+
+    it('should return boolean', () => {
+      const result = log.isDebugEnabled('test');
+      expect(result).to.be.a('boolean');
+    });
+  });
 });

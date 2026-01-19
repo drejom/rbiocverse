@@ -221,7 +221,7 @@ router.post('/login', async (req, res) => {
     const expiresIn = rememberMe ? config.sessionExpiryDays * 24 * 60 * 60 : 24 * 60 * 60;
     const token = generateToken({ username, fullName: user.fullName }, expiresIn);
 
-    log.info('User logged in', { username, hasPublicKey: !!user.publicKey });
+    log.audit('User login', { username, hasPublicKey: !!user.publicKey });
 
     res.json({
       token,
@@ -251,7 +251,7 @@ router.post('/login', async (req, res) => {
 router.post('/logout', requireAuth, (req, res) => {
   // Clear decrypted key from memory
   clearSessionKey(req.user.username);
-  log.info('User logged out', { username: req.user.username });
+  log.audit('User logout', { username: req.user.username });
   res.json({ success: true });
 });
 
@@ -412,7 +412,7 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user.username, privateKeyPem, sessionTtl);
 
-  log.info('Generated managed key for user', { username: user.username });
+  log.audit('SSH key generated', { username: user.username });
 
   res.json({
     success: true,
@@ -468,7 +468,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   // Clear from session
   clearSessionKey(req.user.username);
 
-  log.info('Removed managed key for user', { username: user.username });
+  log.audit('SSH key removed', { username: user.username });
 
   res.json({
     success: true,
@@ -515,7 +515,7 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user.username, privateKeyPem, sessionTtl);
 
-  log.info('Regenerated managed key for user', { username: user.username });
+  log.audit('SSH key regenerated', { username: user.username });
 
   res.json({
     success: true,
