@@ -24,6 +24,7 @@ const { generateToken, verifyToken } = require('../lib/auth/token');
 const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('../lib/auth/ssh');
 const { loadUsers, saveUsers, getUser, setUser } = require('../lib/auth/user-store');
 const { setSessionKey, getSessionKey, clearSessionKey } = require('../lib/auth/session-keys');
+const { isAdmin } = require('../lib/auth/admin');
 
 // Test credentials (for development - will be replaced by LDAP)
 // Must be set via environment variables - no defaults for security
@@ -222,6 +223,7 @@ router.post('/login', async (req, res) => {
         fullName: user.fullName,
         publicKey: user.publicKey,
         setupComplete: user.setupComplete,
+        isAdmin: isAdmin(user.username),
       },
       sshTestResult, // Include for new users so frontend knows SSH status
     });
@@ -266,6 +268,7 @@ router.get('/session', requireAuth, (req, res) => {
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
       hasActiveKey, // Frontend can prompt re-login if false
+      isAdmin: isAdmin(user.username),
     },
   });
 });

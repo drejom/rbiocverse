@@ -1,0 +1,8 @@
+{
+  "sections": [
+    { "id": "overview", "title": "Overview", "icon": "layout-dashboard" },
+    { "id": "cluster-status", "title": "Cluster Status", "icon": "server" },
+    { "id": "users", "title": "Users", "icon": "users" },
+    { "id": "reports", "title": "Reports", "icon": "bar-chart" }
+  ]
+}

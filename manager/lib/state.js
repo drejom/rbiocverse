@@ -15,6 +15,10 @@ const path = require('path');
 const { LockError } = require('./errors');
 const { log } = require('./logger');
 const { clusters, config } = require('../config');
+const { initializeDb, getDb } = require('./db');
+const dbSessions = require('./db/sessions');
+const dbHealth = require('./db/health');
+const { checkAndMigrate } = require('./db/migrate');
 
 /**
  * Build session key from components
@@ -124,6 +128,9 @@ class StateManager {
     this.stateFile = process.env.STATE_FILE || '/data/state.json';
     this.enablePersistence = process.env.ENABLE_STATE_PERSISTENCE === 'true';
 
+    // Use SQLite by default (can be disabled for testing)
+    this.useSqlite = process.env.USE_SQLITE !== 'false';
+
     // Dynamic session keys: gemini-vscode, apollo-jupyter, etc.
     // No hardcoded cluster names - keys created on demand
     this.state = {
@@ -209,72 +216,135 @@ class StateManager {
   }
 
   /**
-   * Load state from disk on startup
+   * Load state from disk/database on startup
    * Reconcile with squeue to detect orphaned jobs
    */
   async load() {
-    if (!this.enablePersistence) {
+    // Initialize SQLite database and run migration if needed
+    if (this.useSqlite) {
+      try {
+        initializeDb();
+        checkAndMigrate();
+        log.state('SQLite database initialized');
+      } catch (err) {
+        log.error('Failed to initialize SQLite database', { error: err.message });
+        // Fall back to JSON persistence
+        this.useSqlite = false;
+      }
+    }
+
+    if (!this.enablePersistence && !this.useSqlite) {
       this.ready = true;
       return;
     }
 
-    try {
-      const data = await fs.readFile(this.stateFile, 'utf8');
-      const loadedState = JSON.parse(data);
-      log.state('Loaded from disk', {
-        file: this.stateFile,
-        sessionKeys: Object.keys(loadedState.sessions || {}),
-        activeSession: loadedState.activeSession,
-      });
-
-      // Migrate from old activeHpc to new activeSession format
-      if (loadedState.activeHpc && !loadedState.activeSession) {
-        // Old format - activeHpc was just cluster name, convert to null
-        // (we can't know which IDE, so start fresh)
-        loadedState.activeSession = null;
-        delete loadedState.activeHpc;
-      }
-
-      // Ensure sessions object exists
-      if (!loadedState.sessions) {
-        loadedState.sessions = {};
-      }
-
-      // IMPORTANT: Mutate this.state instead of replacing it!
-      // api.js captures a reference to this.state at startup.
-      // If we reassign this.state, api.js would have a stale reference
-      // and new sessions would be added to the wrong object.
-      this.state.activeSession = loadedState.activeSession ?? null;
-      this.state.clusterHealth = loadedState.clusterHealth ?? {};
-
-      // Clear and repopulate sessions (maintains the same object reference)
-      for (const key of Object.keys(this.state.sessions)) {
-        delete this.state.sessions[key];
-      }
-      for (const [key, session] of Object.entries(loadedState.sessions)) {
-        if (session) {
-          // Ensure tunnelProcess is null (can't restore from disk)
-          session.tunnelProcess = null;
+    // Load from SQLite if enabled
+    if (this.useSqlite) {
+      try {
+        // Load active sessions from database
+        const dbActiveSessions = dbSessions.getAllActiveSessions();
+        for (const [key, session] of Object.entries(dbActiveSessions)) {
+          this.state.sessions[key] = session;
         }
-        this.state.sessions[key] = session;
-      }
 
-      await this.reconcile();
-    } catch (e) {
-      if (e.code !== 'ENOENT') {
-        log.error('Failed to load state', { error: e.message });
+        // Load active session reference from app_state
+        const db = getDb();
+        const activeRow = db.prepare('SELECT value FROM app_state WHERE key = ?').get('activeSession');
+        if (activeRow?.value) {
+          this.state.activeSession = JSON.parse(activeRow.value);
+        }
+
+        // Load cluster health from database
+        const clusterCaches = dbHealth.getAllClusterCaches();
+        this.state.clusterHealth = {};
+        for (const [hpc, cache] of Object.entries(clusterCaches)) {
+          this.state.clusterHealth[hpc] = {
+            current: cache,
+            history: [], // History is now in database, not in-memory
+            consecutiveFailures: cache.consecutiveFailures || 0,
+          };
+        }
+
+        log.state('Loaded state from SQLite', {
+          sessionKeys: Object.keys(this.state.sessions),
+          activeSession: this.state.activeSession,
+        });
+      } catch (err) {
+        log.error('Failed to load from SQLite', { error: err.message });
       }
-      // File doesn't exist yet - normal on first run
     }
 
+    // Also try loading from JSON file for backwards compatibility
+    if (this.enablePersistence) {
+      try {
+        const data = await fs.readFile(this.stateFile, 'utf8');
+        const loadedState = JSON.parse(data);
+        log.state('Loaded from disk', {
+          file: this.stateFile,
+          sessionKeys: Object.keys(loadedState.sessions || {}),
+          activeSession: loadedState.activeSession,
+        });
+
+        // Migrate from old activeHpc to new activeSession format
+        if (loadedState.activeHpc && !loadedState.activeSession) {
+          loadedState.activeSession = null;
+          delete loadedState.activeHpc;
+        }
+
+        // Ensure sessions object exists
+        if (!loadedState.sessions) {
+          loadedState.sessions = {};
+        }
+
+        // Only use JSON data if SQLite didn't load anything
+        if (Object.keys(this.state.sessions).length === 0) {
+          this.state.activeSession = loadedState.activeSession ?? null;
+          this.state.clusterHealth = loadedState.clusterHealth ?? {};
+
+          for (const [key, session] of Object.entries(loadedState.sessions)) {
+            if (session) {
+              session.tunnelProcess = null;
+            }
+            this.state.sessions[key] = session;
+          }
+        }
+      } catch (e) {
+        if (e.code !== 'ENOENT') {
+          log.error('Failed to load state from JSON', { error: e.message });
+        }
+      }
+    }
+
+    await this.reconcile();
     this.ready = true;
   }
 
   /**
-   * Save state to disk after every change
+   * Save state to disk/database after every change
    * Excludes non-serializable fields like tunnelProcess
    */
   async save() {
+    // Save to SQLite if enabled
+    if (this.useSqlite) {
+      try {
+        // Save active sessions to database
+        for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
+          if (session) {
+            dbSessions.saveActiveSession(sessionKey, session);
+          }
+        }
+
+        // Save active session reference
+        const db = getDb();
+        db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)')
+          .run('activeSession', JSON.stringify(this.state.activeSession));
+
+      } catch (err) {
+        log.error('Failed to save to SQLite', { error: err.message });
+      }
+    }
+
+    // Also save to JSON file if persistence is enabled
     if (!this.enablePersistence) return;
     log.state('Saving state to disk', {
       file: this.stateFile,
@@ -468,18 +538,34 @@ class StateManager {
   }
 
   /**
-   * Clear (delete) session and persist
+   * Clear (delete) session and archive to history
    * @param {string} user - Username (null for default/single-user mode)
    * @param {string} hpc - Cluster name
    * @param {string} ide - IDE type
+   * @param {Object} [options] - Optional archive options
+   * @param {string} [options.endReason='completed'] - completed, cancelled, timeout, error
+   * @param {string} [options.errorMessage] - Error message if applicable
    */
-  async clearSession(user, hpc, ide) {
+  async clearSession(user, hpc, ide, options = {}) {
     const sessionKey = buildSessionKey(user, hpc, ide);
     const session = this.state.sessions[sessionKey];
     if (!session) {
       log.warn(`clearSession called for non-existent session: ${sessionKey}`);
       return;
     }
+
+    // Archive to SQLite history before deleting
+    if (this.useSqlite && session.status && session.status !== 'idle') {
+      const { endReason = 'completed', errorMessage = null } = options;
+      try {
+        dbSessions.archiveSession(session, sessionKey, endReason, errorMessage);
+        // Also delete from active_sessions table
+        dbSessions.deleteActiveSession(sessionKey, { archive: false }); // Already archived above
+      } catch (err) {
+        log.error('Failed to archive session to history', { sessionKey, error: err.message });
+      }
+    }
+
     this._clearActiveSessionIfMatches(user, hpc, ide);
     delete this.state.sessions[sessionKey];
     await this.save();
@@ -992,7 +1078,20 @@ class StateManager {
         // Update current health
         this.state.clusterHealth[hpc].current = health;
 
-        // Append to history (only if online and health data is valid)
+        // Save to SQLite if enabled
+        if (this.useSqlite) {
+          try {
+            dbHealth.saveClusterCache(hpc, health);
+            // Also save health snapshot to history
+            if (health.online && health.cpus && health.memory && health.nodes) {
+              dbHealth.addHealthSnapshot(hpc, health);
+            }
+          } catch (err) {
+            log.error('Failed to save cluster health to SQLite', { hpc, error: err.message });
+          }
+        }
+
+        // Append to in-memory history (only if online and health data is valid)
         // Use pre-calculated percentages from hpc.js
         if (health.online && health.cpus && health.memory && health.nodes) {
           this.state.clusterHealth[hpc].history.push({
@@ -1004,11 +1103,14 @@ class StateManager {
           });
 
           // Throttle rollover to avoid repeated file I/O (at most once per hour)
-          const ROLLOVER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-          const lastRolloverAt = this.state.clusterHealth[hpc].lastRolloverAt || 0;
-          if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
-            await this.rolloverHealthHistory(hpc);
-            this.state.clusterHealth[hpc].lastRolloverAt = now;
+          // Skip if using SQLite (history is in database)
+          if (!this.useSqlite) {
+            const ROLLOVER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+            const lastRolloverAt = this.state.clusterHealth[hpc].lastRolloverAt || 0;
+            if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
+              await this.rolloverHealthHistory(hpc);
+              this.state.clusterHealth[hpc].lastRolloverAt = now;
+            }
           }
         }
 
@@ -1177,6 +1279,30 @@ class StateManager {
    */
   getClusterHealth() {
     return this.state.clusterHealth || {};
+  }
+
+  /**
+   * Get cluster health history from database
+   * @param {Object} [options]
+   * @param {number} [options.days=1] - Number of days to look back
+   * @returns {Object} Map of hpc -> history array
+   */
+  getClusterHistory(options = {}) {
+    if (!this.useSqlite) {
+      // Return in-memory history if SQLite not enabled
+      const result = {};
+      for (const [hpc, data] of Object.entries(this.state.clusterHealth || {})) {
+        result[hpc] = data.history || [];
+      }
+      return result;
+    }
+
+    try {
+      return dbHealth.getAllHealthHistory(options);
+    } catch (err) {
+      log.error('Failed to get cluster history from SQLite', { error: err.message });
+      return {};
+    }
   }
 }
 

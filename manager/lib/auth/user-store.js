@@ -1,58 +1,52 @@
 /**
  * User Data Store
  * Persistent storage for user authentication data, SSH keys, and setup state
+ *
+ * This is a thin wrapper that delegates to the SQLite database module.
+ * Maintains backwards compatibility with existing code.
  */
 
-const fs = require('fs');
 const path = require('path');
 const { log } = require('../logger');
+const dbUsers = require('../db/users');
+const { initializeDb } = require('../db');
+const { checkAndMigrate } = require('../db/migrate');
 
-// Persistent user data file (tracks setupComplete, public keys, etc.)
-const USER_DATA_FILE = path.join(__dirname, '..', '..', 'data', 'users.json');
+// Legacy path reference for compatibility
+const USER_DATA_FILE = process.env.USER_DATA_FILE || path.join(__dirname, '..', '..', 'data', 'users.json');
 
-// Persistent user store (JSON file)
-// Structure: { username: { fullName, publicKey, privateKey, setupComplete, createdAt } }
-// publicKey: null (no managed key) or "ssh-ed25519 ..." (managed key exists)
-// privateKey: null (no managed key) or encrypted private key (for SSH connections)
-//
-// Private keys are encrypted at rest using password-derived AES-256-GCM.
-// Format v2: "enc:v2:<salt_hex>:<iv_hex>:<authTag_hex>:<ciphertext_hex>"
-// Legacy v1 keys need re-encryption on next login.
-let users = new Map();
+// In-memory cache for compatibility with code that expects Map
+let usersCache = null;
 
 /**
- * Load users from disk
+ * Load users from database
+ * Also runs migration if JSON files exist
  */
 function loadUsers() {
   try {
-    if (fs.existsSync(USER_DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
-      users = new Map(Object.entries(data));
-      log.info('Loaded user data', { count: users.size });
-    }
+    // Initialize database
+    initializeDb();
+
+    // Check and run migration from JSON if needed
+    checkAndMigrate();
+
+    // Load users into cache
+    usersCache = dbUsers.getAllUsers();
+    log.info('Loaded user data from database', { count: usersCache.size });
   } catch (err) {
     log.error('Failed to load user data', { error: err.message });
+    usersCache = new Map();
   }
 }
 
 /**
- * Save users to disk atomically
- * Uses temp file + rename to prevent corruption on crash/interrupt
+ * Save users to database
+ * This is now a no-op since setUser saves immediately
+ * Kept for backwards compatibility
  */
 function saveUsers() {
-  try {
-    const dir = path.dirname(USER_DATA_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const data = Object.fromEntries(users);
-    // Write to temp file first, then atomically rename
-    const tempFile = `${USER_DATA_FILE}.tmp.${process.pid}`;
-    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
-    fs.renameSync(tempFile, USER_DATA_FILE);
-  } catch (err) {
-    log.error('Failed to save user data', { error: err.message });
-  }
+  // Database saves are immediate in setUser()
+  // This function is kept for backwards compatibility
 }
 
 /**
@@ -61,7 +55,7 @@ function saveUsers() {
  * @returns {Object|undefined}
  */
 function getUser(username) {
-  return users.get(username);
+  return dbUsers.getUser(username);
 }
 
 /**
@@ -70,7 +64,11 @@ function getUser(username) {
  * @param {Object} user
  */
 function setUser(username, user) {
-  users.set(username, user);
+  dbUsers.setUser(username, user);
+  // Update cache
+  if (usersCache) {
+    usersCache.set(username, user);
+  }
 }
 
 /**
@@ -78,7 +76,8 @@ function setUser(username, user) {
  * @returns {Map}
  */
 function getAllUsers() {
-  return users;
+  // Return fresh data from database
+  return dbUsers.getAllUsers();
 }
 
 module.exports = {

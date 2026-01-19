@@ -13,8 +13,9 @@ import Login from './pages/Login';
 import SetupWizard from './components/SetupWizard';
 import UserMenu from './components/UserMenu';
 import HelpPanel from './components/HelpPanel';
+import AdminPanel from './components/AdminPanel';
 import KeyManagementModal from './components/KeyManagementModal';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Settings } from 'lucide-react';
 import './styles/index.css';
 import './styles/themes.css';
 
@@ -32,14 +33,17 @@ function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
+  const { user } = useAuth();
 
   const [stoppingJobs, setStoppingJobs] = useState({});
   const [error, setError] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [keyModalOpen, setKeyModalOpen] = useState(false);
 
-  // Stable callback for HelpPanel to prevent memo invalidation
+  // Stable callbacks for panels to prevent memo invalidation
   const closeHelp = useCallback(() => setHelpOpen(false), []);
+  const closeAdmin = useCallback(() => setAdminOpen(false), []);
 
   // Handle SSH key setup from error state - opens modal instead of generating directly
   const handleSetupKeys = useCallback(() => {
@@ -142,6 +146,16 @@ function Launcher() {
             </div>
           </div>
           <div className="header-actions">
+            {user?.isAdmin && (
+              <button
+                className="admin-btn"
+                onClick={() => setAdminOpen(true)}
+                title="Admin Panel"
+                aria-label="Open admin panel"
+              >
+                <Settings size={18} />
+              </button>
+            )}
             <button
               className="help-btn"
               onClick={() => setHelpOpen(true)}
@@ -189,6 +203,7 @@ function Launcher() {
       />
 
       <HelpPanel isOpen={helpOpen} onClose={closeHelp} health={health} history={history} />
+      <AdminPanel isOpen={adminOpen} onClose={closeAdmin} health={health} history={history} />
       <KeyManagementModal isOpen={keyModalOpen} onClose={() => setKeyModalOpen(false)} />
     </>
   );
