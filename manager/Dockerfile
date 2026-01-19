@@ -29,9 +29,10 @@ RUN addgroup -g 568 apps && adduser -u 568 -G apps -h /home/apps -D apps
 WORKDIR /app
 
 # Copy package files and install production dependencies only
-# better-sqlite3 requires native compilation, so we can't skip scripts
+# --ignore-scripts skips postinstall (which tries to cd to ui - not in prod image)
+# Then rebuild better-sqlite3 which needs native compilation
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts && npm rebuild better-sqlite3
 
 # Remove build tools after native modules are compiled (reduce image size)
 RUN apk del python3 make g++
