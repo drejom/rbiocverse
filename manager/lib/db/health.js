@@ -50,11 +50,12 @@ function saveClusterCache(hpc, health) {
  */
 function getAllClusterCaches() {
   const db = getDb();
-  const rows = db.prepare('SELECT DISTINCT hpc FROM cluster_cache').all();
+  // Single query to get all clusters at once (no N+1)
+  const rows = db.prepare('SELECT * FROM cluster_cache').all();
   const caches = {};
 
   for (const row of rows) {
-    caches[row.hpc] = getClusterCache(row.hpc);
+    caches[row.hpc] = schema.rowToHealth(row);
   }
 
   return caches;

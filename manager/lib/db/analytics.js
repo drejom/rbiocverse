@@ -278,25 +278,38 @@ function getNewUserSuccessRate(days = 30) {
   const db = getDb();
   const cutoff = daysAgo(days);
 
-  // Users who had their first session in the period
+  // Single query: get new users with their first session's end_reason
+  // Uses window function to identify first session per user
   const newUsers = db.prepare(`
-    SELECT user, MIN(started_at) as firstSession, COUNT(*) as totalSessions,
-           SUM(CASE WHEN end_reason = 'completed' THEN 1 ELSE 0 END) as completedSessions
-    FROM session_history
-    GROUP BY user
-    HAVING MIN(started_at) >= ?
+    WITH first_sessions AS (
+      SELECT
+        user,
+        started_at,
+        end_reason,
+        ROW_NUMBER() OVER (PARTITION BY user ORDER BY started_at ASC) as rn
+      FROM session_history
+    ),
+    user_stats AS (
+      SELECT
+        user,
+        MIN(started_at) as firstSession,
+        COUNT(*) as totalSessions,
+        SUM(CASE WHEN end_reason = 'completed' THEN 1 ELSE 0 END) as completedSessions
+      FROM session_history
+      GROUP BY user
+      HAVING MIN(started_at) >= ?
+    )
+    SELECT
+      us.user,
+      us.firstSession,
+      us.totalSessions,
+      us.completedSessions,
+      fs.end_reason as firstSessionEndReason
+    FROM user_stats us
+    LEFT JOIN first_sessions fs ON us.user = fs.user AND fs.rn = 1
   `).all(cutoff);
 
-  const withSuccessfulFirst = newUsers.filter(u => {
-    // Check if their first session completed successfully
-    const first = db.prepare(`
-      SELECT end_reason FROM session_history
-      WHERE user = ?
-      ORDER BY started_at ASC
-      LIMIT 1
-    `).get(u.user);
-    return first?.end_reason === 'completed';
-  });
+  const withSuccessfulFirst = newUsers.filter(u => u.firstSessionEndReason === 'completed');
 
   return {
     totalNewUsers: newUsers.length,
@@ -496,23 +509,28 @@ function getQueueWaitTimesByCluster(days = 30) {
   const db = getDb();
   const cutoff = daysAgo(days);
 
-  const clusters = db.prepare(`
-    SELECT DISTINCT hpc FROM session_history WHERE started_at >= ?
+  // Single query with GROUP BY to get all cluster stats at once
+  const clusterStats = db.prepare(`
+    SELECT
+      hpc,
+      COUNT(*) as count,
+      AVG(wait_seconds) as avg_wait,
+      GROUP_CONCAT(wait_seconds) as wait_values
+    FROM session_history
+    WHERE started_at >= ? AND wait_seconds IS NOT NULL
+    GROUP BY hpc
   `).all(cutoff);
 
   const result = {};
-  for (const { hpc } of clusters) {
-    const waitTimes = db.prepare(`
-      SELECT wait_seconds
-      FROM session_history
-      WHERE started_at >= ? AND hpc = ? AND wait_seconds IS NOT NULL
-      ORDER BY wait_seconds
-    `).all(cutoff, hpc);
+  for (const row of clusterStats) {
+    // Parse concatenated values for percentile calculation
+    const values = row.wait_values
+      ? row.wait_values.split(',').map(Number).sort((a, b) => a - b)
+      : [];
 
-    const values = waitTimes.map(w => w.wait_seconds);
-    result[hpc] = {
-      count: values.length,
-      avg: values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null,
+    result[row.hpc] = {
+      count: row.count,
+      avg: row.avg_wait !== null ? Math.round(row.avg_wait) : null,
       p50: percentile(values, 50),
       p90: percentile(values, 90),
       p99: percentile(values, 99),

@@ -1,9 +1,115 @@
 /**
  * Security-critical input validation
  * Prevents command injection in sbatch commands
+ *
+ * Also provides Joi schemas for API request validation.
  */
 
 const { partitionLimits, clusters, gpuConfig } = require('../config');
+
+// Joi is optional - gracefully handle if not installed
+let Joi = null;
+try {
+  Joi = require('joi');
+} catch (e) {
+  // Joi not installed - schema validation will be a no-op
+}
+
+// ============================================
+// Joi Schemas for API Validation
+// ============================================
+
+/**
+ * Create validation schemas (only if Joi is available)
+ */
+const schemas = Joi ? {
+  // User management schemas
+  updateUser: Joi.object({
+    fullName: Joi.string().max(100).allow('', null).optional(),
+  }),
+
+  bulkUserAction: Joi.object({
+    action: Joi.string().valid('delete', 'delete-keys').required(),
+    usernames: Joi.array().items(Joi.string().max(50)).min(1).max(100).required(),
+  }),
+
+  // Session launch schemas
+  launchSession: Joi.object({
+    hpc: Joi.string().valid('gemini', 'apollo').required(),
+    ide: Joi.string().valid('vscode', 'rstudio', 'jupyter').required(),
+    cpus: Joi.alternatives().try(
+      Joi.number().integer().min(1).max(128),
+      Joi.string().pattern(/^\d+$/)
+    ).required(),
+    memory: Joi.string().pattern(/^\d+[gGmM]$/).required(),
+    walltime: Joi.string().pattern(/^(\d{1,2}-)?\d{1,2}:\d{2}:\d{2}$/).required(),
+    releaseVersion: Joi.string().pattern(/^[\d.]+$/).optional(),
+    gpu: Joi.string().valid('', 'a100', 'v100').optional(),
+    account: Joi.string().max(50).optional(),
+    shiny: Joi.boolean().optional(),
+    liveServer: Joi.boolean().optional(),
+  }),
+
+  // Search query
+  searchQuery: Joi.object({
+    q: Joi.string().min(2).max(100).required(),
+  }),
+
+  // Pagination
+  pagination: Joi.object({
+    limit: Joi.number().integer().min(1).max(1000).default(100),
+    offset: Joi.number().integer().min(0).default(0),
+    days: Joi.number().integer().min(1).max(365).default(30),
+  }),
+
+  // Username param
+  usernameParam: Joi.object({
+    username: Joi.string().max(50).pattern(/^[a-zA-Z0-9._-]+$/).required(),
+  }),
+} : {};
+
+/**
+ * Express middleware factory for Joi validation
+ * @param {Object} schema - Joi schema
+ * @param {string} [property='body'] - Request property to validate ('body', 'query', 'params')
+ * @returns {Function} Express middleware
+ */
+function validate(schema, property = 'body') {
+  return (req, res, next) => {
+    if (!Joi || !schema) {
+      return next(); // Skip validation if Joi not available
+    }
+
+    const { error, value } = schema.validate(req[property], {
+      abortEarly: false,
+      stripUnknown: true,
+    });
+
+    if (error) {
+      const details = error.details.map(d => ({
+        field: d.path.join('.'),
+        message: d.message,
+      }));
+
+      return res.status(400).json({
+        error: 'Validation failed',
+        details,
+      });
+    }
+
+    // Replace with validated/sanitized values
+    req[property] = value;
+    next();
+  };
+}
+
+/**
+ * Check if Joi is available
+ * @returns {boolean}
+ */
+function isJoiAvailable() {
+  return Joi !== null;
+}
 
 /**
  * Parse time string to seconds
@@ -116,9 +222,15 @@ function validateHpcName(hpc) {
 }
 
 module.exports = {
+  // Sbatch validation
   validateSbatchInputs,
   validateHpcName,
   getPartitionLimits,
   parseTimeToSeconds,
   parseMemToMB,
+
+  // Joi schemas and middleware
+  schemas,
+  validate,
+  isJoiAvailable,
 };

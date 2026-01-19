@@ -18,6 +18,7 @@ const createApiRouter = require('./routes/api');
 const authRouter = require('./routes/auth');
 const helpRouter = require('./routes/help');
 const adminRouter = require('./routes/admin');
+const statsRouter = require('./routes/stats');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
@@ -75,6 +76,10 @@ app.use('/api/help', helpRouter);
 // Mount admin routes (inject stateManager for cluster data)
 adminRouter.setStateManager(stateManager);
 app.use('/api/admin', adminRouter);
+
+// Mount public stats API (no auth required, inject stateManager)
+statsRouter.setStateManager(stateManager);
+app.use('/api/stats', statsRouter);
 
 // Mount API routes (general /api/* - must come after more specific routes)
 app.use('/api', createApiRouter(stateManager));
