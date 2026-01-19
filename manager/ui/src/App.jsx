@@ -13,7 +13,9 @@ import Login from './pages/Login';
 import SetupWizard from './components/SetupWizard';
 import UserMenu from './components/UserMenu';
 import HelpPanel from './components/HelpPanel';
-import { HelpCircle, Hexagon } from 'lucide-react';
+import AdminPanel from './components/AdminPanel';
+import KeyManagementModal from './components/KeyManagementModal';
+import { HelpCircle, Settings } from 'lucide-react';
 import './styles/index.css';
 import './styles/themes.css';
 
@@ -31,24 +33,23 @@ function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
-  const { generateKey } = useAuth();
+  const { user } = useAuth();
 
   const [stoppingJobs, setStoppingJobs] = useState({});
   const [error, setError] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
 
-  // Stable callback for HelpPanel to prevent memo invalidation
+  // Stable callbacks for panels to prevent memo invalidation
   const closeHelp = useCallback(() => setHelpOpen(false), []);
+  const closeAdmin = useCallback(() => setAdminOpen(false), []);
 
-  // Handle SSH key setup from error state
-  const handleSetupKeys = useCallback(async () => {
+  // Handle SSH key setup from error state - opens modal instead of generating directly
+  const handleSetupKeys = useCallback(() => {
     backToMenu(); // Clear the error state
-    // Generate a managed key which will trigger setup wizard
-    const result = await generateKey();
-    if (result.success) {
-      // User will be redirected to setup wizard via needsSetup
-    }
-  }, [backToMenu, generateKey]);
+    setKeyModalOpen(true); // Open key management modal
+  }, [backToMenu]);
 
   // Track active EventSources for cleanup on unmount
   const stopEventSourcesRef = useRef(new Map());
@@ -136,8 +137,8 @@ function Launcher() {
       <div className="launcher">
         <div className="launcher-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="login-logo-icon" style={{ width: 36, height: 36, borderRadius: 8 }}>
-              <Hexagon size={20} />
+            <div className="login-logo-icon" style={{ width: 48, height: 48, borderRadius: 10 }}>
+              <img src="/icons/icon.svg" alt="rbiocverse" width={32} height={32} />
             </div>
             <div>
               <h1 style={{ marginBottom: 0 }}>rbiocverse</h1>
@@ -145,6 +146,16 @@ function Launcher() {
             </div>
           </div>
           <div className="header-actions">
+            {user?.isAdmin && (
+              <button
+                className="admin-btn"
+                onClick={() => setAdminOpen(true)}
+                title="Admin Panel"
+                aria-label="Open admin panel"
+              >
+                <Settings size={18} />
+              </button>
+            )}
             <button
               className="help-btn"
               onClick={() => setHelpOpen(true)}
@@ -192,6 +203,8 @@ function Launcher() {
       />
 
       <HelpPanel isOpen={helpOpen} onClose={closeHelp} health={health} history={history} />
+      <AdminPanel isOpen={adminOpen} onClose={closeAdmin} health={health} history={history} />
+      <KeyManagementModal isOpen={keyModalOpen} onClose={() => setKeyModalOpen(false)} />
     </>
   );
 }

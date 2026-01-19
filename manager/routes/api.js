@@ -255,10 +255,20 @@ function createApiRouter(stateManager) {
       const hpcService = new HpcService(hpc);
       // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
       const result = await hpcService.checkPorts(session.node, [5500, 3838]);
-      res.json({
-        liveServer: result[5500] || false,
-        shiny: result[3838] || false,
-      });
+      const liveServer = result[5500] || false;
+      const shiny = result[3838] || false;
+
+      // Track feature usage for analytics (only mark once per session)
+      if (liveServer && !session.usedLiveServer) {
+        await stateManager.updateSession(user, hpc, 'vscode', { usedLiveServer: true });
+        log.info('Live Server usage detected', { user, hpc });
+      }
+      if (shiny && !session.usedShiny) {
+        await stateManager.updateSession(user, hpc, 'vscode', { usedShiny: true });
+        log.info('Shiny usage detected', { user, hpc });
+      }
+
+      res.json({ liveServer, shiny });
     } catch (e) {
       log.debugFor('api', 'dev-servers check failed', { error: e.message });
       res.json({ liveServer: false, shiny: false });
@@ -444,7 +454,7 @@ function createApiRouter(stateManager) {
         if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
           log.state('Stale session detected, clearing', { user, hpc, ide, jobId: session.jobId });
-          await stateManager.clearSession(user, hpc, ide);
+          await stateManager.clearSession(user, hpc, ide, { endReason: 'timeout' });
           // Fall through to fresh launch flow below
         } else {
           // Job exists - safe to reconnect
@@ -505,6 +515,12 @@ function createApiRouter(stateManager) {
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         jobId = result.jobId;
         token = result.token;  // Auth token for VS Code/Jupyter
+
+        // Record submission time for wait time analytics
+        await stateManager.updateSession(user, hpc, ide, {
+          submittedAt: new Date().toISOString(),
+        });
+
         log.job(`Submitted`, { hpc, ide, jobId });
       } else {
         jobId = jobInfo.jobId;
@@ -681,7 +697,7 @@ function createApiRouter(stateManager) {
         if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
           log.state('Stale session detected, clearing', { user, hpc, ide, jobId: session.jobId });
-          await stateManager.clearSession(user, hpc, ide);
+          await stateManager.clearSession(user, hpc, ide, { endReason: 'timeout' });
           sendProgress('launching', 'Previous job ended, starting fresh...');
           // Fall through to fresh launch flow below
         } else {
@@ -803,6 +819,14 @@ function createApiRouter(stateManager) {
         jobId = result.jobId;
         token = result.token;
 
+        // Record submission time for wait time analytics
+        await stateManager.updateSession(user, hpc, ide, {
+          submittedAt: new Date().toISOString(),
+          releaseVersion: jobReleaseVersion,
+          gpu: jobGpu,
+          account: session.account || null,
+        });
+
         sendProgress('submitted', `Job ${jobId} submitted`, { jobId });
         log.job(`Submitted`, { hpc, ide, jobId });
 
@@ -872,6 +896,14 @@ function createApiRouter(stateManager) {
 
       // Invalidate cache for this cluster
       invalidateStatusCache(hpc);
+
+      // Audit log session launch
+      log.audit('Session started', {
+        user, hpc, ide, jobId, node,
+        cpus, mem, time,
+        gpu: jobGpu || 'none',
+        releaseVersion: jobReleaseVersion,
+      });
 
       const ideConfig = ides[ide];
       sendComplete({
@@ -979,15 +1011,18 @@ function createApiRouter(stateManager) {
         if (jobId) {
           await hpcService.cancelJob(jobId);
           log.job(`Cancelled`, { hpc, ide, jobId });
+          log.audit('Session stopped', { user, hpc, ide, jobId, cancelled: true });
           jobCancelled = true;
         }
       } catch (e) {
         log.error('Failed to cancel job', { hpc, ide, error: e.message });
       }
+    } else {
+      log.audit('Session stopped', { user, hpc, ide, jobId: session?.jobId, cancelled: false });
     }
 
     // Clear session and active session if needed
-    await stateManager.clearSession(user, hpc, ide);
+    await stateManager.clearSession(user, hpc, ide, { endReason: 'cancelled' });
 
     // If we cancelled a job, invalidate cache for this cluster and fetch fresh status
     // This ensures ALL users (multi-user environment) immediately see the freed slot
@@ -1074,7 +1109,7 @@ function createApiRouter(stateManager) {
       }
 
       // Clear session and active session if needed
-      await stateManager.clearSession(user, hpc, ide);
+      await stateManager.clearSession(user, hpc, ide, { endReason: 'cancelled' });
 
       // Invalidate cache and fetch fresh status
       if (jobCancelled) {

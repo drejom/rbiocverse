@@ -1,6 +1,6 @@
 {
   "name": "hpc-code-server-manager",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
   "main": "server.js",
   "scripts": {
@@ -23,8 +23,10 @@
     "report-dir": "coverage"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "express": "^4.18.2",
     "http-proxy": "^1.18.1",
+    "joi": "^17.13.3",
     "winston": "^3.19.0"
   },
   "devDependencies": {

@@ -1,14 +1,14 @@
 /**
  * SSH Key Generation and Encryption
- * Ed25519 keypair generation with AES-256-GCM encryption at rest
+ * Ed25519 keypair generation with password-derived AES-256-GCM encryption at rest
  */
 
 const crypto = require('crypto');
 const { promisify } = require('util');
-const { config } = require('../../config');
 const { log } = require('../logger');
 
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
+const scryptAsync = promisify(crypto.scrypt);
 
 /**
  * Generate SSH keypair for user (async to avoid blocking event loop)
@@ -21,9 +21,8 @@ const generateKeyPairAsync = promisify(crypto.generateKeyPair);
  * 4. User marks setup complete
  * 5. HpcService uses stored PRIVATE key for SSH connections on behalf of user
  *
- * Private keys are encrypted (AES-256-GCM) and stored in users.json.
- * Keys are written to data/ssh-keys/ as needed for SSH commands.
- * Users without managed keys fall back to the shared mounted SSH key.
+ * Private keys are encrypted (AES-256-GCM) with password-derived keys.
+ * Only the user's password can decrypt their private key.
  */
 async function generateSshKeypair(username) {
   // Use Ed25519 - modern, fast, secure, short keys
@@ -65,27 +64,28 @@ async function generateSshKeypair(username) {
 }
 
 /**
- * Derive encryption key from JWT_SECRET using HKDF-like derivation
- * Returns a 32-byte key suitable for AES-256-GCM
+ * Derive encryption key from password using scrypt
+ * @param {string} password - User's password
+ * @param {Buffer} salt - 32-byte random salt
+ * @returns {Promise<Buffer>} 32-byte key suitable for AES-256-GCM
  */
-function getEncryptionKey() {
-  // Use HMAC-SHA256 to derive a key from JWT_SECRET
-  // This provides key separation between JWT signing and encryption
-  return crypto
-    .createHmac('sha256', config.jwtSecret)
-    .update('private-key-encryption-v1')
-    .digest();
+async function deriveKeyFromPassword(password, salt) {
+  // scrypt parameters: N=16384, r=8, p=1
+  // Provides good security while keeping login <100ms
+  return scryptAsync(password, salt, 32, { N: 16384, r: 8, p: 1 });
 }
 
 /**
- * Encrypt a private key using AES-256-GCM
+ * Encrypt a private key using password-derived AES-256-GCM
  * @param {string} plaintext - PEM-encoded private key
- * @returns {string} Encrypted string in format "enc:v1:<iv>:<authTag>:<ciphertext>"
+ * @param {string} password - User's password for key derivation
+ * @returns {Promise<string>} Encrypted string in format "enc:v2:<salt>:<iv>:<authTag>:<ciphertext>"
  */
-function encryptPrivateKey(plaintext) {
-  if (!plaintext) return null;
+async function encryptPrivateKey(plaintext, password) {
+  if (!plaintext || !password) return null;
 
-  const key = getEncryptionKey();
+  const salt = crypto.randomBytes(32);
+  const key = await deriveKeyFromPassword(password, salt);
   const iv = crypto.randomBytes(12); // 96-bit IV for GCM
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
@@ -93,15 +93,17 @@ function encryptPrivateKey(plaintext) {
   encrypted += cipher.final('hex');
   const authTag = cipher.getAuthTag().toString('hex');
 
-  return `enc:v1:${iv.toString('hex')}:${authTag}:${encrypted}`;
+  // v2 format includes salt for password-derived encryption
+  return `enc:v2:${salt.toString('hex')}:${iv.toString('hex')}:${authTag}:${encrypted}`;
 }
 
 /**
- * Decrypt a private key encrypted with AES-256-GCM
- * @param {string} encrypted - Encrypted string or plaintext PEM (for migration)
- * @returns {string} PEM-encoded private key
+ * Decrypt a private key encrypted with password-derived AES-256-GCM
+ * @param {string} encrypted - Encrypted string (v2 format or plaintext PEM for migration)
+ * @param {string} password - User's password for key derivation
+ * @returns {Promise<string|null>} PEM-encoded private key or null on failure
  */
-function decryptPrivateKey(encrypted) {
+async function decryptPrivateKey(encrypted, password) {
   if (!encrypted) return null;
 
   // Check if already plaintext (for backwards compatibility during migration)
@@ -109,33 +111,41 @@ function decryptPrivateKey(encrypted) {
     return encrypted;
   }
 
-  // Parse encrypted format: "enc:v1:<iv>:<authTag>:<ciphertext>"
   const parts = encrypted.split(':');
-  if (parts.length !== 5 || parts[0] !== 'enc' || parts[1] !== 'v1') {
-    log.error('Invalid encrypted key format');
-    return null;
+
+  // v2 format: "enc:v2:<salt>:<iv>:<authTag>:<ciphertext>" (password-derived)
+  if (parts.length === 6 && parts[0] === 'enc' && parts[1] === 'v2') {
+    if (!password) {
+      log.error('Password required to decrypt v2 encrypted key');
+      return null;
+    }
+
+    const [, , saltHex, ivHex, authTagHex, ciphertext] = parts;
+
+    try {
+      const salt = Buffer.from(saltHex, 'hex');
+      const key = await deriveKeyFromPassword(password, salt);
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(authTag);
+
+      let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (err) {
+      log.error('Failed to decrypt private key (v2)', { error: err.message });
+      return null;
+    }
   }
 
-  const [, , ivHex, authTagHex, ciphertext] = parts;
-
-  try {
-    const key = getEncryptionKey();
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    log.error('Failed to decrypt private key', { error: err.message });
-    return null;
-  }
+  log.error('Invalid encrypted key format');
+  return null;
 }
 
 module.exports = {
   generateSshKeypair,
   encryptPrivateKey,
   decryptPrivateKey,
+  deriveKeyFromPassword,
 };

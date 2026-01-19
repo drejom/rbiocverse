@@ -1,22 +1,23 @@
 /**
  * KeyManagementModal - SSH key management interface
  *
- * Shows different UI based on whether user has a managed key:
- * - If publicKey exists: Show key with Copy/Download/Regenerate/Remove
- * - If no publicKey: Offer to generate a managed key
+ * Shows different UI based on whether user has a key:
+ * - If publicKey exists: Show key with Copy/Download/Regenerate
+ * - If no publicKey: Prompt to generate a key
  */
 
 import { useState, useCallback } from 'react';
-import { Copy, Download, CheckCircle, RefreshCw, Key, XCircle, Trash2, Plus, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Download, CheckCircle, RefreshCw, Key, XCircle, Plus, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function KeyManagementModal({ isOpen, onClose }) {
-  const { user, generateKey, removeKey, regenerateKey } = useAuth();
+  const { user, generateKey, regenerateKey } = useAuth();
   const [copied, setCopied] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [testResult, setTestResult] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPasswordInput, setShowPasswordInput] = useState(null); // 'generate' or 'regenerate'
 
   // Generate one-liner for SSH key installation
   const oneLiner = user?.publicKey ? `echo "${user.publicKey}" >> ~/.ssh/authorized_keys` : '';
@@ -48,13 +49,27 @@ function KeyManagementModal({ isOpen, onClose }) {
 
   // Handle generate key
   const handleGenerateKey = async () => {
+    if (!showPasswordInput) {
+      setShowPasswordInput('generate');
+      setPassword('');
+      setError(null);
+      return;
+    }
+
+    if (!password) {
+      setError('Password required');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    const result = await generateKey();
+    const result = await generateKey(password);
 
     if (result.success) {
       setLoading(false);
+      setPassword('');
+      setShowPasswordInput(null);
       onClose(); // Close modal - user will see setup wizard
     } else {
       setError(result.error || 'Failed to generate key');
@@ -62,45 +77,44 @@ function KeyManagementModal({ isOpen, onClose }) {
     }
   };
 
-  // Handle remove key
-  const handleRemoveKey = async () => {
-    if (!confirm('Remove your managed SSH key? You\'ll need working personal SSH keys to continue using rbiocverse.')) {
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setTestResult(null);
-
-    const result = await removeKey();
-
-    if (result.success) {
-      setLoading(false);
-    } else {
-      setError(result.error || 'Failed to remove key');
-      setTestResult(result.sshTestResult);
-      setLoading(false);
-    }
-  };
-
   // Handle key regeneration
   const handleRegenerate = async () => {
-    if (!confirm('Regenerate your SSH key? You will need to install the new key on the clusters.')) {
+    if (!showPasswordInput) {
+      if (!confirm('Regenerate your SSH key? You will need to install the new key on the clusters.')) {
+        return;
+      }
+      setShowPasswordInput('regenerate');
+      setPassword('');
+      setError(null);
+      return;
+    }
+
+    if (!password) {
+      setError('Password required');
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    const result = await regenerateKey();
+    const result = await regenerateKey(password);
 
     if (result.success) {
       setLoading(false);
+      setPassword('');
+      setShowPasswordInput(null);
       onClose(); // Close modal - user will see setup wizard
     } else {
       setError(result.error || 'Failed to regenerate key');
       setLoading(false);
     }
+  };
+
+  // Cancel password input
+  const cancelPasswordInput = () => {
+    setShowPasswordInput(null);
+    setPassword('');
+    setError(null);
   };
 
   if (!isOpen) return null;
@@ -195,21 +209,58 @@ function KeyManagementModal({ isOpen, onClose }) {
               </button>
             </div>
 
-            <button
-              className="key-btn"
-              onClick={handleRegenerate}
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', marginBottom: '10px' }}
-            >
-              {loading ? (
-                <span className="spinner" style={{ width: 16, height: 16 }} />
-              ) : (
-                <>
-                  <RefreshCw size={16} />
-                  Regenerate
-                </>
+            {showPasswordInput === 'regenerate' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Enter your password to encrypt the new key:
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your COH password"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRegenerate()}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              {showPasswordInput === 'regenerate' && (
+                <button
+                  className="key-btn"
+                  onClick={cancelPasswordInput}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  Cancel
+                </button>
               )}
-            </button>
+              <button
+                className="key-btn"
+                onClick={handleRegenerate}
+                disabled={loading}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                {loading ? (
+                  <span className="spinner" style={{ width: 16, height: 16 }} />
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    {showPasswordInput === 'regenerate' ? 'Confirm' : 'Regenerate'}
+                  </>
+                )}
+              </button>
+            </div>
 
             <button
               className="key-btn"
@@ -253,29 +304,6 @@ function KeyManagementModal({ isOpen, onClose }) {
               </div>
             )}
 
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-              <button
-                className="key-btn"
-                onClick={handleRemoveKey}
-                disabled={loading}
-                style={{ width: '100%', justifyContent: 'center', color: 'var(--color-danger)' }}
-              >
-                {loading ? (
-                  <>
-                    <span className="spinner" style={{ width: 16, height: 16 }} />
-                    Checking SSH...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={16} />
-                    Remove managed key
-                  </>
-                )}
-              </button>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
-                Only remove if you have personal SSH keys configured.
-              </p>
-            </div>
           </>
         ) : (
           // No managed key - offer to generate one
@@ -290,32 +318,68 @@ function KeyManagementModal({ isOpen, onClose }) {
               }}
             >
               <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                No managed key
+                No SSH key found
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-                Your SSH is working with your existing setup. You can optionally generate
-                a managed key as a backup or for easier key rotation.
+                Generate an SSH key to connect to the HPC clusters.
               </p>
             </div>
 
-            <button
-              className="key-btn"
-              onClick={handleGenerateKey}
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center' }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner" style={{ width: 16, height: 16 }} />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Plus size={16} />
-                  Generate managed key
-                </>
+            {showPasswordInput === 'generate' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Enter your password to encrypt the key:
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your COH password"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGenerateKey()}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {showPasswordInput === 'generate' && (
+                <button
+                  className="key-btn"
+                  onClick={cancelPasswordInput}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  Cancel
+                </button>
               )}
-            </button>
+              <button
+                className="key-btn"
+                onClick={handleGenerateKey}
+                disabled={loading}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner" style={{ width: 16, height: 16 }} />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    {showPasswordInput === 'generate' ? 'Confirm' : 'Generate managed key'}
+                  </>
+                )}
+              </button>
+            </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
               Creates a key that rbiocverse manages for you.
             </p>
@@ -334,16 +398,10 @@ function KeyManagementModal({ isOpen, onClose }) {
               fontSize: '0.9rem',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: testResult ? '8px' : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <XCircle size={16} />
               {error}
             </div>
-            {testResult && (
-              <div style={{ fontSize: '0.85rem', marginTop: '8px' }}>
-                <div>Gemini: {testResult.gemini ? 'Connected' : `Failed - ${testResult.geminiError || 'Unknown'}`}</div>
-                <div>Apollo: {testResult.apollo ? 'Connected' : `Failed - ${testResult.apolloError || 'Unknown'}`}</div>
-              </div>
-            )}
           </div>
         )}
 

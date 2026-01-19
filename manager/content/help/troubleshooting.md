@@ -2,6 +2,28 @@
 
 Common issues and solutions.
 
+## Authentication Issues
+
+### "SSH connection failed" after password change
+
+If you changed your COH password (via HR/Active Directory), your SSH key can no longer be decrypted:
+
+1. Go to **Manage Keys** in the user menu
+2. Click **Regenerate** and enter your new password
+3. Copy the new public key to the clusters
+
+### Prompted to re-login after server restart
+
+For security, decrypted SSH keys are only held in memory. After a server restart:
+
+1. Your session token may still be valid
+2. But your SSH key needs re-decryption
+3. Enter your password to restore SSH access
+
+### "Invalid password" when generating key
+
+You must enter your current COH password to generate or regenerate a key.
+
 ## Connection Problems
 
 ### "Connection lost" or blank screen

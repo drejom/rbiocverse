@@ -1,6 +1,12 @@
 /**
  * Auth Routes
  * Handles user authentication, session management, and SSH key operations
+ *
+ * Security model:
+ * - Private keys encrypted with password-derived keys (scrypt + AES-256-GCM)
+ * - Keys only decrypted during active sessions (held in memory)
+ * - On logout/expiry, decrypted keys are cleared
+ * - No master key - only the user's password can decrypt their key
  */
 
 const express = require('express');
@@ -16,7 +22,15 @@ const { errorLogger } = require('../services/ErrorLogger');
 // Import auth modules
 const { generateToken, verifyToken } = require('../lib/auth/token');
 const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('../lib/auth/ssh');
-const { loadUsers, saveUsers, getUser, setUser } = require('../lib/auth/user-store');
+const dbUsers = require('../lib/db/users');
+const { initializeDb } = require('../lib/db');
+const { checkAndMigrate } = require('../lib/db/migrate');
+const { setSessionKey, getSessionKey, clearSessionKey } = require('../lib/auth/session-keys');
+const { isAdmin } = require('../lib/auth/admin');
+
+// Database-backed user operations (replaced user-store.js)
+const getUser = (username) => dbUsers.getUser(username);
+const setUser = (username, user) => dbUsers.setUser(username, user);
 
 // Test credentials (for development - will be replaced by LDAP)
 // Must be set via environment variables - no defaults for security
@@ -24,19 +38,41 @@ const TEST_USERNAME = process.env.TEST_USERNAME;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
 
 /**
- * Get user's private key for SSH connections
- * Used by HpcService for per-user SSH authentication
- * @param {string} username - Username to get key for
- * @returns {string|null} PEM-encoded private key (decrypted) or null
+ * Verify password against test credentials
+ * TODO: Replace with LDAP password verification
+ * @param {string} username
+ * @param {string} password
+ * @returns {boolean}
  */
-function getUserPrivateKey(username) {
-  const user = getUser(username);
-  if (!user?.privateKey) return null;
-  return decryptPrivateKey(user.privateKey);
+function verifyPassword(username, password) {
+  if (!TEST_USERNAME || !TEST_PASSWORD) return false;
+
+  const expectedUserBuffer = Buffer.from(TEST_USERNAME);
+  const providedUserBuffer = Buffer.from(username);
+  const expectedPassBuffer = Buffer.from(TEST_PASSWORD);
+  const providedPassBuffer = Buffer.from(password);
+
+  const usernameValid = expectedUserBuffer.length === providedUserBuffer.length &&
+    crypto.timingSafeEqual(expectedUserBuffer, providedUserBuffer);
+  const passwordValid = expectedPassBuffer.length === providedPassBuffer.length &&
+    crypto.timingSafeEqual(expectedPassBuffer, providedPassBuffer);
+
+  return usernameValid && passwordValid;
 }
 
-// Load users on startup
-loadUsers();
+/**
+ * Get user's private key for SSH connections
+ * Returns key from in-memory session store (only available during active session)
+ * @param {string} username - Username to get key for
+ * @returns {string|null} PEM-encoded private key or null if no active session
+ */
+function getUserPrivateKey(username) {
+  return getSessionKey(username);
+}
+
+// Initialize database on startup
+initializeDb();
+checkAndMigrate();
 
 /**
  * Middleware to require authentication
@@ -103,7 +139,7 @@ async function testBothClusters(username = null) {
 /**
  * POST /api/auth/login
  * Authenticate user and return token
- * For new users: tests SSH first, only generates keys if SSH fails
+ * Decrypts private key into session store for SSH access
  */
 router.post('/login', async (req, res) => {
   const { username, password, rememberMe = true } = req.body;
@@ -120,18 +156,7 @@ router.post('/login', async (req, res) => {
       return res.status(500).json({ error: 'Authentication not configured' });
     }
 
-    // Use timing-safe comparison to prevent timing attacks
-    const expectedUserBuffer = Buffer.from(TEST_USERNAME);
-    const providedUserBuffer = Buffer.from(username);
-    const expectedPassBuffer = Buffer.from(TEST_PASSWORD);
-    const providedPassBuffer = Buffer.from(password);
-
-    const usernameValid = expectedUserBuffer.length === providedUserBuffer.length &&
-      crypto.timingSafeEqual(expectedUserBuffer, providedUserBuffer);
-    const passwordValid = expectedPassBuffer.length === providedPassBuffer.length &&
-      crypto.timingSafeEqual(expectedPassBuffer, providedPassBuffer);
-
-    if (!usernameValid || !passwordValid) {
+    if (!verifyPassword(username, password)) {
       await errorLogger.logWarning({
         user: username,
         action: 'login',
@@ -143,6 +168,7 @@ router.post('/login', async (req, res) => {
     // Get or create user record
     let user = getUser(username);
     let sshTestResult = null;
+    const sessionTtl = rememberMe ? config.sessionExpiryDays * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
 
     if (!user) {
       // First login - test SSH to see if existing keys work
@@ -160,28 +186,42 @@ router.post('/login', async (req, res) => {
         };
         log.info('New user with working SSH', { username });
       } else {
-        // SSH failed - generate managed key
+        // SSH failed - generate managed key with password-derived encryption
         const { publicKey, privateKeyPem } = await generateSshKeypair(username);
         user = {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey,
-          privateKey: encryptPrivateKey(privateKeyPem),
+          privateKey: await encryptPrivateKey(privateKeyPem, password),
           setupComplete: false,
           createdAt: new Date().toISOString(),
         };
+        // Store decrypted key in session
+        setSessionKey(username, privateKeyPem, sessionTtl);
         log.info('New user - generated managed key', { username });
       }
 
       setUser(username, user);
-      saveUsers();
+      // setUser saves immediately to SQLite
+    } else {
+      // Existing user - decrypt private key if they have one
+      if (user.privateKey) {
+        const privateKeyPem = await decryptPrivateKey(user.privateKey, password);
+        if (privateKeyPem) {
+          setSessionKey(username, privateKeyPem, sessionTtl);
+          log.info('Decrypted private key into session', { username });
+        } else {
+          // Decryption failed - password may have changed, need to regenerate
+          log.warn('Failed to decrypt private key, user needs to regenerate', { username });
+        }
+      }
     }
 
     // Generate token
     const expiresIn = rememberMe ? config.sessionExpiryDays * 24 * 60 * 60 : 24 * 60 * 60;
     const token = generateToken({ username, fullName: user.fullName }, expiresIn);
 
-    log.info('User logged in', { username, hasPublicKey: !!user.publicKey });
+    log.audit('User login', { username, hasPublicKey: !!user.publicKey });
 
     res.json({
       token,
@@ -190,6 +230,7 @@ router.post('/login', async (req, res) => {
         fullName: user.fullName,
         publicKey: user.publicKey,
         setupComplete: user.setupComplete,
+        isAdmin: isAdmin(user.username),
       },
       sshTestResult, // Include for new users so frontend knows SSH status
     });
@@ -205,10 +246,12 @@ router.post('/login', async (req, res) => {
 
 /**
  * POST /api/auth/logout
- * Invalidate session (for audit logging)
+ * Clear session key and invalidate session
  */
 router.post('/logout', requireAuth, (req, res) => {
-  log.info('User logged out', { username: req.user.username });
+  // Clear decrypted key from memory
+  clearSessionKey(req.user.username);
+  log.audit('User logout', { username: req.user.username });
   res.json({ success: true });
 });
 
@@ -222,12 +265,17 @@ router.get('/session', requireAuth, (req, res) => {
     return res.status(401).json({ error: 'User not found' });
   }
 
+  // Check if session key is still available
+  const hasActiveKey = getSessionKey(req.user.username) !== null;
+
   res.json({
     user: {
       username: user.username,
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      hasActiveKey, // Frontend can prompt re-login if false
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -256,23 +304,22 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
       };
       log.info('Legacy user with working SSH', { username: req.user.username });
     } else {
-      // SSH failed - generate managed key
-      const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
+      // Can't generate key here without password - mark as incomplete
       user = {
         username: req.user.username,
         fullName: req.user.fullName || req.user.username,
-        publicKey,
-        privateKey: encryptPrivateKey(privateKeyPem),
+        publicKey: null,
+        privateKey: null,
         setupComplete: false,
         createdAt: new Date().toISOString(),
       };
-      log.info('Legacy user - generated managed key', { username: req.user.username });
+      log.info('Legacy user needs to regenerate key', { username: req.user.username });
     }
     setUser(req.user.username, user);
-    saveUsers();
+    // setUser saves immediately to SQLite
   } else {
     user.setupComplete = true;
-    saveUsers();
+    // setUser saves immediately to SQLite
     log.info('User setup completed', { username: user.username });
   }
 
@@ -334,9 +381,20 @@ router.post('/test-connection-both', async (req, res) => {
 /**
  * POST /api/auth/generate-key
  * Generate a managed SSH key for the user
- * Can be used even if user already has working SSH (as a backup)
+ * Requires password in request body for encryption
  */
 router.post('/generate-key', requireAuth, async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password required to encrypt key' });
+  }
+
+  // Verify password before using it for encryption
+  if (!verifyPassword(req.user.username, password)) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
   let user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -346,11 +404,15 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
-  user.privateKey = encryptPrivateKey(privateKeyPem);
+  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install the new key
-  saveUsers();
+  // setUser saves immediately to SQLite
 
-  log.info('Generated managed key for user', { username: user.username });
+  // Store in session for immediate use
+  const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
+  setSessionKey(req.user.username, privateKeyPem, sessionTtl);
+
+  log.audit('SSH key generated', { username: user.username });
 
   res.json({
     success: true,
@@ -401,9 +463,12 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   // SSH works - safe to remove managed key
   user.publicKey = null;
   user.privateKey = null;
-  saveUsers();
+  setUser(req.user.username, user);
 
-  log.info('Removed managed key for user', { username: user.username });
+  // Clear from session
+  clearSessionKey(req.user.username);
+
+  log.audit('SSH key removed', { username: user.username });
 
   res.json({
     success: true,
@@ -419,8 +484,20 @@ router.post('/remove-key', requireAuth, async (req, res) => {
 /**
  * POST /api/auth/regenerate-key
  * Regenerate the managed SSH key
+ * Requires password in request body for encryption
  */
 router.post('/regenerate-key', requireAuth, async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password required to encrypt key' });
+  }
+
+  // Verify password before using it for encryption
+  if (!verifyPassword(req.user.username, password)) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
   let user = getUser(req.user.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -430,11 +507,15 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
 
   user.publicKey = publicKey;
-  user.privateKey = encryptPrivateKey(privateKeyPem);
+  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install new key
-  saveUsers();
+  // setUser saves immediately to SQLite
 
-  log.info('Regenerated managed key for user', { username: user.username });
+  // Store in session for immediate use
+  const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
+  setSessionKey(req.user.username, privateKeyPem, sessionTtl);
+
+  log.audit('SSH key regenerated', { username: user.username });
 
   res.json({
     success: true,

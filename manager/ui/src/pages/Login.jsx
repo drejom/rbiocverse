@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import { Hexagon, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ClusterHealthCard from '../components/ClusterHealthCard';
 import ThemeToggle from '../components/ThemeToggle';
@@ -61,7 +61,7 @@ function Login({ clusterHealth = {}, clusterHistory = {} }) {
           {/* Logo */}
           <div className="login-logo">
             <div className="login-logo-icon">
-              <Hexagon size={28} />
+              <img src="/icons/icon.svg" alt="rbiocverse" width={28} height={28} />
             </div>
             <span className="login-logo-text">rbiocverse</span>
             <div style={{ marginLeft: 'auto' }}>

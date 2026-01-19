@@ -2,10 +2,14 @@
   "sections": [
     { "id": "quick-start", "title": "Quick Start", "icon": "rocket" },
     { "id": "environment", "title": "Environment", "icon": "box" },
-    { "id": "vscode", "title": "VS Code", "icon": "devicon-vscode" },
-    { "id": "rstudio", "title": "RStudio", "icon": "devicon-rstudio" },
-    { "id": "jupyterlab", "title": "JupyterLab", "icon": "devicon-jupyter" },
-    { "id": "troubleshooting", "title": "Troubleshooting", "icon": "wrench" },
-    { "id": "faq", "title": "FAQ", "icon": "question" }
+
+    { "id": "ides", "title": "IDEs", "icon": "monitor" },
+    { "id": "vscode", "title": "VS Code", "icon": "devicon-vscode", "parent": "ides" },
+    { "id": "rstudio", "title": "RStudio", "icon": "devicon-rstudio", "parent": "ides" },
+    { "id": "jupyterlab", "title": "JupyterLab", "icon": "devicon-jupyter", "parent": "ides" },
+
+    { "id": "support", "title": "Support", "icon": "question" },
+    { "id": "troubleshooting", "title": "Troubleshooting", "icon": "wrench", "parent": "support" },
+    { "id": "faq", "title": "FAQ", "icon": "question", "parent": "support" }
   ]
 }

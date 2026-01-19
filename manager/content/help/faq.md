@@ -69,7 +69,31 @@ Yes! Install extensions normally - they persist in your home directory between s
 
 ### How does authentication work?
 
-Currently single-user mode. Multi-user authentication uses your COH credentials (coming soon).
+You log in with your COH credentials. On first login, an SSH key is generated for you to connect to the HPC clusters.
+
+### How do SSH keys work?
+
+rbiocverse manages an SSH key for each user:
+
+1. On first login, a keypair is generated and encrypted with your password
+2. You copy the public key to `~/.ssh/authorized_keys` on the clusters (one-time setup)
+3. On each login, your password decrypts the key for the session
+4. On logout, the decrypted key is cleared from memory
+
+**Security:** Your private key is encrypted with your password. Only you can decrypt it - not even server administrators.
+
+### What happens if I change my password?
+
+If your COH password changes (through HR/Active Directory), your encrypted SSH key can no longer be decrypted. You'll need to regenerate your key:
+
+1. Go to **Manage Keys** in the user menu
+2. Click **Regenerate**
+3. Enter your new password
+4. Copy the new public key to the clusters
+
+### Why do I need to re-login after a server restart?
+
+For security, decrypted SSH keys are only held in memory during active sessions. After a server restart, you'll need to log in again to decrypt your key. Your session may still be valid, but you'll be prompted to re-enter your password to decrypt your SSH key.
 
 ### Where are IDE settings stored?
 

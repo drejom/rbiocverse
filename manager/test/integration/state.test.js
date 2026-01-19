@@ -18,6 +18,8 @@ describe('StateManager Integration Tests', () => {
     }
     process.env.STATE_FILE = testStateFile;
     process.env.ENABLE_STATE_PERSISTENCE = 'true';
+    // Disable SQLite for these tests - we're testing JSON persistence
+    process.env.USE_SQLITE = 'false';
     stateManager = new StateManager();
   });
 
@@ -30,6 +32,7 @@ describe('StateManager Integration Tests', () => {
     }
     delete process.env.STATE_FILE;
     delete process.env.ENABLE_STATE_PERSISTENCE;
+    delete process.env.USE_SQLITE;
   });
 
   describe('Persistence', () => {
