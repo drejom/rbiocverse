@@ -2,6 +2,7 @@
   "name": "ui",
   "private": true,
   "version": "0.0.7",
+  "repository": "https://github.com/drejom/omhq-hpc-code-server-stack",
   "type": "module",
   "scripts": {
     "dev": "vite",
