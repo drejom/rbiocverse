@@ -566,7 +566,9 @@ class StateManager {
     }
 
     // Archive to SQLite history before deleting
-    if (this.useSqlite && session.status && session.status !== 'idle') {
+    // Archive if session was ever started (has startedAt), regardless of current status
+    // Sessions transition to 'idle' before clearSession is called, so we can't check status
+    if (this.useSqlite && session.startedAt) {
       const { endReason = 'completed', errorMessage = null } = options;
       try {
         dbSessions.archiveSession(session, sessionKey, endReason, errorMessage);
