@@ -302,10 +302,21 @@ class StateManager {
           this.state.clusterHealth = loadedState.clusterHealth ?? {};
 
           for (const [key, session] of Object.entries(loadedState.sessions)) {
+            let sessionKey = key;
+            // TODO: Remove this migration before v0.1.0 release
+            // Migrate legacy keys without user prefix (e.g., "gemini-vscode" -> "{user}-gemini-vscode")
+            if (!parseSessionKey(key)) {
+              sessionKey = `${config.hpcUser}-${key}`;
+              log.warn('Migrating legacy session key', { old: key, new: sessionKey });
+              if (!parseSessionKey(sessionKey)) {
+                log.warn('Skipping invalid session key', { key });
+                continue;
+              }
+            }
             if (session) {
               session.tunnelProcess = null;
             }
-            this.state.sessions[key] = session;
+            this.state.sessions[sessionKey] = session;
           }
         }
       } catch (e) {
@@ -555,7 +566,9 @@ class StateManager {
     }
 
     // Archive to SQLite history before deleting
-    if (this.useSqlite && session.status && session.status !== 'idle') {
+    // Archive if session was ever started (has startedAt), regardless of current status
+    // Sessions transition to 'idle' before clearSession is called, so we can't check status
+    if (this.useSqlite && session.startedAt) {
       const { endReason = 'completed', errorMessage = null } = options;
       try {
         dbSessions.archiveSession(session, sessionKey, endReason, errorMessage);

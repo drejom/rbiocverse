@@ -55,7 +55,7 @@ services:
 
 volumes:
   data:
-    driver: local
+    # Named volume for persistent state - Dokploy manages lifecycle
 
 networks:
   dokploy-network:
