@@ -55,8 +55,7 @@ services:
 
 volumes:
   data:
-    # Volume created by Dokploy setup, not Compose - mark as external to silence warning
-    external: true
+    # Named volume for persistent state - Dokploy manages lifecycle
 
 networks:
   dokploy-network:
