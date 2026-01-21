@@ -1153,8 +1153,9 @@ function createApiRouter(stateManager) {
     const sessions = stateManager.getSessionsForUser(user);
 
     // Collect running/pending jobs on this cluster
+    // Map jobId -> sessionKey so we can clear only successfully cancelled sessions
     const jobsToCancel = [];
-    const sessionKeys = [];
+    const jobIdToSessionKey = new Map();
 
     for (const [sessionKey, session] of Object.entries(sessions)) {
       if (!session?.jobId) continue;
@@ -1163,7 +1164,7 @@ function createApiRouter(stateManager) {
       if (session.status !== 'running' && session.status !== 'pending') continue;
 
       jobsToCancel.push(session.jobId);
-      sessionKeys.push(sessionKey);
+      jobIdToSessionKey.set(session.jobId, sessionKey);
     }
 
     if (jobsToCancel.length === 0) {
@@ -1174,8 +1175,12 @@ function createApiRouter(stateManager) {
     const hpcService = new HpcService(hpc, user);
     const result = await hpcService.cancelJobs(jobsToCancel);
 
-    // Clear sessions for cancelled jobs (stop tunnels too)
-    for (const sessionKey of sessionKeys) {
+    // Clear sessions only for successfully cancelled jobs (stop tunnels too)
+    // Jobs that failed to cancel keep their sessions so they can be retried
+    for (const jobId of result.cancelled) {
+      const sessionKey = jobIdToSessionKey.get(jobId);
+      if (!sessionKey) continue;
+
       const parsed = parseSessionKey(sessionKey);
       if (parsed) {
         const { hpc: sessionHpc, ide } = parsed;

@@ -46,8 +46,9 @@ class TunnelService {
     for (const port of allPorts) {
       try {
         // Find SSH processes listening on this port
+        // Use portable xargs pattern (xargs -r is GNU-only, not available on macOS)
         const result = execSync(
-          `lsof -i :${port} -t 2>/dev/null | xargs -r ps -o pid=,comm= 2>/dev/null | grep ssh | awk '{print $1}'`,
+          `lsof -i :${port} -t 2>/dev/null | xargs sh -c 'test -n "$*" && ps -o pid=,comm= "$@"' sh 2>/dev/null | grep ssh | awk '{print $1}'`,
           { encoding: 'utf8', timeout: 5000 }
         ).trim();
 

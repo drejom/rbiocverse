@@ -120,6 +120,13 @@ export function useClusterStatus() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [fetchStatus]);
 
+  // Listen for refresh-status events (e.g., from Stop All Jobs)
+  useEffect(() => {
+    const handleRefresh = () => fetchStatus(true);
+    window.addEventListener('refresh-status', handleRefresh);
+    return () => window.removeEventListener('refresh-status', handleRefresh);
+  }, [fetchStatus]);
+
   const refresh = useCallback(() => fetchStatus(true), [fetchStatus]);
 
   return {

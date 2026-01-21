@@ -177,7 +177,7 @@ class HpcService {
       }
 
       // SSH ControlMaster for connection multiplexing
-      // Socket path: data/ssh-sockets/{user}-{cluster} (user defaults to hpcUser in single-user mode)
+      // Socket path: /tmp/rbiocverse-ssh/{user}-{cluster} (user defaults to hpcUser in single-user mode)
       const effectiveUser = this.username || config.hpcUser;
       const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveUser}-${this.clusterName}`);
       const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
