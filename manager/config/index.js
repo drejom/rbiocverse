@@ -360,7 +360,7 @@ const releases = {
   },
   '3.17': {
     name: 'Bioconductor 3.17',
-    ides: ['vscode', 'rstudio'],
+    ides: ['rstudio'],  // VS Code not supported in 3.17
     paths: createReleasePaths('3.17'),
   },
 };
