@@ -30,14 +30,14 @@ async function withClusterQueue(cluster, fn) {
   const next = current.then(async () => {
     log.debugFor('ssh', 'SSH queue executing', { cluster });
     return fn();
-  }).catch(async (err) => {
-    // Previous call failed, but continue queue
-    log.warn('SSH queue previous call failed, continuing', { cluster, error: err.message });
-    return fn();
   });
 
-  // Store chain but don't let errors block future calls
-  queues.set(cluster, next.catch(() => {}));
+  // Store a promise that always resolves, so failures don't block subsequent operations
+  // The original promise (next) is returned to caller so they receive any rejection
+  queues.set(cluster, next.catch((err) => {
+    log.warn('SSH queue operation failed; continuing queue.', { cluster, error: err.message });
+  }));
+
   return next;
 }
 
@@ -47,9 +47,11 @@ async function withClusterQueue(cluster, fn) {
  */
 function getQueueStats() {
   const stats = {};
-  for (const [cluster, promise] of queues.entries()) {
-    // Check if there's a pending operation by seeing if the promise is resolved
-    stats[cluster] = { hasPendingOperations: true };
+  for (const cluster of queues.keys()) {
+    // This indicates a promise chain exists for this cluster.
+    // It may have pending operations or may be idle - precise tracking
+    // would require counting pending operations explicitly.
+    stats[cluster] = { hasQueueChain: true };
   }
   return stats;
 }
