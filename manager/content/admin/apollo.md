@@ -1,7 +1,9 @@
-# Apollo Cluster
+<div class="admin-cluster-container">
 
 :::widget ClusterDetail cluster="apollo":::
 
-## Historical Trends
-
 :::widget ClusterHeatmap hpc="apollo":::
+
+:::widget PartitionLimits cluster="apollo":::
+
+</div>

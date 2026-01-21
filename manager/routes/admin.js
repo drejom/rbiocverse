@@ -17,6 +17,7 @@ const { clearSessionKey } = require('../lib/auth/session-keys');
 const analytics = require('../lib/db/analytics');
 const dbHealth = require('../lib/db/health');
 const dbSessions = require('../lib/db/sessions');
+const partitions = require('../lib/partitions');
 const asyncHandler = require('../lib/asyncHandler');
 const ContentManager = require('../lib/content');
 const { schemas, validate, parseQueryInt, parseQueryParams } = require('../lib/validation');
@@ -319,6 +320,54 @@ router.post('/users/bulk',
     res.json(results);
   })
 );
+
+// =============================================================================
+// Partition Management Routes
+// =============================================================================
+
+/**
+ * GET /api/admin/partitions
+ * Get all partition limits with full details
+ */
+router.get('/partitions', asyncHandler(async (req, res) => {
+  const allPartitions = partitions.getAllPartitions();
+  const lastUpdated = partitions.getLastUpdated();
+
+  res.json({
+    partitions: allPartitions,
+    lastUpdated,
+    generatedAt: new Date().toISOString(),
+  });
+}));
+
+/**
+ * POST /api/admin/partitions/refresh
+ * Trigger refresh of partition data from all clusters
+ */
+router.post('/partitions/refresh', asyncHandler(async (req, res) => {
+  log.info('Admin triggered partition refresh', { admin: req.user.username });
+
+  const results = await partitions.refreshAllPartitions();
+  const allPartitions = partitions.getAllPartitions();
+  const lastUpdated = partitions.getLastUpdated();
+
+  // Summarize results
+  const summary = {};
+  for (const [cluster, result] of Object.entries(results)) {
+    summary[cluster] = {
+      success: result.success,
+      partitionCount: result.success ? result.partitions.length : 0,
+      error: result.error || null,
+    };
+  }
+
+  res.json({
+    results: summary,
+    partitions: allPartitions,
+    lastUpdated,
+    generatedAt: new Date().toISOString(),
+  });
+}));
 
 // =============================================================================
 // Reports Routes

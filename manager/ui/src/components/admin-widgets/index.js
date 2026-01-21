@@ -5,6 +5,7 @@
 import { AdminStats } from './AdminStats';
 import { UserTable } from './UserTable';
 import { ClusterDetail } from './ClusterDetail';
+import { PartitionLimits } from './PartitionLimits';
 import { UsageReport } from './UsageReport';
 
 // Analytics widgets
@@ -29,6 +30,7 @@ export const widgetRegistry = {
   AdminStats,
   UserTable,
   ClusterDetail,
+  PartitionLimits,
   UsageReport,
 
   // Analytics widgets

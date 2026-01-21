@@ -23,6 +23,7 @@ const clientErrorsRouter = require('./routes/client-errors');
 const { HpcError } = require('./lib/errors');
 const { log } = require('./lib/logger');
 const { getCookieToken, isVscodeRootPath } = require('./lib/proxy-helpers');
+const partitionService = require('./lib/partitions');
 
 const app = express();
 // NOTE: Do NOT use express.json() globally - it consumes request body streams
@@ -608,8 +609,12 @@ app.use((err, req, res, next) => {
 const PORT = 3000;
 let server;
 
-stateManager.load().then(() => {
+stateManager.load().then(async () => {
   log.info('State manager initialized');
+
+  // Initialize partition service (inject HpcService for SSH operations)
+  partitionService.setHpcService(HpcService);
+  await partitionService.initialize();
 
   // Start background polling with HpcService factory
   stateManager.startPolling(hpc => new HpcService(hpc));

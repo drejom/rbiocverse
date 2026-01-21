@@ -164,6 +164,26 @@ function initializeDb(dbPath = DEFAULT_DB_PATH) {
       value TEXT
     );
 
+    -- Partition limits (dynamic SLURM partition info)
+    CREATE TABLE IF NOT EXISTS partition_limits (
+      cluster TEXT NOT NULL,
+      partition TEXT NOT NULL,
+      is_default INTEGER DEFAULT 0,
+      max_cpus INTEGER,
+      max_mem_mb INTEGER,
+      max_time TEXT,
+      default_time TEXT,
+      total_cpus INTEGER,
+      total_nodes INTEGER,
+      total_mem_mb INTEGER,
+      gpu_count INTEGER,
+      gpu_type TEXT,
+      restricted INTEGER DEFAULT 0,
+      restriction_reason TEXT,
+      updated_at INTEGER,
+      PRIMARY KEY (cluster, partition)
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_session_history_user ON session_history(user);
     CREATE INDEX IF NOT EXISTS idx_session_history_started ON session_history(started_at);

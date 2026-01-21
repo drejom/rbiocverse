@@ -76,75 +76,53 @@ export function ClusterDetail({ cluster, health = {}, history = {} }) {
         </div>
       </div>
 
-      <div className="admin-cluster-metrics">
+      <div className="admin-cluster-metrics-row">
         {/* CPU */}
-        <div className="admin-metric">
-          <div className="admin-metric-header">
-            <Cpu size={14} />
-            <span>CPU Usage</span>
+        <div className="admin-metric-compact">
+          <div className="admin-metric-compact-header">
+            <Cpu size={12} />
+            <span>CPU</span>
           </div>
-          <div className="admin-metric-content">
-            <SimpleHealthBar percent={cpus?.percent || 0} />
-            <div className="admin-metric-values">
-              <span>{cpus?.used || 0} / {cpus?.total || 0} cores</span>
-              <span className="admin-metric-percent">{cpus?.percent || 0}%</span>
-            </div>
-            {clusterHistory?.cpus && (
-              <div className="admin-metric-sparkline">
-                <Sparkline data={clusterHistory.cpus} height={24} />
-              </div>
-            )}
+          <SimpleHealthBar percent={cpus?.percent || 0} />
+          <div className="admin-metric-compact-value">
+            {cpus?.used || 0}/{cpus?.total || 0} <span className="admin-metric-percent">{cpus?.percent || 0}%</span>
           </div>
         </div>
 
         {/* Memory */}
-        <div className="admin-metric">
-          <div className="admin-metric-header">
-            <MemoryStick size={14} />
-            <span>Memory Usage</span>
+        <div className="admin-metric-compact">
+          <div className="admin-metric-compact-header">
+            <MemoryStick size={12} />
+            <span>Memory</span>
           </div>
-          <div className="admin-metric-content">
-            <SimpleHealthBar percent={memory?.percent || 0} />
-            <div className="admin-metric-values">
-              <span>{formatMemory(memory?.used)} / {formatMemory(memory?.total)}</span>
-              <span className="admin-metric-percent">{memory?.percent || 0}%</span>
-            </div>
-            {clusterHistory?.memory && (
-              <div className="admin-metric-sparkline">
-                <Sparkline data={clusterHistory.memory} height={24} />
-              </div>
-            )}
+          <SimpleHealthBar percent={memory?.percent || 0} />
+          <div className="admin-metric-compact-value">
+            {formatMemory(memory?.used)}/{formatMemory(memory?.total)} <span className="admin-metric-percent">{memory?.percent || 0}%</span>
           </div>
         </div>
 
         {/* Nodes */}
-        <div className="admin-metric">
-          <div className="admin-metric-header">
-            <Server size={14} />
-            <span>Node Status</span>
+        <div className="admin-metric-compact">
+          <div className="admin-metric-compact-header">
+            <Server size={12} />
+            <span>Nodes</span>
           </div>
-          <div className="admin-metric-content">
-            <SimpleHealthBar percent={nodes?.percent || 0} />
-            <div className="admin-metric-values">
-              <span>{nodes?.busy || 0} / {nodes?.total || 0} busy</span>
-              <span className="admin-metric-percent">{nodes?.percent || 0}%</span>
-            </div>
+          <SimpleHealthBar percent={nodes?.percent || 0} />
+          <div className="admin-metric-compact-value">
+            {nodes?.busy || 0}/{nodes?.total || 0} <span className="admin-metric-percent">{nodes?.percent || 0}%</span>
           </div>
         </div>
 
         {/* GPUs (if available) */}
         {gpus && gpus.total > 0 && (
-          <div className="admin-metric">
-            <div className="admin-metric-header">
-              <Zap size={14} />
-              <span>GPU Usage</span>
+          <div className="admin-metric-compact">
+            <div className="admin-metric-compact-header">
+              <Zap size={12} />
+              <span>GPUs</span>
             </div>
-            <div className="admin-metric-content">
-              <SimpleHealthBar percent={gpus?.percent || 0} />
-              <div className="admin-metric-values">
-                <span>{gpus?.used || 0} / {gpus?.total || 0} GPUs</span>
-                <span className="admin-metric-percent">{gpus?.percent || 0}%</span>
-              </div>
+            <SimpleHealthBar percent={gpus?.percent || 0} />
+            <div className="admin-metric-compact-value">
+              {gpus?.used || 0}/{gpus?.total || 0} <span className="admin-metric-percent">{gpus?.percent || 0}%</span>
             </div>
           </div>
         )}

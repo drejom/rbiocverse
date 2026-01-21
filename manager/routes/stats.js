@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const asyncHandler = require('../lib/asyncHandler');
 const analytics = require('../lib/db/analytics');
+const partitions = require('../lib/partitions');
 const { parseQueryInt } = require('../lib/validation');
 
 // StateManager injected via setStateManager()
@@ -220,6 +221,84 @@ router.get('/queue/:cluster', asyncHandler(async (req, res) => {
       p99Seconds: clusterStats.p99,
       p99Formatted: formatSeconds(clusterStats.p99),
     },
+    generatedAt: new Date().toISOString(),
+  });
+}));
+
+/**
+ * GET /api/stats/partitions
+ * Partition limits for all clusters (public)
+ *
+ * Returns dynamic partition data for resource validation.
+ */
+router.get('/partitions', asyncHandler(async (req, res) => {
+  const allPartitions = partitions.getAllPartitions();
+  const lastUpdated = partitions.getLastUpdated();
+
+  // Transform for API response
+  const result = {};
+  for (const [cluster, clusterPartitions] of Object.entries(allPartitions)) {
+    result[cluster] = {};
+    for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
+      result[cluster][partitionName] = {
+        isDefault: limits.isDefault,
+        maxCpus: limits.maxCpus,
+        maxMemGB: limits.maxMemMB ? Math.floor(limits.maxMemMB / 1024) : null,
+        maxMemMB: limits.maxMemMB,
+        maxTime: limits.maxTime,
+        defaultTime: limits.defaultTime,
+        gpuType: limits.gpuType || null,
+        gpuCount: limits.gpuCount || null,
+        restricted: limits.restricted,
+        restrictionReason: limits.restrictionReason || null,
+      };
+    }
+  }
+
+  res.json({
+    partitions: result,
+    lastUpdated,
+    generatedAt: new Date().toISOString(),
+  });
+}));
+
+/**
+ * GET /api/stats/partitions/:cluster
+ * Partition limits for a specific cluster (public)
+ */
+router.get('/partitions/:cluster', asyncHandler(async (req, res) => {
+  const { cluster } = req.params;
+  const clusterPartitions = partitions.getClusterPartitions(cluster);
+  const lastUpdated = partitions.getLastUpdated(cluster);
+
+  if (Object.keys(clusterPartitions).length === 0) {
+    return res.status(404).json({
+      error: `No partition data for cluster: ${cluster}`,
+      availableClusters: Object.keys(partitions.getAllPartitions()),
+    });
+  }
+
+  // Transform for API response
+  const result = {};
+  for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
+    result[partitionName] = {
+      isDefault: limits.isDefault,
+      maxCpus: limits.maxCpus,
+      maxMemGB: limits.maxMemMB ? Math.floor(limits.maxMemMB / 1024) : null,
+      maxMemMB: limits.maxMemMB,
+      maxTime: limits.maxTime,
+      defaultTime: limits.defaultTime,
+      gpuType: limits.gpuType || null,
+      gpuCount: limits.gpuCount || null,
+      restricted: limits.restricted,
+      restrictionReason: limits.restrictionReason || null,
+    };
+  }
+
+  res.json({
+    cluster,
+    partitions: result,
+    lastUpdated,
     generatedAt: new Date().toISOString(),
   });
 }));

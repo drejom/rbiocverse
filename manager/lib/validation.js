@@ -6,6 +6,7 @@
  */
 
 const { partitionLimits, clusters, gpuConfig } = require('../config');
+const dynamicPartitions = require('./partitions');
 
 // Joi is optional - gracefully handle if not installed
 let Joi = null;
@@ -196,22 +197,39 @@ function parseMemToMB(mem) {
 }
 
 /**
+ * Get partition name for a cluster and GPU type
+ * @param {string} hpc - Cluster name
+ * @param {string} gpu - GPU type ('' for none)
+ * @returns {string} Partition name
+ */
+function getPartitionName(hpc, gpu = '') {
+  if (gpu && gpuConfig[hpc] && gpuConfig[hpc][gpu]) {
+    return gpuConfig[hpc][gpu].partition;
+  }
+  return clusters[hpc]?.partition || null;
+}
+
+/**
  * Get partition limits for a cluster and GPU type
+ * Uses dynamic limits from SLURM with fallback to config
+ *
  * @param {string} hpc - Cluster name
  * @param {string} gpu - GPU type ('' for none)
  * @returns {Object} Partition limits { maxCpus, maxMemMB, maxTime }
  */
 function getPartitionLimits(hpc, gpu = '') {
+  const partition = getPartitionName(hpc, gpu);
+  if (!partition) return null;
+
+  // Try dynamic limits first (from SLURM via SSH)
+  const dynamicLimits = dynamicPartitions.getPartitionLimits(hpc, partition);
+  if (dynamicLimits && dynamicLimits.maxCpus && dynamicLimits.maxMemMB && dynamicLimits.maxTime) {
+    return dynamicLimits;
+  }
+
+  // Fall back to hardcoded config values
   const clusterLimits = partitionLimits[hpc];
   if (!clusterLimits) return null;
-
-  // Determine partition based on GPU selection
-  let partition;
-  if (gpu && gpuConfig[hpc] && gpuConfig[hpc][gpu]) {
-    partition = gpuConfig[hpc][gpu].partition;
-  } else {
-    partition = clusters[hpc].partition;
-  }
 
   return clusterLimits[partition] || null;
 }

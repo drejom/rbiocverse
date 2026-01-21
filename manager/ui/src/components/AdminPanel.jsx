@@ -54,7 +54,7 @@ const MarkdownContent = memo(React.forwardRef(function MarkdownContent({ content
 /**
  * Renders widgets into their placeholder elements using React portals
  */
-function WidgetPortals({ widgets, containerRef, contentKey, health, history }) {
+function WidgetPortals({ widgets, containerRef, contentKey, health, history, partitions, onRefreshPartitions, isRefreshingPartitions }) {
   const [mountPoints, setMountPoints] = useState([]);
   const { getAuthHeader } = useAuth();
 
@@ -90,6 +90,9 @@ function WidgetPortals({ widgets, containerRef, contentKey, health, history }) {
             {...widget.props}
             health={health}
             history={history}
+            partitions={partitions}
+            onRefreshPartitions={onRefreshPartitions}
+            isRefreshing={isRefreshingPartitions}
             getAuthHeader={getAuthHeader}
           />,
           element
@@ -108,8 +111,45 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const [partitions, setPartitions] = useState({});
+  const [isRefreshingPartitions, setIsRefreshingPartitions] = useState(false);
   const contentRef = useRef(null);
   const { getAuthHeader } = useAuth();
+
+  // Fetch partition data
+  const fetchPartitions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stats/partitions');
+      const data = await res.json();
+      setPartitions(data.partitions || {});
+    } catch (err) {
+      console.error('Failed to fetch partitions:', err);
+    }
+  }, []);
+
+  // Refresh partitions (admin action)
+  const handleRefreshPartitions = useCallback(async () => {
+    setIsRefreshingPartitions(true);
+    try {
+      const res = await fetch('/api/admin/partitions/refresh', {
+        method: 'POST',
+        headers: getAuthHeader(),
+      });
+      const data = await res.json();
+      setPartitions(data.partitions || {});
+    } catch (err) {
+      console.error('Failed to refresh partitions:', err);
+    } finally {
+      setIsRefreshingPartitions(false);
+    }
+  }, [getAuthHeader]);
+
+  // Fetch partitions when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchPartitions();
+    }
+  }, [isOpen, fetchPartitions]);
 
   // Fetch menu structure on mount
   useEffect(() => {
@@ -399,6 +439,9 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }) {
                 contentKey={activeSection}
                 health={health}
                 history={history}
+                partitions={partitions}
+                onRefreshPartitions={handleRefreshPartitions}
+                isRefreshingPartitions={isRefreshingPartitions}
               />
             </>
           )}
