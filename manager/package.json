@@ -25,6 +25,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "express": "^4.18.2",
+    "find-process": "^2.0.0",
     "http-proxy": "^1.18.1",
     "joi": "^17.13.3",
     "winston": "^3.19.0"

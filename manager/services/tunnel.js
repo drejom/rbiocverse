@@ -3,9 +3,10 @@
  * Manages SSH tunnels to HPC compute nodes
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const net = require('net');
 const http = require('http');
+const findProcess = require('find-process').default;
 const { config, clusters, ides } = require('../config');
 const { log } = require('../lib/logger');
 
@@ -14,8 +15,10 @@ class TunnelService {
     // Map of session key (user-hpc-ide) to tunnel process
     this.tunnels = new Map();
 
-    // Kill any orphaned SSH tunnel processes on startup
-    this.cleanupOrphanedTunnels();
+    // Kill any orphaned SSH tunnel processes on startup (async, fire-and-forget)
+    this.cleanupOrphanedTunnels().catch(e => {
+      log.warn('Orphan cleanup failed', { error: e.message });
+    });
   }
 
   /**
@@ -34,8 +37,9 @@ class TunnelService {
   /**
    * Kill orphaned SSH tunnel processes from previous server runs
    * These are SSH processes forwarding to IDE ports that weren't cleaned up
+   * Uses find-process for cross-platform process detection
    */
-  cleanupOrphanedTunnels() {
+  async cleanupOrphanedTunnels() {
     const idePorts = Object.values(ides).map(ide => ide.port);
     const additionalPorts = config.additionalPorts || [];
     const allPorts = [...new Set([...idePorts, ...additionalPorts])];
@@ -45,28 +49,27 @@ class TunnelService {
 
     for (const port of allPorts) {
       try {
-        // Find SSH processes listening on this port
-        // Use portable xargs pattern (xargs -r is GNU-only, not available on macOS)
-        const result = execSync(
-          `lsof -i :${port} -t 2>/dev/null | xargs sh -c 'test -n "$*" && ps -o pid=,comm= "$@"' sh 2>/dev/null | grep ssh | awk '{print $1}'`,
-          { encoding: 'utf8', timeout: 5000 }
-        ).trim();
+        // Find processes listening on this port
+        const processes = await findProcess('port', port);
 
-        if (result) {
-          const pids = result.split('\n').filter(Boolean);
-          for (const pid of pids) {
-            try {
-              process.kill(parseInt(pid, 10), 'SIGTERM');
-              log.tunnel(`Killed orphaned SSH tunnel`, { pid, port });
-              killed++;
-            } catch (e) {
-              log.warn(`Failed to kill orphaned tunnel`, { pid, port, error: e.message });
-              failed++;
-            }
+        // Filter to SSH processes only
+        const sshProcesses = processes.filter(p =>
+          p.name && p.name.toLowerCase().includes('ssh')
+        );
+
+        for (const proc of sshProcesses) {
+          try {
+            process.kill(proc.pid, 'SIGTERM');
+            log.tunnel(`Killed orphaned SSH tunnel`, { pid: proc.pid, name: proc.name, port });
+            killed++;
+          } catch (e) {
+            log.warn(`Failed to kill orphaned tunnel`, { pid: proc.pid, port, error: e.message });
+            failed++;
           }
         }
       } catch (e) {
-        // No processes found or command failed - that's fine
+        // find-process failed for this port - continue with others
+        log.debugFor('tunnel', `Failed to check port for orphans`, { port, error: e.message });
       }
     }
 
@@ -222,11 +225,16 @@ class TunnelService {
     log.tunnel(`Starting: localhost:{${allPorts}} -> ${node}:{${allPorts}}${remoteInfo}`, { hpc: hpcName, ide, host: cluster.host });
     log.debugFor('tunnel', 'spawn args', { portForwards, host: cluster.host, localPort, remotePort });
 
+    // Tunnels use dedicated SSH processes (ControlMaster=no) because:
+    // - HpcService uses ControlMaster=auto for short-lived SSH commands
+    // - Tunnels are long-lived and tracked explicitly in this.tunnels
+    // - Sharing a control connection could cause unexpected teardowns
+    // - Our tunnel lifecycle/orphan cleanup requires dedicated processes
     const tunnel = spawn('ssh', [
       '-o', 'StrictHostKeyChecking=no',
       '-o', 'ServerAliveInterval=30',
       '-o', 'ExitOnForwardFailure=yes',
-      '-o', 'ControlMaster=no',  // Don't use SSH multiplexing - we manage our own tunnels
+      '-o', 'ControlMaster=no',
       '-N',
       ...portForwards,
       `${config.hpcUser}@${cluster.host}`
@@ -247,10 +255,10 @@ class TunnelService {
       } else {
         log.ssh(line, { hpc: hpcName, ide });
         // Capture meaningful errors for user-facing message
+        // Note: "Connection refused" is handled above as expected for dev servers
         if (line.includes('Address already in use') ||
             line.includes('Permission denied') ||
             line.includes('Host key verification') ||
-            line.includes('Connection refused') ||
             line.includes('No route to host') ||
             line.includes('Could not resolve')) {
           lastError = line;

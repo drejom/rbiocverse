@@ -22,10 +22,11 @@ describe('TunnelService', () => {
     mockTunnelProcess.exitCode = null;
     mockTunnelProcess.stderr = new EventEmitter();
 
-    // Stub spawn and execSync BEFORE requiring TunnelService
+    // Stub spawn BEFORE requiring TunnelService
     spawnStub = sinon.stub(require('child_process'), 'spawn').returns(mockTunnelProcess);
-    // Stub execSync used by cleanupOrphanedTunnels() - return empty (no orphans)
-    sinon.stub(require('child_process'), 'execSync').returns('');
+    // Stub find-process used by cleanupOrphanedTunnels() - return empty (no orphans)
+    const findProcess = require('find-process');
+    sinon.stub(findProcess, 'default').callsFake(() => Promise.resolve([]));
 
     // Now require TunnelService - it will use the stubbed spawn/execSync
     TunnelService = require('../../services/tunnel');
