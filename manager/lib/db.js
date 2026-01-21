@@ -191,6 +191,7 @@ function initializeDb(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_session_history_ended ON session_history(ended_at);
     CREATE INDEX IF NOT EXISTS idx_cluster_health_hpc_ts ON cluster_health(hpc, timestamp);
     CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user);
+    CREATE INDEX IF NOT EXISTS idx_partition_limits_updated ON partition_limits(updated_at);
   `);
 
   // Run migrations for existing databases (add new columns if they don't exist)

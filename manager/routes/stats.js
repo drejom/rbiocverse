@@ -226,6 +226,26 @@ router.get('/queue/:cluster', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * Transform partition limits for public API responses
+ * @param {Object} limits - Raw partition limits from DB
+ * @returns {Object} Transformed object for API response
+ */
+function transformPartitionForApi(limits) {
+  return {
+    isDefault: limits.isDefault,
+    maxCpus: limits.maxCpus,
+    maxMemGB: limits.maxMemMB ? Math.floor(limits.maxMemMB / 1024) : null,
+    maxMemMB: limits.maxMemMB,
+    maxTime: limits.maxTime,
+    defaultTime: limits.defaultTime,
+    gpuType: limits.gpuType || null,
+    gpuCount: limits.gpuCount || null,
+    restricted: limits.restricted,
+    restrictionReason: limits.restrictionReason || null,
+  };
+}
+
+/**
  * GET /api/stats/partitions
  * Partition limits for all clusters (public)
  *
@@ -240,18 +260,7 @@ router.get('/partitions', asyncHandler(async (req, res) => {
   for (const [cluster, clusterPartitions] of Object.entries(allPartitions)) {
     result[cluster] = {};
     for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
-      result[cluster][partitionName] = {
-        isDefault: limits.isDefault,
-        maxCpus: limits.maxCpus,
-        maxMemGB: limits.maxMemMB ? Math.floor(limits.maxMemMB / 1024) : null,
-        maxMemMB: limits.maxMemMB,
-        maxTime: limits.maxTime,
-        defaultTime: limits.defaultTime,
-        gpuType: limits.gpuType || null,
-        gpuCount: limits.gpuCount || null,
-        restricted: limits.restricted,
-        restrictionReason: limits.restrictionReason || null,
-      };
+      result[cluster][partitionName] = transformPartitionForApi(limits);
     }
   }
 
@@ -281,18 +290,7 @@ router.get('/partitions/:cluster', asyncHandler(async (req, res) => {
   // Transform for API response
   const result = {};
   for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
-    result[partitionName] = {
-      isDefault: limits.isDefault,
-      maxCpus: limits.maxCpus,
-      maxMemGB: limits.maxMemMB ? Math.floor(limits.maxMemMB / 1024) : null,
-      maxMemMB: limits.maxMemMB,
-      maxTime: limits.maxTime,
-      defaultTime: limits.defaultTime,
-      gpuType: limits.gpuType || null,
-      gpuCount: limits.gpuCount || null,
-      restricted: limits.restricted,
-      restrictionReason: limits.restrictionReason || null,
-    };
+    result[partitionName] = transformPartitionForApi(limits);
   }
 
   res.json({
