@@ -3,7 +3,7 @@
  * Contains IDE sessions, launch form, and health indicators
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Play } from 'lucide-react';
+import { Play, Square } from 'lucide-react';
 import { HealthBars } from './HealthBar';
 import ReleaseSelector from './ReleaseSelector';
 import IdeSelector from './IdeSelector';
@@ -12,6 +12,7 @@ import { RunningSession, PendingSession } from './IdeSession';
 
 export function ClusterCard({
   hpc,
+  user,
   ideStatuses,
   health,
   history,
@@ -33,6 +34,8 @@ export function ClusterCard({
     mem: config.defaultMem || '40G',
     time: config.defaultTime || '12:00:00',
   });
+  const [isStoppingAll, setIsStoppingAll] = useState(false);
+  const [stopAllError, setStopAllError] = useState(null);
 
   // Sync default release when it becomes available
   useEffect(() => {
@@ -129,6 +132,43 @@ export function ClusterCard({
     });
   }, [hpc, selectedIde, formValues, selectedRelease, selectedGpu, onLaunch]);
 
+  // Count of running + pending jobs (for Stop All button visibility)
+  const activeJobCount = runningIdes.length + pendingIdes.length;
+
+  // Handle stop all jobs
+  const handleStopAll = useCallback(async () => {
+    if (!confirm(`Stop all ${activeJobCount} jobs on ${hpc.charAt(0).toUpperCase() + hpc.slice(1)}?`)) {
+      return;
+    }
+
+    setIsStoppingAll(true);
+    setStopAllError(null);
+
+    try {
+      const res = await fetch(`/api/stop-all/${hpc}`, { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to stop jobs');
+      }
+
+      if (data.failed?.length > 0) {
+        // Some jobs failed to cancel - show which ones
+        setStopAllError(`Failed to stop ${data.failed.length} job(s): ${data.failed.join(', ')}`);
+      }
+
+      // Refresh the UI by calling onStop without cancel (just clear state)
+      // The API already cleared sessions and invalidated cache
+      // Trigger a refresh by calling onStop for each running IDE with cancelJob=false
+      // Actually, we should just trigger a status refresh
+      window.dispatchEvent(new CustomEvent('refresh-status'));
+    } catch (e) {
+      setStopAllError(e.message);
+    } finally {
+      setIsStoppingAll(false);
+    }
+  }, [hpc, activeJobCount]);
+
   // Check if any IDEs are available to launch
   const canLaunch = useMemo(() => {
     return availableIdesForRelease.some((ide) => !runningIdeNames.includes(ide));
@@ -159,6 +199,7 @@ export function ClusterCard({
             status={status}
             ides={ides}
             onStop={onStop}
+            stopping={isStoppingAll || !!stoppingJobs[`${user?.username}-${hpc}-${ide}`]}
           />
         ))}
 
@@ -175,9 +216,26 @@ export function ClusterCard({
                 ides={ides}
                 onConnect={onConnect}
                 onStop={onStop}
-                stopping={!!stoppingJobs[`${hpc}-${ide}`]}
+                stopping={isStoppingAll || !!stoppingJobs[`${user?.username}-${hpc}-${ide}`]}
               />
             ))}
+          </div>
+        )}
+
+        {/* Stop All Jobs button - only show when >1 job */}
+        {activeJobCount > 1 && (
+          <div className="stop-all-section">
+            {stopAllError && (
+              <div className="error-message small">{stopAllError}</div>
+            )}
+            <button
+              className="btn btn-danger btn-sm stop-all-btn"
+              onClick={handleStopAll}
+              disabled={isStoppingAll}
+            >
+              <Square className="icon-sm" />
+              {isStoppingAll ? 'Stopping...' : `Stop All Jobs (${activeJobCount})`}
+            </button>
           </div>
         )}
 

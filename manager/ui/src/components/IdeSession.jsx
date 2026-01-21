@@ -70,7 +70,7 @@ export function RunningSession({
   );
 }
 
-export function PendingSession({ hpc, ide, status, ides, onStop }) {
+export function PendingSession({ hpc, ide, status, ides, onStop, stopping }) {
   const ideInfo = ides[ide] || { name: ide };
 
   return (
@@ -80,17 +80,28 @@ export function PendingSession({ hpc, ide, status, ides, onStop }) {
           <i className={`${ideIcons[ide] || 'devicon-nodejs-plain'} icon-sm`} />
           {ideInfo.name}
         </span>
-        <span className="spinner" />
+        {!stopping && <span className="spinner" />}
       </div>
-      <div className="cluster-info">Waiting for resources...</div>
-      {status.startTime && (
-        <div className="estimated-start">Est: {status.startTime}</div>
+      {stopping ? (
+        <div className="stop-progress">
+          <div className="stop-progress-text">Cancelling job...</div>
+          <div className="stop-progress-bar">
+            <div className="stop-progress-fill" />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="cluster-info">Waiting for resources...</div>
+          {status.startTime && (
+            <div className="estimated-start">Est: {status.startTime}</div>
+          )}
+          <div className="btn-group btn-group-sm">
+            <button className="btn btn-danger btn-sm" onClick={() => onStop(hpc, ide)}>
+              <X className="icon-sm" /> Cancel
+            </button>
+          </div>
+        </>
       )}
-      <div className="btn-group btn-group-sm">
-        <button className="btn btn-danger btn-sm" onClick={() => onStop(hpc, ide)}>
-          <X className="icon-sm" /> Cancel
-        </button>
-      </div>
     </div>
   );
 }

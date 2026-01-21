@@ -14,8 +14,9 @@ const router = express.Router();
 router.use(express.json());
 const HpcService = require('../services/hpc');
 const TunnelService = require('../services/tunnel');
-const { validateSbatchInputs } = require('../lib/validation');
+const { validateSbatchInputs, validateHpcName } = require('../lib/validation');
 const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters } = require('../config');
 const { log } = require('../lib/logger');
 const { createClusterCache } = require('../lib/cache');
@@ -76,12 +77,13 @@ function invalidateStatusCache(cluster = null) {
  * @param {string} node - Compute node name
  * @param {string} ide - IDE type
  * @param {Function} onExit - Callback when tunnel exits
+ * @param {string} user - Username for session tracking (multi-user support)
  * @returns {Promise<Object>} Tunnel process
  */
-async function startTunnelWithPortDiscovery(hpc, node, ide, onExit) {
-  const hpcService = new HpcService(hpc);
+async function startTunnelWithPortDiscovery(hpc, node, ide, onExit, user) {
+  const hpcService = new HpcService(hpc, user);
   const remotePort = await hpcService.getIdePort(ide);
-  return tunnelService.start(hpc, node, ide, onExit, { remotePort });
+  return tunnelService.start(hpc, node, ide, onExit, { remotePort, user });
 }
 
 /**
@@ -90,10 +92,11 @@ async function startTunnelWithPortDiscovery(hpc, node, ide, onExit) {
  * @param {Object} session - Session object with jobId
  * @param {string} hpc - HPC cluster name
  * @param {string} ide - IDE type
+ * @param {string} user - Username for SSH connection
  * @returns {Promise<boolean>} True if job exists, false if stale
  */
-async function verifyJobExists(session, hpc, ide) {
-  const hpcService = new HpcService(hpc);
+async function verifyJobExists(session, hpc, ide, user) {
+  const hpcService = new HpcService(hpc, user);
   const jobInfo = await hpcService.getJobInfo(ide);
   return jobInfo && jobInfo.jobId === session.jobId;
 }
@@ -178,6 +181,13 @@ async function fetchClusterStatus(stateManager) {
  * @returns {express.Router} Configured router
  */
 function createApiRouter(stateManager) {
+  // Set up callback to stop tunnels when sessions are cleared
+  // This handles: job expiry (walltime), reconcile cleanup, manual clear
+  stateManager.onSessionCleared = (user, hpc, ide) => {
+    log.tunnel('Session cleared, stopping tunnel', { user, hpc, ide });
+    tunnelService.stop(hpc, ide, user);
+  };
+
   // Helper: build session key (user-hpc-ide format)
   function buildSessionKey(user, hpc, ide) {
     const effectiveUser = user || config.hpcUser;
@@ -252,7 +262,7 @@ function createApiRouter(stateManager) {
     }
 
     try {
-      const hpcService = new HpcService(hpc);
+      const hpcService = new HpcService(hpc, user);
       // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
       const result = await hpcService.checkPorts(session.node, [5500, 3838]);
       const liveServer = result[5500] || false;
@@ -449,7 +459,7 @@ function createApiRouter(stateManager) {
 
       // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
-        const jobExists = await verifyJobExists(session, hpc, ide);
+        const jobExists = await verifyJobExists(session, hpc, ide, user);
 
         if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
@@ -465,7 +475,7 @@ function createApiRouter(stateManager) {
                   session.status = 'idle';
                 }
                 session.tunnelProcess = null;
-              });
+              }, user);
             } catch (error) {
               stateManager.releaseLock(lockName);
               return res.status(500).json({ error: error.message });
@@ -501,7 +511,7 @@ function createApiRouter(stateManager) {
         walltime: time,
       });
 
-      const hpcService = new HpcService(hpc);
+      const hpcService = new HpcService(hpc, user);
 
       // Use local variables to collect job data (avoid mutating session directly)
       let jobId, token, node;
@@ -546,7 +556,7 @@ function createApiRouter(stateManager) {
         if (currentSession?.status === 'running') {
           stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
         }
-      });
+      }, user);
 
       await stateManager.updateSession(user, hpc, ide, {
         status: 'running',
@@ -692,7 +702,7 @@ function createApiRouter(stateManager) {
       // If session thinks it's running, verify with SLURM before reconnecting
       if (session.status === 'running') {
         sendProgress('verifying', 'Checking job status...');
-        const jobExists = await verifyJobExists(session, hpc, ide);
+        const jobExists = await verifyJobExists(session, hpc, ide, user);
 
         if (!jobExists) {
           // Job is gone (walltime expired, cancelled, etc) - clear stale session
@@ -720,7 +730,7 @@ function createApiRouter(stateManager) {
                   session.status = 'idle';
                 }
                 session.tunnelProcess = null;
-              });
+              }, user);
             } catch (error) {
               stateManager.releaseLock(lockName);
               return sendError(error.message);
@@ -768,7 +778,7 @@ function createApiRouter(stateManager) {
       // Step 1: Connecting
       sendProgress('connecting', 'Connecting...');
 
-      const hpcService = new HpcService(hpc);
+      const hpcService = new HpcService(hpc, user);
 
       // Use local variables to collect job data (avoid mutating session directly)
       let jobId, token, node;
@@ -875,7 +885,7 @@ function createApiRouter(stateManager) {
         if (currentSession?.status === 'running') {
           stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
         }
-      });
+      }, user);
 
       log.state('Saving session with releaseVersion', {
         user, hpc, ide, jobId, node,
@@ -949,9 +959,9 @@ function createApiRouter(stateManager) {
     // Stop current active tunnel if switching to different session
     const activeSession = stateManager.getActiveSession();
     if (activeSession) {
-      const { hpc: activeHpc, ide: activeIde } = activeSession;
+      const { user: activeUser, hpc: activeHpc, ide: activeIde } = activeSession;
       if (activeHpc !== hpc || activeIde !== ide) {
-        tunnelService.stop(activeHpc, activeIde);
+        tunnelService.stop(activeHpc, activeIde, activeUser);
       }
     }
 
@@ -963,7 +973,7 @@ function createApiRouter(stateManager) {
             session.status = 'idle';
           }
           session.tunnelProcess = null;
-        });
+        }, user);
       }
 
       await stateManager.setActiveSession(user, hpc, ide);
@@ -990,13 +1000,13 @@ function createApiRouter(stateManager) {
     const session = stateManager.getSession(user, hpc, ide);
 
     // Stop tunnel if exists
-    tunnelService.stop(hpc, ide);
+    tunnelService.stop(hpc, ide, user);
 
     // Cancel SLURM job if requested
     let jobCancelled = false;
     if (cancelJob) {
       try {
-        const hpcService = new HpcService(hpc);
+        const hpcService = new HpcService(hpc, user);
 
         // Get job ID from session or query SLURM directly
         let jobId = session?.jobId;
@@ -1087,11 +1097,11 @@ function createApiRouter(stateManager) {
       sendProgress('cancelling', 'Stopping...');
 
       // Stop tunnel if exists
-      tunnelService.stop(hpc, ide);
+      tunnelService.stop(hpc, ide, user);
 
       // Cancel SLURM job
       let jobCancelled = false;
-      const hpcService = new HpcService(hpc);
+      const hpcService = new HpcService(hpc, user);
 
       // Get job ID from session or query SLURM directly
       let jobId = session?.jobId;
@@ -1129,6 +1139,68 @@ function createApiRouter(stateManager) {
       sendError(error.message);
     }
   });
+
+  /**
+   * POST /api/stop-all/:hpc
+   * Stop all user's jobs on a cluster (batch operation)
+   * More efficient than individual stops when user has multiple jobs
+   */
+  router.post('/stop-all/:hpc', asyncHandler(async (req, res) => {
+    const { hpc } = req.params;
+    validateHpcName(hpc);
+
+    const user = getRequestUser(req);
+    const sessions = stateManager.getSessionsForUser(user);
+
+    // Collect running/pending jobs on this cluster
+    const jobsToCancel = [];
+    const sessionKeys = [];
+
+    for (const [sessionKey, session] of Object.entries(sessions)) {
+      if (!session?.jobId) continue;
+      const parsed = parseSessionKey(sessionKey);
+      if (!parsed || parsed.hpc !== hpc) continue;
+      if (session.status !== 'running' && session.status !== 'pending') continue;
+
+      jobsToCancel.push(session.jobId);
+      sessionKeys.push(sessionKey);
+    }
+
+    if (jobsToCancel.length === 0) {
+      return res.json({ status: 'ok', cancelled: 0, failed: [], message: 'No jobs to cancel' });
+    }
+
+    // Batch cancel
+    const hpcService = new HpcService(hpc, user);
+    const result = await hpcService.cancelJobs(jobsToCancel);
+
+    // Clear sessions for cancelled jobs (stop tunnels too)
+    for (const sessionKey of sessionKeys) {
+      const parsed = parseSessionKey(sessionKey);
+      if (parsed) {
+        const { hpc: sessionHpc, ide } = parsed;
+        // Stop tunnel if exists
+        tunnelService.stop(sessionHpc, ide, user);
+        await stateManager.clearSession(user, sessionHpc, ide, { endReason: 'cancelled' });
+      }
+    }
+
+    // Invalidate cache and wait for SLURM to process
+    if (result.cancelled.length > 0) {
+      invalidateStatusCache(hpc);
+      await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
+    }
+
+    log.job('Batch stop completed', { user, hpc, count: result.cancelled.length, failed: result.failed.length });
+    log.audit('Batch session stop', { user, hpc, cancelled: result.cancelled.length, failed: result.failed.length });
+
+    res.json({
+      status: 'ok',
+      cancelled: result.cancelled.length,
+      failed: result.failed,
+      jobIds: result.cancelled,
+    });
+  }));
 
   return router;
 }

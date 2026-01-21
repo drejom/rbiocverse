@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } = require('../config');
 const { log } = require('../lib/logger');
+const { withClusterQueue } = require('../lib/ssh-queue');
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
 let getUserPrivateKey = null;
@@ -21,6 +22,10 @@ function loadAuthModule() {
 
 // Directory for SSH key files (inside data volume, persisted across restarts)
 const SSH_KEY_DIR = path.join(__dirname, '..', 'data', 'ssh-keys');
+
+// Directory for SSH ControlMaster sockets (per-user-cluster multiplexing)
+// Use /tmp for short paths (Unix socket paths limited to ~104 bytes)
+const SSH_SOCKET_DIR = '/tmp/rbiocverse-ssh';
 
 /**
  * Get or create a key file for a user
@@ -143,16 +148,21 @@ class HpcService {
   }
 
   /**
-   * Execute SSH command on cluster
-   * Supports multi-line commands (heredocs) via stdin
-   * Uses per-user SSH key if available, falls back to shared mounted key
+   * Execute SSH command directly (bypasses queue)
+   * Internal method - use sshExec() for all external calls
    * @param {string} command - Command to execute
    * @returns {Promise<string>} Command output
+   * @private
    */
-  sshExec(command) {
+  _sshExecDirect(command) {
     return new Promise((resolve, reject) => {
       log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
       log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
+
+      // Ensure socket directory exists
+      if (!fs.existsSync(SSH_SOCKET_DIR)) {
+        fs.mkdirSync(SSH_SOCKET_DIR, { mode: 0o700, recursive: true });
+      }
 
       // Check for per-user SSH key
       let keyOption = '';
@@ -166,9 +176,15 @@ class HpcService {
         }
       }
 
+      // SSH ControlMaster for connection multiplexing
+      // Socket path: data/ssh-sockets/{user}-{cluster} (user defaults to hpcUser in single-user mode)
+      const effectiveUser = this.username || config.hpcUser;
+      const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveUser}-${this.clusterName}`);
+      const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
+
       // Use bash -s to read script from stdin - handles heredocs cleanly
       // Note: keyOption includes trailing space when set, so concatenation is safe
-      const sshCmd = `ssh ${keyOption}-o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
+      const sshCmd = `ssh ${keyOption}${controlOptions} -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
 
       const child = exec(
         sshCmd,
@@ -201,6 +217,17 @@ class HpcService {
       child.stdin.write(command);
       child.stdin.end();
     });
+  }
+
+  /**
+   * Execute SSH command on cluster (queued)
+   * All SSH calls are serialized per cluster to prevent race conditions
+   * Uses per-user SSH key if available, falls back to shared mounted key
+   * @param {string} command - Command to execute
+   * @returns {Promise<string>} Command output
+   */
+  sshExec(command) {
+    return withClusterQueue(this.clusterName, () => this._sshExecDirect(command));
   }
 
   /**
@@ -726,6 +753,42 @@ SLURM_SCRIPT`;
   async cancelJob(jobId) {
     log.job(`Cancelling`, { cluster: this.clusterName, jobId });
     await this.sshExec(`scancel ${jobId}`);
+  }
+
+  /**
+   * Cancel multiple SLURM jobs in a single SSH call
+   * More efficient than individual cancelJob() calls when stopping multiple jobs
+   * @param {string[]} jobIds - Array of job IDs to cancel
+   * @returns {Promise<{cancelled: string[], failed: string[]}>} Result with cancelled and failed job IDs
+   */
+  async cancelJobs(jobIds) {
+    if (!Array.isArray(jobIds) || jobIds.length === 0) {
+      return { cancelled: [], failed: [] };
+    }
+
+    // Single job - use regular cancelJob for simplicity
+    if (jobIds.length === 1) {
+      try {
+        await this.cancelJob(jobIds[0]);
+        return { cancelled: jobIds, failed: [] };
+      } catch (e) {
+        log.warn('Single job cancel failed', { cluster: this.clusterName, jobId: jobIds[0], error: e.message });
+        return { cancelled: [], failed: jobIds };
+      }
+    }
+
+    // Multiple jobs - batch scancel
+    const jobList = jobIds.join(' ');
+    try {
+      await this.sshExec(`scancel ${jobList}`);
+      log.job('Batch cancelled', { cluster: this.clusterName, jobIds, count: jobIds.length });
+      return { cancelled: jobIds, failed: [] };
+    } catch (e) {
+      // scancel doesn't provide per-job error info, so we can't determine which failed
+      // Return all as failed and let the caller retry individually if needed
+      log.warn('Batch cancel failed', { cluster: this.clusterName, jobIds, error: e.message });
+      return { cancelled: [], failed: jobIds };
+    }
   }
 
   /**

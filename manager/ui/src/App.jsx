@@ -76,7 +76,7 @@ function Launcher() {
   // Note: Using native confirm() is intentional - it's simple, accessible, and
   // sufficient for this low-frequency action. A custom modal would add complexity.
   const handleStop = useCallback((hpc, ide) => {
-    const key = `${hpc}-${ide}`;
+    const key = `${user?.username}-${hpc}-${ide}`;
     const ideName = config.ides?.[ide]?.name || ide;
 
     if (stoppingJobs[key]) return;
@@ -120,7 +120,7 @@ function Launcher() {
       clearTimeout(timeout);
       cleanup();
     };
-  }, [config, stoppingJobs, refresh]);
+  }, [user, config, stoppingJobs, refresh]);
 
   if (loading && !config.ides) {
     return (
@@ -175,6 +175,7 @@ function Launcher() {
           <ClusterCard
             key={hpc}
             hpc={hpc}
+            user={user}
             ideStatuses={status[hpc]}
             health={health[hpc]}
             history={history[hpc]}

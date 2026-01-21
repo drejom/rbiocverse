@@ -163,6 +163,10 @@ class StateManager {
     // Per-user SLURM accounts (fetched on first access for fairshare queries)
     // Map: username -> { account, fetchedAt }
     this.userAccounts = new Map();
+
+    // Callback for when sessions are cleared (for tunnel cleanup)
+    // Signature: (user, hpc, ide) => void
+    this.onSessionCleared = null;
   }
 
   /**
@@ -409,6 +413,10 @@ class StateManager {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
           this._clearActiveSessionIfMatches(user, hpc, ide);
           delete this.state.sessions[sessionKey];
+          // Notify listener (e.g., for tunnel cleanup)
+          if (this.onSessionCleared) {
+            this.onSessionCleared(user, hpc, ide);
+          }
         }
       }
     }
@@ -582,6 +590,11 @@ class StateManager {
     this._clearActiveSessionIfMatches(user, hpc, ide);
     delete this.state.sessions[sessionKey];
     await this.save();
+
+    // Notify listener (e.g., for tunnel cleanup)
+    if (this.onSessionCleared) {
+      this.onSessionCleared(user, hpc, ide);
+    }
   }
 
   /**
