@@ -105,21 +105,17 @@ function parsePartitionLine(line) {
     restrictionReason = `DenyAccounts=${denyAccounts}`;
   }
 
-  // Handle UNLIMITED values by deriving from totals
-  if (maxCpus === 'UNLIMITED' && totalCpus && totalNodes) {
-    maxCpus = Math.floor(totalCpus / totalNodes);
-  } else if (maxCpus !== 'UNLIMITED' && maxCpus) {
-    maxCpus = parseInt(maxCpus, 10);
+  // Handle UNLIMITED values by deriving from totals (with division-by-zero protection)
+  if (maxCpus === 'UNLIMITED') {
+    maxCpus = (totalCpus && totalNodes > 0) ? Math.floor(totalCpus / totalNodes) : null;
   } else {
-    maxCpus = null;
+    maxCpus = maxCpus ? parseInt(maxCpus, 10) : null;
   }
 
-  if (maxMemMB === 'UNLIMITED' && totalMemMB && totalNodes) {
-    maxMemMB = Math.floor(totalMemMB / totalNodes);
-  } else if (maxMemMB !== 'UNLIMITED' && maxMemMB) {
-    maxMemMB = parseInt(maxMemMB, 10);
+  if (maxMemMB === 'UNLIMITED') {
+    maxMemMB = (totalMemMB && totalNodes > 0) ? Math.floor(totalMemMB / totalNodes) : null;
   } else {
-    maxMemMB = null;
+    maxMemMB = maxMemMB ? parseInt(maxMemMB, 10) : null;
   }
 
   // Handle UNLIMITED time - cap at 14 days
@@ -258,15 +254,17 @@ async function refreshClusterPartitions(clusterName) {
  * @returns {Promise<Object>} Results per cluster
  */
 async function refreshAllPartitions() {
-  const results = {};
-
   // Fetch from all clusters in parallel
   const clusterNames = Object.keys(clusters);
-  const promises = clusterNames.map(async (name) => {
-    results[name] = await refreshClusterPartitions(name);
-  });
+  const resultsArray = await Promise.all(
+    clusterNames.map(name => refreshClusterPartitions(name))
+  );
 
-  await Promise.all(promises);
+  // Build results object after all promises resolve (avoids race condition)
+  const results = {};
+  clusterNames.forEach((name, index) => {
+    results[name] = resultsArray[index];
+  });
 
   return results;
 }

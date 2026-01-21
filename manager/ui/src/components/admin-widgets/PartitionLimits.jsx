@@ -3,18 +3,50 @@
  */
 import React from 'react';
 import { Cpu, MemoryStick, Clock, Zap, Lock, RefreshCw } from 'lucide-react';
+import { formatTime } from '../../hooks/useCountdown';
 
-function formatTime(slurmTime) {
+/**
+ * Parse SLURM time string to seconds
+ * Mirrors lib/helpers.js parseTimeToSeconds
+ */
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+
+  // MM:SS format
+  if (parts.length === 2) {
+    const [m, s] = parts;
+    return parseInt(m) * 60 + parseInt(s);
+  }
+
+  // HH:MM:SS or D-HH:MM:SS format
+  if (parts.length === 3) {
+    const [h, m, s] = parts;
+    if (h.includes('-')) {
+      const [days, hours] = h.split('-');
+      return parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(m) * 60 + parseInt(s);
+    }
+    return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s);
+  }
+  return null;
+}
+
+/**
+ * Format SLURM time string to human-readable
+ */
+function formatSlurmTime(slurmTime) {
   if (!slurmTime) return 'N/A';
-  const dayMatch = slurmTime.match(/^(\d+)-/);
-  if (dayMatch) {
-    return `${dayMatch[1]}d`;
+  const seconds = parseTimeToSeconds(slurmTime);
+  if (seconds === null) return slurmTime;
+
+  // For times >= 1 day, show days
+  if (seconds >= 86400) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
   }
-  const hourMatch = slurmTime.match(/^(\d+):/);
-  if (hourMatch) {
-    return `${hourMatch[1]}h`;
-  }
-  return slurmTime;
+
+  return formatTime(seconds);
 }
 
 function formatMemoryGB(gb) {
@@ -67,7 +99,7 @@ export function PartitionLimits({ cluster, partitions = {}, onRefreshPartitions,
                 <MemoryStick size={12} /> {formatMemoryGB(limits.maxMemGB)}
               </span>
               <span title="Max walltime">
-                <Clock size={12} /> {formatTime(limits.maxTime)}
+                <Clock size={12} /> {formatSlurmTime(limits.maxTime)}
               </span>
               {limits.gpuType && (
                 <span title={`${limits.gpuCount || 0}x ${limits.gpuType} GPU`}>
