@@ -1177,18 +1177,19 @@ function createApiRouter(stateManager) {
 
     // Clear sessions only for successfully cancelled jobs (stop tunnels too)
     // Jobs that failed to cancel keep their sessions so they can be retried
-    for (const jobId of result.cancelled) {
+    // Run in parallel for efficiency when multiple jobs cancelled
+    await Promise.all(result.cancelled.map(jobId => {
       const sessionKey = jobIdToSessionKey.get(jobId);
-      if (!sessionKey) continue;
+      if (!sessionKey) return;
 
       const parsed = parseSessionKey(sessionKey);
       if (parsed) {
         const { hpc: sessionHpc, ide } = parsed;
         // Stop tunnel if exists
         tunnelService.stop(sessionHpc, ide, user);
-        await stateManager.clearSession(user, sessionHpc, ide, { endReason: 'cancelled' });
+        return stateManager.clearSession(user, sessionHpc, ide, { endReason: 'cancelled' });
       }
-    }
+    }));
 
     // Invalidate cache and wait for SLURM to process
     if (result.cancelled.length > 0) {

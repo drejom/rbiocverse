@@ -766,18 +766,7 @@ SLURM_SCRIPT`;
       return { cancelled: [], failed: [] };
     }
 
-    // Single job - use regular cancelJob for simplicity
-    if (jobIds.length === 1) {
-      try {
-        await this.cancelJob(jobIds[0]);
-        return { cancelled: jobIds, failed: [] };
-      } catch (e) {
-        log.warn('Single job cancel failed', { cluster: this.clusterName, jobId: jobIds[0], error: e.message });
-        return { cancelled: [], failed: jobIds };
-      }
-    }
-
-    // Multiple jobs - batch scancel
+    // Batch scancel - works for single or multiple jobs
     const jobList = jobIds.join(' ');
     try {
       await this.sshExec(`scancel ${jobList}`);
