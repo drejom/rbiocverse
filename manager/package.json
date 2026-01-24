@@ -18,7 +18,7 @@
     "test:coverage": "NODE_ENV=test c8 mocha",
     "test:e2e": "NODE_ENV=test mocha 'test/e2e/**/*.test.{ts,js}' --timeout 60000",
     "test:all": "NODE_ENV=test mocha 'test/**/*.test.{ts,js}' --timeout 60000",
-    "prepare": ""
+    "prepare": "cd .. && husky manager/.husky"
   },
   "c8": {
     "reporter": [
@@ -44,14 +44,30 @@
     ]
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/chai": "^5.2.3",
+    "@types/express": "^5.0.6",
+    "@types/http-proxy": "^1.17.17",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.0.10",
+    "@types/sinon": "^21.0.0",
+    "@types/sinon-chai": "^4.0.0",
+    "@types/supertest": "^6.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
     "c8": "^9.0.0",
     "chai": "^4.3.10",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "mocha": "^12.0.0-beta-5",
+    "prettier": "^3.8.1",
     "puppeteer": "^24.34.0",
     "sinon": "^21.0.1",
     "sinon-chai": "^3.7.0",
     "supertest": "^6.3.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.1"
   }
 }
