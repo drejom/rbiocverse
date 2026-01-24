@@ -43,12 +43,12 @@ RUN apk del python3 make g++
 # Copy compiled TypeScript output
 COPY --from=builder /app/dist ./dist
 
-# Copy static content
-COPY --from=builder /app/content ./content
-COPY --from=builder /app/public ./public
+# Copy static content into dist/ (paths resolve relative to compiled server.js)
+COPY --from=builder /app/content ./dist/content
+COPY --from=builder /app/public ./dist/public
 
-# Copy built React UI
-COPY --from=builder /app/ui/dist ./ui/dist
+# Copy built React UI into dist/
+COPY --from=builder /app/ui/dist ./dist/ui/dist
 
 # Change ownership to apps user
 RUN chown -R apps:apps /app
