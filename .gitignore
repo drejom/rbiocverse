@@ -20,3 +20,4 @@ manager/scripts/.env.dev
 manager/data/*.db
 manager/data/*.db-wal
 manager/data/*.db-shm
+manager/dist/
