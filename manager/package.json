@@ -1,6 +1,6 @@
 {
   "name": "hpc-code-server-manager",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
   "main": "server.js",
   "scripts": {
