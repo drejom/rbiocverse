@@ -7,47 +7,58 @@
  * but currently just logs what would be sent.
  */
 
-const { log } = require('../lib/logger');
-const { errorLogger } = require('./ErrorLogger');
+import { log } from '../lib/logger';
+import { errorLogger, ErrorEntry } from './ErrorLogger';
 
-/**
- * AdminNotifier configuration
- * @typedef {Object} AdminNotifierConfig
- * @property {string} adminEmail - Admin email address
- * @property {string} smtpHost - SMTP server hostname
- * @property {number} smtpPort - SMTP server port
- * @property {string} smtpUser - SMTP username
- * @property {string} smtpPass - SMTP password
- * @property {string} fromAddress - From email address
- */
+interface AdminNotifierConfig {
+  adminEmail?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  fromAddress?: string;
+}
+
+interface ErrorSummary {
+  period: {
+    since: string;
+    until: string;
+  };
+  total: number;
+  byLevel: Record<string, number>;
+  byAction: Record<string, number>;
+  recent: ErrorEntry[];
+}
 
 class AdminNotifier {
-  constructor(config = {}) {
+  private adminEmail: string | undefined;
+  private smtpHost: string | undefined;
+  private smtpPort: number;
+  private smtpUser: string | undefined;
+  private smtpPass: string | undefined;
+  private fromAddress: string;
+  private lastDigestTime: Date | null = null;
+
+  constructor(config: AdminNotifierConfig = {}) {
     this.adminEmail = config.adminEmail || process.env.ADMIN_EMAIL;
     this.smtpHost = config.smtpHost || process.env.SMTP_HOST;
     this.smtpPort = config.smtpPort || parseInt(process.env.SMTP_PORT || '587', 10);
     this.smtpUser = config.smtpUser || process.env.SMTP_USER;
     this.smtpPass = config.smtpPass || process.env.SMTP_PASS;
     this.fromAddress = config.fromAddress || process.env.SMTP_FROM || 'rbiocverse@localhost';
-
-    // Track last digest time
-    this.lastDigestTime = null;
   }
 
   /**
    * Check if email is configured
-   * @returns {boolean}
    */
-  isConfigured() {
+  isConfigured(): boolean {
     return !!(this.adminEmail && this.smtpHost && this.smtpUser && this.smtpPass);
   }
 
   /**
    * Format error summary as plain text email
-   * @param {Object} summary - Error summary from ErrorLogger
-   * @returns {string} Email body
    */
-  formatDigestEmail(summary) {
+  formatDigestEmail(summary: ErrorSummary): string {
     const lines = [
       'rbiocverse Error Digest',
       '========================',
@@ -98,10 +109,8 @@ class AdminNotifier {
   /**
    * Send daily error digest
    * Should be called by a cron job or scheduled task
-   * @param {Date} since - Start of reporting period (default: 24h ago)
-   * @returns {Promise<boolean>} True if sent (or no errors to send)
    */
-  async sendDailyDigest(since = new Date(Date.now() - 24 * 60 * 60 * 1000)) {
+  async sendDailyDigest(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000)): Promise<boolean> {
     const summary = await errorLogger.getSummary(since);
 
     // Don't send if no errors
@@ -118,10 +127,8 @@ class AdminNotifier {
 
   /**
    * Send an immediate alert for critical errors
-   * @param {Object} entry - Error entry from ErrorLogger
-   * @returns {Promise<boolean>}
    */
-  async sendCriticalAlert(entry) {
+  async sendCriticalAlert(entry: ErrorEntry): Promise<boolean> {
     const subject = `[CRITICAL] rbiocverse: ${entry.action}`;
     const body = [
       'Critical Error Alert',
@@ -143,11 +150,8 @@ class AdminNotifier {
 
   /**
    * Send an email
-   * @param {string} subject - Email subject
-   * @param {string} body - Email body (plain text)
-   * @returns {Promise<boolean>} True if sent successfully
    */
-  async sendEmail(subject, body) {
+  async sendEmail(subject: string, body: string): Promise<boolean> {
     if (!this.adminEmail) {
       log.warn('ADMIN_EMAIL not configured, skipping notification');
       return false;
@@ -185,7 +189,7 @@ class AdminNotifier {
       this.lastDigestTime = new Date();
       return true;
     } catch (err) {
-      log.error('Failed to send admin email:', { error: err.message });
+      log.error('Failed to send admin email:', { error: (err as Error).message });
       return false;
     }
   }
@@ -194,4 +198,7 @@ class AdminNotifier {
 // Singleton instance
 const adminNotifier = new AdminNotifier();
 
+export { AdminNotifier, adminNotifier };
+
+// CommonJS compatibility for existing require() calls
 module.exports = { AdminNotifier, adminNotifier };

@@ -3,12 +3,22 @@
  * Ed25519 keypair generation with password-derived AES-256-GCM encryption at rest
  */
 
-const crypto = require('crypto');
-const { promisify } = require('util');
-const { log } = require('../logger');
+import crypto from 'crypto';
+import { promisify } from 'util';
+import { log } from '../logger';
 
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
-const scryptAsync = promisify(crypto.scrypt);
+const scryptAsync = promisify(crypto.scrypt) as (
+  password: crypto.BinaryLike,
+  salt: crypto.BinaryLike,
+  keylen: number,
+  options?: crypto.ScryptOptions
+) => Promise<Buffer>;
+
+interface SshKeypair {
+  publicKey: string;
+  privateKeyPem: string;
+}
 
 /**
  * Generate SSH keypair for user (async to avoid blocking event loop)
@@ -24,7 +34,7 @@ const scryptAsync = promisify(crypto.scrypt);
  * Private keys are encrypted (AES-256-GCM) with password-derived keys.
  * Only the user's password can decrypt their private key.
  */
-async function generateSshKeypair(username) {
+async function generateSshKeypair(username: string): Promise<SshKeypair> {
   // Use Ed25519 - modern, fast, secure, short keys
   const { publicKey, privateKey } = await generateKeyPairAsync('ed25519', {
     publicKeyEncoding: {
@@ -65,11 +75,11 @@ async function generateSshKeypair(username) {
 
 /**
  * Derive encryption key from password using scrypt
- * @param {string} password - User's password
- * @param {Buffer} salt - 32-byte random salt
- * @returns {Promise<Buffer>} 32-byte key suitable for AES-256-GCM
+ * @param password - User's password
+ * @param salt - 32-byte random salt
+ * @returns 32-byte key suitable for AES-256-GCM
  */
-async function deriveKeyFromPassword(password, salt) {
+async function deriveKeyFromPassword(password: string, salt: Buffer): Promise<Buffer> {
   // scrypt parameters: N=16384, r=8, p=1
   // Provides good security while keeping login <100ms
   return scryptAsync(password, salt, 32, { N: 16384, r: 8, p: 1 });
@@ -77,11 +87,11 @@ async function deriveKeyFromPassword(password, salt) {
 
 /**
  * Encrypt a private key using password-derived AES-256-GCM
- * @param {string} plaintext - PEM-encoded private key
- * @param {string} password - User's password for key derivation
- * @returns {Promise<string>} Encrypted string in format "enc:v2:<salt>:<iv>:<authTag>:<ciphertext>"
+ * @param plaintext - PEM-encoded private key
+ * @param password - User's password for key derivation
+ * @returns Encrypted string in format "enc:v2:<salt>:<iv>:<authTag>:<ciphertext>"
  */
-async function encryptPrivateKey(plaintext, password) {
+async function encryptPrivateKey(plaintext: string | null, password: string | null): Promise<string | null> {
   if (!plaintext || !password) return null;
 
   const salt = crypto.randomBytes(32);
@@ -99,11 +109,11 @@ async function encryptPrivateKey(plaintext, password) {
 
 /**
  * Decrypt a private key encrypted with password-derived AES-256-GCM
- * @param {string} encrypted - Encrypted string (v2 format or plaintext PEM for migration)
- * @param {string} password - User's password for key derivation
- * @returns {Promise<string|null>} PEM-encoded private key or null on failure
+ * @param encrypted - Encrypted string (v2 format or plaintext PEM for migration)
+ * @param password - User's password for key derivation
+ * @returns PEM-encoded private key or null on failure
  */
-async function decryptPrivateKey(encrypted, password) {
+async function decryptPrivateKey(encrypted: string | null, password: string | null): Promise<string | null> {
   if (!encrypted) return null;
 
   // Check if already plaintext (for backwards compatibility during migration)
@@ -134,7 +144,7 @@ async function decryptPrivateKey(encrypted, password) {
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (err) {
-      log.error('Failed to decrypt private key (v2)', { error: err.message });
+      log.error('Failed to decrypt private key (v2)', { error: (err as Error).message });
       return null;
     }
   }
@@ -143,6 +153,15 @@ async function decryptPrivateKey(encrypted, password) {
   return null;
 }
 
+export {
+  generateSshKeypair,
+  encryptPrivateKey,
+  decryptPrivateKey,
+  deriveKeyFromPassword,
+  SshKeypair,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   generateSshKeypair,
   encryptPrivateKey,

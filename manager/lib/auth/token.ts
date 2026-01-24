@@ -3,15 +3,24 @@
  * Simple token handling without external dependencies
  */
 
-const crypto = require('crypto');
-const { config } = require('../../config');
+import crypto from 'crypto';
+import { config } from '../../config';
+
+interface TokenPayload {
+  iat: number;
+  exp: number;
+  [key: string]: unknown;
+}
 
 /**
  * Generate a simple token
  * Format: base64(payload).base64(signature)
  */
-function generateToken(payload, expiresIn = config.sessionExpiryDays * 24 * 60 * 60) {
-  const data = {
+function generateToken(
+  payload: Record<string, unknown>,
+  expiresIn: number = config.sessionExpiryDays * 24 * 60 * 60
+): string {
+  const data: TokenPayload = {
     ...payload,
     iat: Date.now(),
     exp: Date.now() + expiresIn * 1000,
@@ -27,7 +36,7 @@ function generateToken(payload, expiresIn = config.sessionExpiryDays * 24 * 60 *
 /**
  * Verify and decode a token
  */
-function verifyToken(token) {
+function verifyToken(token: string | undefined | null): TokenPayload | null {
   if (!token) return null;
 
   const [payloadStr, signature] = token.split('.');
@@ -50,16 +59,23 @@ function verifyToken(token) {
 
   // Decode and check expiry
   try {
-    const payload = JSON.parse(Buffer.from(payloadStr, 'base64url').toString());
+    const payload = JSON.parse(Buffer.from(payloadStr, 'base64url').toString()) as TokenPayload;
     if (payload.exp && payload.exp < Date.now()) {
       return null; // Expired
     }
     return payload;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
 
+export {
+  generateToken,
+  verifyToken,
+  TokenPayload,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   generateToken,
   verifyToken,

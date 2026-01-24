@@ -9,28 +9,59 @@
  * - No master key - only the user's password can decrypt their key
  */
 
-const express = require('express');
+import express, { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+
 const router = express.Router();
-const crypto = require('crypto');
 
 // Parse JSON bodies for auth routes
 router.use(express.json());
-const { log } = require('../lib/logger');
-const { config } = require('../config');
-const { errorLogger } = require('../services/ErrorLogger');
+
+import { log } from '../lib/logger';
+import { config } from '../config';
+import { errorLogger } from '../services/ErrorLogger';
 
 // Import auth modules
-const { generateToken, verifyToken } = require('../lib/auth/token');
-const { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } = require('../lib/auth/ssh');
-const dbUsers = require('../lib/db/users');
-const { initializeDb } = require('../lib/db');
-const { checkAndMigrate } = require('../lib/db/migrate');
-const { setSessionKey, getSessionKey, clearSessionKey } = require('../lib/auth/session-keys');
-const { isAdmin } = require('../lib/auth/admin');
+import { generateToken, verifyToken, TokenPayload } from '../lib/auth/token';
+import { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } from '../lib/auth/ssh';
+import * as dbUsers from '../lib/db/users';
+import { initializeDb } from '../lib/db';
+import { checkAndMigrate } from '../lib/db/migrate';
+import { setSessionKey, getSessionKey, clearSessionKey } from '../lib/auth/session-keys';
+import { isAdmin } from '../lib/auth/admin';
+
+// Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
+const param = (req: Request, name: string): string => req.params[name] as string;
+
+// Extend Express Request to include user property
+// TokenPayload has { iat, exp, [key]: unknown }, token includes username/fullName at runtime
+interface AuthenticatedRequest extends Request {
+  user?: TokenPayload & {
+    username?: string;
+    fullName?: string;
+  };
+}
+
+interface User {
+  username: string;
+  fullName: string;
+  publicKey: string | null;
+  privateKey: string | null;
+  setupComplete: boolean;
+  createdAt: string;
+}
+
+interface SshTestResult {
+  gemini: boolean;
+  apollo: boolean;
+  bothSucceeded: boolean;
+  geminiError?: string;
+  apolloError?: string;
+}
 
 // Database-backed user operations (replaced user-store.js)
-const getUser = (username) => dbUsers.getUser(username);
-const setUser = (username, user) => dbUsers.setUser(username, user);
+const getUser = (username: string): User | null => dbUsers.getUser(username) as User | null;
+const setUser = (username: string, user: User): void => dbUsers.setUser(username, user);
 
 // Test credentials (for development - will be replaced by LDAP)
 // Must be set via environment variables - no defaults for security
@@ -40,11 +71,11 @@ const TEST_PASSWORD = process.env.TEST_PASSWORD;
 /**
  * Verify password against test credentials
  * TODO: Replace with LDAP password verification
- * @param {string} username
- * @param {string} password
- * @returns {boolean}
+ * @param username
+ * @param password
+ * @returns boolean
  */
-function verifyPassword(username, password) {
+function verifyPassword(username: string, password: string): boolean {
   if (!TEST_USERNAME || !TEST_PASSWORD) return false;
 
   const expectedUserBuffer = Buffer.from(TEST_USERNAME);
@@ -63,10 +94,10 @@ function verifyPassword(username, password) {
 /**
  * Get user's private key for SSH connections
  * Returns key from in-memory session store (only available during active session)
- * @param {string} username - Username to get key for
- * @returns {string|null} PEM-encoded private key or null if no active session
+ * @param username - Username to get key for
+ * @returns PEM-encoded private key or null if no active session
  */
-function getUserPrivateKey(username) {
+function getUserPrivateKey(username: string): string | null {
   return getSessionKey(username);
 }
 
@@ -77,7 +108,7 @@ checkAndMigrate();
 /**
  * Middleware to require authentication
  */
-function requireAuth(req, res, next) {
+function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void | Response {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -101,17 +132,17 @@ function requireAuth(req, res, next) {
  * Note: HpcService is required inline to avoid circular dependency
  * (hpc.js may import auth middleware). This is a common Node.js pattern.
  *
- * @param {string} cluster - Cluster name ('gemini' or 'apollo')
- * @param {string} [username] - Optional username for per-user SSH key testing
+ * @param cluster - Cluster name ('gemini' or 'apollo')
+ * @param username - Optional username for per-user SSH key testing
  */
-async function testSshConnection(cluster, username = null) {
+async function testSshConnection(cluster: string, username: string | null = null): Promise<{ success: boolean; error?: string }> {
   try {
     const HpcService = require('../services/hpc');
     const hpcService = new HpcService(cluster, username);
     await hpcService.sshExec('echo "Connection successful"');
     return { success: true };
   } catch (err) {
-    return { success: false, error: err.message || 'Connection failed' };
+    return { success: false, error: (err as Error).message || 'Connection failed' };
   }
 }
 
@@ -119,9 +150,9 @@ async function testSshConnection(cluster, username = null) {
  * Test SSH to both clusters
  * Returns { gemini: boolean, apollo: boolean, bothSucceeded: boolean }
  *
- * @param {string} [username] - Optional username for per-user SSH key testing
+ * @param username - Optional username for per-user SSH key testing
  */
-async function testBothClusters(username = null) {
+async function testBothClusters(username: string | null = null): Promise<SshTestResult> {
   const [geminiResult, apolloResult] = await Promise.all([
     testSshConnection('gemini', username),
     testSshConnection('apollo', username),
@@ -141,7 +172,7 @@ async function testBothClusters(username = null) {
  * Authenticate user and return token
  * Decrypts private key into session store for SSH access
  */
-router.post('/login', async (req, res) => {
+router.post('/login', async (req: Request, res: Response) => {
   const { username, password, rememberMe = true } = req.body;
 
   if (!username || !password) {
@@ -167,7 +198,7 @@ router.post('/login', async (req, res) => {
 
     // Get or create user record
     let user = getUser(username);
-    let sshTestResult = null;
+    let sshTestResult: SshTestResult | null = null;
     const sessionTtl = rememberMe ? config.sessionExpiryDays * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
 
     if (!user) {
@@ -181,6 +212,7 @@ router.post('/login', async (req, res) => {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey: null, // No managed key needed
+          privateKey: null,
           setupComplete: true,
           createdAt: new Date().toISOString(),
         };
@@ -248,10 +280,10 @@ router.post('/login', async (req, res) => {
  * POST /api/auth/logout
  * Clear session key and invalidate session
  */
-router.post('/logout', requireAuth, (req, res) => {
+router.post('/logout', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   // Clear decrypted key from memory
-  clearSessionKey(req.user.username);
-  log.audit('User logout', { username: req.user.username });
+  clearSessionKey(req.user!.username);
+  log.audit('User logout', { username: req.user!.username });
   res.json({ success: true });
 });
 
@@ -259,14 +291,14 @@ router.post('/logout', requireAuth, (req, res) => {
  * GET /api/auth/session
  * Check session validity and return user info
  */
-router.get('/session', requireAuth, (req, res) => {
-  const user = getUser(req.user.username);
+router.get('/session', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
 
   // Check if session key is still available
-  const hasActiveKey = getSessionKey(req.user.username) !== null;
+  const hasActiveKey = getSessionKey(req.user!.username) !== null;
 
   res.json({
     user: {
@@ -284,38 +316,38 @@ router.get('/session', requireAuth, (req, res) => {
  * POST /api/auth/complete-setup
  * Mark user setup as complete
  */
-router.post('/complete-setup', requireAuth, async (req, res) => {
-  let user = getUser(req.user.username);
+router.post('/complete-setup', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  let user = getUser(req.user!.username);
 
   // Handle users created before persistence was added (legacy migration)
   if (!user) {
     // Test if user's existing SSH keys work before generating new ones
-    const sshTestResult = await testBothClusters(req.user.username);
+    const sshTestResult = await testBothClusters(req.user!.username);
 
     if (sshTestResult.bothSucceeded) {
       // Existing SSH works - no managed key needed
       user = {
-        username: req.user.username,
-        fullName: req.user.fullName || req.user.username,
+        username: req.user!.username,
+        fullName: req.user!.fullName || req.user!.username,
         publicKey: null,
         privateKey: null,
         setupComplete: true,
         createdAt: new Date().toISOString(),
       };
-      log.info('Legacy user with working SSH', { username: req.user.username });
+      log.info('Legacy user with working SSH', { username: req.user!.username });
     } else {
       // Can't generate key here without password - mark as incomplete
       user = {
-        username: req.user.username,
-        fullName: req.user.fullName || req.user.username,
+        username: req.user!.username,
+        fullName: req.user!.fullName || req.user!.username,
         publicKey: null,
         privateKey: null,
         setupComplete: false,
         createdAt: new Date().toISOString(),
       };
-      log.info('Legacy user needs to regenerate key', { username: req.user.username });
+      log.info('Legacy user needs to regenerate key', { username: req.user!.username });
     }
-    setUser(req.user.username, user);
+    setUser(req.user!.username, user);
     // setUser saves immediately to SQLite
   } else {
     user.setupComplete = true;
@@ -337,8 +369,8 @@ router.post('/complete-setup', requireAuth, async (req, res) => {
  * POST /api/auth/test-connection/:cluster
  * Test SSH connection to a single cluster
  */
-router.post('/test-connection/:cluster', async (req, res) => {
-  const { cluster } = req.params;
+router.post('/test-connection/:cluster', async (req: Request, res: Response) => {
+  const cluster = param(req, 'cluster');
 
   if (!['gemini', 'apollo'].includes(cluster)) {
     return res.status(400).json({ error: 'Invalid cluster' });
@@ -362,14 +394,14 @@ router.post('/test-connection/:cluster', async (req, res) => {
  * Test SSH connection to both clusters
  * Optionally accepts Authorization header to test with per-user keys
  */
-router.post('/test-connection-both', async (req, res) => {
+router.post('/test-connection-both', async (req: Request, res: Response) => {
   // Check for optional authentication to use per-user keys
-  let username = null;
+  let username: string | null = null;
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
     const payload = verifyToken(token);
-    if (payload?.username) {
+    if (payload?.username && typeof payload.username === 'string') {
       username = payload.username;
     }
   }
@@ -383,7 +415,7 @@ router.post('/test-connection-both', async (req, res) => {
  * Generate a managed SSH key for the user
  * Requires password in request body for encryption
  */
-router.post('/generate-key', requireAuth, async (req, res) => {
+router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { password } = req.body;
 
   if (!password) {
@@ -391,17 +423,17 @@ router.post('/generate-key', requireAuth, async (req, res) => {
   }
 
   // Verify password before using it for encryption
-  if (!verifyPassword(req.user.username, password)) {
+  if (!verifyPassword(req.user!.username, password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
 
-  let user = getUser(req.user.username);
+  const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
 
   // Generate new keypair
-  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
+  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
@@ -410,7 +442,7 @@ router.post('/generate-key', requireAuth, async (req, res) => {
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
-  setSessionKey(req.user.username, privateKeyPem, sessionTtl);
+  setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
 
   log.audit('SSH key generated', { username: user.username });
 
@@ -430,8 +462,8 @@ router.post('/generate-key', requireAuth, async (req, res) => {
  * Remove the managed SSH key (user will rely on their own SSH setup)
  * Only allowed if SSH test passes (user has working alternative)
  */
-router.post('/remove-key', requireAuth, async (req, res) => {
-  const user = getUser(req.user.username);
+router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -450,7 +482,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   }
 
   // Test SSH to ensure user has working alternative (use their managed key)
-  const result = await testBothClusters(req.user.username);
+  const result = await testBothClusters(req.user!.username);
 
   if (!result.bothSucceeded) {
     return res.json({
@@ -463,10 +495,10 @@ router.post('/remove-key', requireAuth, async (req, res) => {
   // SSH works - safe to remove managed key
   user.publicKey = null;
   user.privateKey = null;
-  setUser(req.user.username, user);
+  setUser(req.user!.username, user);
 
   // Clear from session
-  clearSessionKey(req.user.username);
+  clearSessionKey(req.user!.username);
 
   log.audit('SSH key removed', { username: user.username });
 
@@ -486,7 +518,7 @@ router.post('/remove-key', requireAuth, async (req, res) => {
  * Regenerate the managed SSH key
  * Requires password in request body for encryption
  */
-router.post('/regenerate-key', requireAuth, async (req, res) => {
+router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { password } = req.body;
 
   if (!password) {
@@ -494,17 +526,17 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
   }
 
   // Verify password before using it for encryption
-  if (!verifyPassword(req.user.username, password)) {
+  if (!verifyPassword(req.user!.username, password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
 
-  let user = getUser(req.user.username);
+  const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
 
   // Generate new keypair
-  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user.username);
+  const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
@@ -513,7 +545,7 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
-  setSessionKey(req.user.username, privateKeyPem, sessionTtl);
+  setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
 
   log.audit('SSH key regenerated', { username: user.username });
 
@@ -532,8 +564,8 @@ router.post('/regenerate-key', requireAuth, async (req, res) => {
  * GET /api/auth/public-key
  * Get user's managed public key (if any)
  */
-router.get('/public-key', requireAuth, (req, res) => {
-  const user = getUser(req.user.username);
+router.get('/public-key', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -541,6 +573,10 @@ router.get('/public-key', requireAuth, (req, res) => {
   res.json({ publicKey: user.publicKey });
 });
 
+export default router;
+export { requireAuth, verifyToken, getUserPrivateKey };
+
+// CommonJS compatibility for existing require() calls
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.verifyToken = verifyToken;

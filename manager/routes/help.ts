@@ -4,33 +4,70 @@
  * Supports dynamic template syntax for embedding live data
  */
 
-const express = require('express');
+import express, { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { log } from '../lib/logger';
+
+const fsPromises = fs.promises;
 const router = express.Router();
-const fs = require('fs').promises;
-const path = require('path');
-const { log } = require('../lib/logger');
+
+// Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
+const param = (req: Request, name: string): string => req.params[name] as string;
 
 const HELP_CONTENT_DIR = path.join(__dirname, '../content/help');
 const CONTENT_DIR = path.join(__dirname, '../content');
 
+// StateManager type (simplified for this module)
+interface StateManager {
+  getClusterHealth(): Record<string, {
+    current?: {
+      online?: boolean;
+      cpus?: Record<string, unknown>;
+      memory?: Record<string, unknown>;
+      nodes?: Record<string, unknown>;
+      gpus?: Record<string, unknown>;
+      runningJobs?: number;
+      pendingJobs?: number;
+    };
+  }>;
+}
+
 // StateManager will be injected via setStateManager()
-let stateManager = null;
+let stateManager: StateManager | null = null;
 
 // Icons loaded from shared icons.json
-let icons = {};
+let icons: Record<string, string> = {};
+
+interface HelpSection {
+  id: string;
+  title: string;
+  icon?: string;
+}
+
+interface HelpIndex {
+  sections: HelpSection[];
+}
+
+interface SearchResult {
+  sectionId: string;
+  sectionTitle: string;
+  snippet: string;
+  matchIndex: number;
+}
 
 /**
  * Load icons from shared icons.json
  * Called once at startup
  */
-async function loadIcons() {
+async function loadIcons(): Promise<void> {
   try {
     const iconsPath = path.join(CONTENT_DIR, 'icons.json');
-    const content = await fs.readFile(iconsPath, 'utf8');
+    const content = await fsPromises.readFile(iconsPath, 'utf8');
     icons = JSON.parse(content);
     log.info('Loaded help icons', { count: Object.keys(icons).length });
   } catch (err) {
-    log.warn('Failed to load help icons:', err.message);
+    log.warn('Failed to load help icons:', (err as Error).message);
     icons = {};
   }
 }
@@ -40,20 +77,25 @@ loadIcons();
 
 /**
  * Set the state manager for accessing cluster health data
- * @param {StateManager} sm - State manager instance
+ * @param sm - State manager instance
  */
-function setStateManager(sm) {
+function setStateManager(sm: StateManager): void {
   stateManager = sm;
 }
 
 /**
  * Get value from nested object using dot notation path
- * @param {Object} obj - Object to traverse
- * @param {string} path - Dot notation path (e.g., 'gemini.cpus.percent')
- * @returns {*} Value at path or undefined
+ * @param obj - Object to traverse
+ * @param dotPath - Dot notation path (e.g., 'gemini.cpus.percent')
+ * @returns Value at path or undefined
  */
-function getNestedValue(obj, path) {
-  return path.split('.').reduce((curr, key) => curr?.[key], obj);
+function getNestedValue(obj: Record<string, unknown>, dotPath: string): unknown {
+  return dotPath.split('.').reduce((curr: unknown, key: string) => {
+    if (curr && typeof curr === 'object' && key in curr) {
+      return (curr as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
 }
 
 /**
@@ -63,16 +105,16 @@ function getNestedValue(obj, path) {
  * - Ternary expressions: {{gemini.online ? "🟢 Online" : "🔴 Offline"}}
  * - Icons: {{icon:rocket}} or {{icon:rocket:24}}
  *
- * @param {string} content - Markdown content with template expressions
- * @param {Object} data - Data context for substitutions
- * @returns {string} Processed content
+ * @param content - Markdown content with template expressions
+ * @param data - Data context for substitutions
+ * @returns Processed content
  */
-function processTemplates(content, data) {
+function processTemplates(content: string, data: Record<string, unknown>): string {
   if (!content) return content;
 
   // Match {{...}} expressions
   return content.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
-    const trimmed = expr.trim();
+    const trimmed = (expr as string).trim();
 
     // Check for icon syntax: {{icon:name}} or {{icon:name:size}}
     // Allow hyphens in icon names (e.g., help-circle, check-circle)
@@ -108,13 +150,13 @@ function processTemplates(content, data) {
 /**
  * Build data context for template processing
  * Flattens cluster health data into a template-friendly format
- * @returns {Object} Data context with paths like gemini.cpus.percent
+ * @returns Data context with paths like gemini.cpus.percent
  */
-function buildTemplateContext() {
+function buildTemplateContext(): Record<string, unknown> {
   if (!stateManager) return {};
 
   const clusterHealth = stateManager.getClusterHealth();
-  const context = {};
+  const context: Record<string, unknown> = {};
 
   for (const [cluster, health] of Object.entries(clusterHealth)) {
     if (!health?.current) continue;
@@ -136,34 +178,34 @@ function buildTemplateContext() {
 
 /**
  * Load the help index manifest
- * @returns {Promise<Object>} Parsed index.json
+ * @returns Parsed index.json
  */
-async function loadHelpIndex() {
+async function loadHelpIndex(): Promise<HelpIndex> {
   const indexPath = path.join(HELP_CONTENT_DIR, 'index.json');
-  const content = await fs.readFile(indexPath, 'utf8');
+  const content = await fsPromises.readFile(indexPath, 'utf8');
   return JSON.parse(content);
 }
 
 /**
  * Load a markdown help section
- * @param {string} sectionId - Section ID (e.g., 'quick-start')
- * @returns {Promise<string>} Markdown content
+ * @param sectionId - Section ID (e.g., 'quick-start')
+ * @returns Markdown content
  */
-async function loadHelpSection(sectionId) {
+async function loadHelpSection(sectionId: string): Promise<string> {
   // Sanitize section ID to prevent path traversal
   const sanitized = sectionId.replace(/[^a-z0-9-]/gi, '');
   const filePath = path.join(HELP_CONTENT_DIR, `${sanitized}.md`);
-  return fs.readFile(filePath, 'utf8');
+  return fsPromises.readFile(filePath, 'utf8');
 }
 
 /**
  * Search help content for a query string
- * @param {string} query - Search query
- * @returns {Promise<Array>} Array of matches with section, title, and snippet
+ * @param query - Search query
+ * @returns Array of matches with section, title, and snippet
  */
-async function searchHelpContent(query) {
+async function searchHelpContent(query: string): Promise<SearchResult[]> {
   const index = await loadHelpIndex();
-  const results = [];
+  const results: SearchResult[] = [];
   const queryLower = query.toLowerCase();
 
   for (const section of index.sections) {
@@ -205,7 +247,7 @@ async function searchHelpContent(query) {
       }
     } catch (err) {
       // Skip sections that can't be loaded
-      log.warn(`Failed to search section ${section.id}:`, err.message);
+      log.warn(`Failed to search section ${section.id}:`, (err as Error).message);
     }
   }
 
@@ -216,7 +258,7 @@ async function searchHelpContent(query) {
  * GET /api/help
  * Returns the help index (sections list)
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const index = await loadHelpIndex();
     res.json(index);
@@ -231,15 +273,15 @@ router.get('/', async (req, res) => {
  * Search across all help content
  * Query param: q (search query)
  */
-router.get('/search', async (req, res) => {
+router.get('/search', async (req: Request, res: Response) => {
   const { q } = req.query;
 
-  if (!q || q.length < 2) {
+  if (!q || (q as string).length < 2) {
     return res.status(400).json({ error: 'Search query must be at least 2 characters' });
   }
 
   try {
-    const results = await searchHelpContent(q);
+    const results = await searchHelpContent(q as string);
     res.json({ query: q, results });
   } catch (err) {
     log.error('Help search failed:', err);
@@ -252,8 +294,8 @@ router.get('/search', async (req, res) => {
  * Returns markdown content for a specific help section
  * Processes template expressions ({{...}}) with live cluster data
  */
-router.get('/:section', async (req, res) => {
-  const { section } = req.params;
+router.get('/:section', async (req: Request, res: Response) => {
+  const section = param(req, 'section');
 
   try {
     // Verify section exists in index
@@ -277,7 +319,7 @@ router.get('/:section', async (req, res) => {
       content,
     });
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return res.status(404).json({ error: `Help section '${section}' not found` });
     }
     log.error(`Failed to load help section ${section}:`, err);
@@ -285,5 +327,9 @@ router.get('/:section', async (req, res) => {
   }
 });
 
+export default router;
+export { setStateManager };
+
+// CommonJS compatibility for existing require() calls
 module.exports = router;
 module.exports.setStateManager = setStateManager;

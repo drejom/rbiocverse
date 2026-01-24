@@ -12,21 +12,26 @@
  * On logout or session expiry, keys are cleared from memory.
  */
 
-const { log } = require('../logger');
+import { log } from '../logger';
+
+interface SessionKeyEntry {
+  privateKey: string;
+  expiresAt: number;
+}
 
 // In-memory store: Map<username, { privateKey, expiresAt }>
-const sessionKeys = new Map();
+const sessionKeys: Map<string, SessionKeyEntry> = new Map();
 
 // Default session duration: 14 days (matches JWT expiry)
 const DEFAULT_SESSION_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * Store a decrypted private key for a user session
- * @param {string} username - User's username
- * @param {string} privateKey - Decrypted PEM-encoded private key
- * @param {number} [ttlMs] - Time to live in milliseconds
+ * @param username - User's username
+ * @param privateKey - Decrypted PEM-encoded private key
+ * @param ttlMs - Time to live in milliseconds
  */
-function setSessionKey(username, privateKey, ttlMs = DEFAULT_SESSION_MS) {
+function setSessionKey(username: string, privateKey: string, ttlMs: number = DEFAULT_SESSION_MS): void {
   if (!username || !privateKey) return;
 
   sessionKeys.set(username, {
@@ -39,10 +44,10 @@ function setSessionKey(username, privateKey, ttlMs = DEFAULT_SESSION_MS) {
 
 /**
  * Get a user's decrypted private key from the session store
- * @param {string} username - User's username
- * @returns {string|null} Decrypted private key or null if not found/expired
+ * @param username - User's username
+ * @returns Decrypted private key or null if not found/expired
  */
-function getSessionKey(username) {
+function getSessionKey(username: string): string | null {
   const session = sessionKeys.get(username);
 
   if (!session) {
@@ -61,9 +66,9 @@ function getSessionKey(username) {
 
 /**
  * Clear a user's session key (on logout)
- * @param {string} username - User's username
+ * @param username - User's username
  */
-function clearSessionKey(username) {
+function clearSessionKey(username: string): void {
   if (sessionKeys.has(username)) {
     sessionKeys.delete(username);
     log.info('Session key cleared', { username });
@@ -74,7 +79,7 @@ function clearSessionKey(username) {
  * Clear all expired session keys
  * Called periodically to clean up memory
  */
-function clearExpiredKeys() {
+function clearExpiredKeys(): void {
   const now = Date.now();
   let cleared = 0;
 
@@ -92,18 +97,16 @@ function clearExpiredKeys() {
 
 /**
  * Check if a user has an active session key
- * @param {string} username - User's username
- * @returns {boolean}
+ * @param username - User's username
  */
-function hasSessionKey(username) {
+function hasSessionKey(username: string): boolean {
   return getSessionKey(username) !== null;
 }
 
 /**
  * Get count of active session keys (for monitoring)
- * @returns {number}
  */
-function getActiveSessionCount() {
+function getActiveSessionCount(): number {
   clearExpiredKeys();
   return sessionKeys.size;
 }
@@ -112,6 +115,16 @@ function getActiveSessionCount() {
 // .unref() allows process to exit gracefully if this is the only timer
 setInterval(clearExpiredKeys, 5 * 60 * 1000).unref();
 
+export {
+  setSessionKey,
+  getSessionKey,
+  clearSessionKey,
+  clearExpiredKeys,
+  hasSessionKey,
+  getActiveSessionCount,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   setSessionKey,
   getSessionKey,

@@ -3,38 +3,71 @@
  * Structured error logging with file persistence and admin notification support
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-const { log } = require('../lib/logger');
+import { promises as fs } from 'fs';
+import path from 'path';
+import { log } from '../lib/logger';
 
 // Default error log path (can be overridden via ERROR_LOG_FILE env var)
 const ERROR_LOG_FILE = process.env.ERROR_LOG_FILE || '/data/logs/errors.json';
 
 /**
  * Error entry structure for persistence
- * @typedef {Object} ErrorEntry
- * @property {string} timestamp - ISO 8601 timestamp
- * @property {string} level - Error level (error, warn)
- * @property {string} user - Username (if available)
- * @property {string} action - What the user was trying to do
- * @property {string} message - Error message
- * @property {string} [code] - Error code (if applicable)
- * @property {Object} [context] - Additional context
- * @property {string} [stack] - Stack trace (for Error objects)
  */
+export interface ErrorEntry {
+  timestamp: string;
+  level: string;
+  user: string;
+  action: string;
+  message: string;
+  code?: string;
+  context?: Record<string, unknown>;
+  stack?: string;
+}
+
+interface ErrorLoggerOptions {
+  logFile?: string;
+  maxEntries?: number;
+}
+
+interface LogErrorOptions {
+  user?: string;
+  action: string;
+  error: Error | string;
+  context?: Record<string, unknown>;
+}
+
+interface GetRecentErrorsOptions {
+  since?: Date;
+  level?: string;
+}
+
+interface ErrorSummary {
+  period: {
+    since: string;
+    until: string;
+  };
+  total: number;
+  byLevel: Record<string, number>;
+  byUser: Record<string, number>;
+  byAction: Record<string, number>;
+  recent: ErrorEntry[];
+}
 
 class ErrorLogger {
-  constructor(options = {}) {
+  private logFile: string;
+  private maxEntries: number;
+  private initialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
+
+  constructor(options: ErrorLoggerOptions = {}) {
     this.logFile = options.logFile || ERROR_LOG_FILE;
     this.maxEntries = options.maxEntries || 1000; // Keep last N entries
-    this.initialized = false;
-    this.initPromise = null;
   }
 
   /**
    * Ensure the log directory exists
    */
-  async ensureLogDir() {
+  async ensureLogDir(): Promise<void> {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
@@ -44,7 +77,7 @@ class ErrorLogger {
         await fs.mkdir(dir, { recursive: true });
         this.initialized = true;
       } catch (err) {
-        log.warn('Failed to create error log directory:', { error: err.message });
+        log.warn('Failed to create error log directory:', { error: (err as Error).message });
       }
     })();
 
@@ -53,14 +86,8 @@ class ErrorLogger {
 
   /**
    * Log an error with context
-   * @param {Object} options - Error details
-   * @param {string} options.user - Username (optional)
-   * @param {string} options.action - What the user was doing
-   * @param {Error|string} options.error - The error
-   * @param {Object} options.context - Additional context
-   * @returns {Promise<void>}
    */
-  async logError({ user = 'system', action, error, context = {} }) {
+  async logError({ user = 'system', action, error, context = {} }: LogErrorOptions): Promise<ErrorEntry> {
     const entry = this.createEntry('error', user, action, error, context);
 
     // Log to console/winston
@@ -77,10 +104,8 @@ class ErrorLogger {
 
   /**
    * Log a warning with context
-   * @param {Object} options - Warning details
-   * @returns {Promise<void>}
    */
-  async logWarning({ user = 'system', action, error, context = {} }) {
+  async logWarning({ user = 'system', action, error, context = {} }: LogErrorOptions): Promise<ErrorEntry> {
     const entry = this.createEntry('warn', user, action, error, context);
 
     log.warn(`[${user}] ${action}: ${entry.message}`, {
@@ -96,8 +121,15 @@ class ErrorLogger {
   /**
    * Create an error entry object
    */
-  createEntry(level, user, action, error, context) {
+  createEntry(
+    level: string,
+    user: string,
+    action: string,
+    error: Error | string,
+    context: Record<string, unknown>
+  ): ErrorEntry {
     const isError = error instanceof Error;
+    const errorWithCode = error as Error & { code?: string };
 
     return {
       timestamp: new Date().toISOString(),
@@ -105,7 +137,7 @@ class ErrorLogger {
       user,
       action,
       message: isError ? error.message : String(error),
-      code: isError && error.code ? error.code : undefined,
+      code: isError && errorWithCode.code ? errorWithCode.code : undefined,
       context: Object.keys(context).length > 0 ? context : undefined,
       stack: isError && level === 'error' ? error.stack : undefined,
     };
@@ -118,18 +150,19 @@ class ErrorLogger {
    * is low-frequency. For high-frequency logging, consider switching to JSON Lines
    * (.jsonl) format with append-only writes.
    */
-  async appendEntry(entry) {
+  async appendEntry(entry: ErrorEntry): Promise<void> {
     await this.ensureLogDir();
 
     try {
       // Read existing entries
-      let entries = [];
+      let entries: ErrorEntry[] = [];
       try {
         const content = await fs.readFile(this.logFile, 'utf8');
         entries = JSON.parse(content);
       } catch (err) {
         // File doesn't exist or is invalid - start fresh
-        if (err.code !== 'ENOENT') {
+        const nodeErr = err as NodeJS.ErrnoException;
+        if (nodeErr.code !== 'ENOENT') {
           log.warn('Error log file corrupted, starting fresh');
         }
       }
@@ -148,21 +181,17 @@ class ErrorLogger {
       await fs.rename(tempFile, this.logFile);
     } catch (err) {
       // Don't throw - error logging should never break the app
-      log.error('Failed to persist error log:', { error: err.message });
+      log.error('Failed to persist error log:', { error: (err as Error).message });
     }
   }
 
   /**
    * Get recent errors for admin digest
-   * @param {Object} options - Filter options
-   * @param {Date} options.since - Only errors after this date
-   * @param {string} options.level - Filter by level (error, warn)
-   * @returns {Promise<ErrorEntry[]>}
    */
-  async getRecentErrors({ since, level } = {}) {
+  async getRecentErrors({ since, level }: GetRecentErrorsOptions = {}): Promise<ErrorEntry[]> {
     try {
       const content = await fs.readFile(this.logFile, 'utf8');
-      let entries = JSON.parse(content);
+      let entries: ErrorEntry[] = JSON.parse(content);
 
       if (since) {
         const sinceTime = since.getTime();
@@ -175,23 +204,22 @@ class ErrorLogger {
 
       return entries;
     } catch (err) {
-      if (err.code === 'ENOENT') {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
         return [];
       }
-      log.error('Failed to read error log:', { error: err.message });
+      log.error('Failed to read error log:', { error: (err as Error).message });
       return [];
     }
   }
 
   /**
    * Get error summary for a time period
-   * @param {Date} since - Start of period
-   * @returns {Promise<Object>} Summary with counts by level, user, action
    */
-  async getSummary(since = new Date(Date.now() - 24 * 60 * 60 * 1000)) {
+  async getSummary(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000)): Promise<ErrorSummary> {
     const errors = await this.getRecentErrors({ since });
 
-    const summary = {
+    const summary: ErrorSummary = {
       period: {
         since: since.toISOString(),
         until: new Date().toISOString(),
@@ -219,13 +247,13 @@ class ErrorLogger {
 
   /**
    * Clear old entries
-   * @param {number} keepDays - Keep entries from last N days
+   * @param keepDays - Keep entries from last N days
    */
-  async cleanup(keepDays = 30) {
+  async cleanup(keepDays: number = 30): Promise<void> {
     try {
       const cutoff = new Date(Date.now() - keepDays * 24 * 60 * 60 * 1000);
       const content = await fs.readFile(this.logFile, 'utf8');
-      let entries = JSON.parse(content);
+      let entries: ErrorEntry[] = JSON.parse(content);
 
       const beforeCount = entries.length;
       entries = entries.filter(e => new Date(e.timestamp) >= cutoff);
@@ -235,8 +263,9 @@ class ErrorLogger {
         log.info(`Cleaned up ${beforeCount - entries.length} old error log entries`);
       }
     } catch (err) {
-      if (err.code !== 'ENOENT') {
-        log.error('Failed to cleanup error log:', { error: err.message });
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code !== 'ENOENT') {
+        log.error('Failed to cleanup error log:', { error: (err as Error).message });
       }
     }
   }
@@ -245,4 +274,7 @@ class ErrorLogger {
 // Singleton instance for use across the app
 const errorLogger = new ErrorLogger();
 
+export { ErrorLogger, errorLogger };
+
+// CommonJS compatibility for existing require() calls
 module.exports = { ErrorLogger, errorLogger };

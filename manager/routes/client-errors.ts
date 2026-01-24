@@ -7,14 +7,24 @@
  * into frontend issues.
  */
 
-const express = require('express');
+import express, { Request, Response } from 'express';
+import { errorLogger } from '../services/ErrorLogger';
+import { verifyToken } from '../lib/auth/token';
+import { log } from '../lib/logger';
+
 const router = express.Router();
-const { errorLogger } = require('../services/ErrorLogger');
-const { verifyToken } = require('../lib/auth/token');
-const { log } = require('../lib/logger');
 
 // Parse JSON bodies
 router.use(express.json({ limit: '10kb' })); // Limit payload size
+
+interface ClientErrorBody {
+  level: 'error' | 'warn';
+  message: string;
+  action: string;
+  context?: Record<string, unknown>;
+  stack?: string;
+  timestamp?: string;
+}
 
 /**
  * POST /api/client-errors
@@ -29,8 +39,8 @@ router.use(express.json({ limit: '10kb' })); // Limit payload size
  *   timestamp?: string
  * }
  */
-router.post('/', async (req, res) => {
-  const { level, message, action, context = {}, stack, timestamp } = req.body;
+router.post('/', async (req: Request, res: Response) => {
+  const { level, message, action, context = {}, stack, timestamp } = req.body as ClientErrorBody;
 
   // Basic validation
   if (!message || !action) {
@@ -48,7 +58,7 @@ router.post('/', async (req, res) => {
     const token = authHeader.slice(7);
     try {
       const payload = verifyToken(token);
-      if (payload?.username) {
+      if (payload?.username && typeof payload.username === 'string') {
         username = payload.username;
       }
     } catch {
@@ -60,7 +70,7 @@ router.post('/', async (req, res) => {
   const enrichedContext = {
     ...context,
     source: 'client',
-    ip: req.ip || req.connection?.remoteAddress,
+    ip: req.ip || (req.connection as { remoteAddress?: string })?.remoteAddress,
     userAgent: req.headers['user-agent'],
     clientTimestamp: timestamp,
   };
@@ -70,7 +80,7 @@ router.post('/', async (req, res) => {
       await errorLogger.logError({
         user: username,
         action: `client:${action}`,
-        error: stack ? { message, stack } : message,
+        error: stack ? Object.assign(new Error(message), { stack }) : message,
         context: enrichedContext,
       });
     } else {
@@ -85,9 +95,12 @@ router.post('/', async (req, res) => {
     log.debug('Client error logged', { level, action, user: username });
     res.json({ success: true });
   } catch (err) {
-    log.error('Failed to log client error', { error: err.message });
+    log.error('Failed to log client error', { error: (err as Error).message });
     res.status(500).json({ error: 'Failed to log error' });
   }
 });
 
+export default router;
+
+// CommonJS compatibility for existing require() calls
 module.exports = router;

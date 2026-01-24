@@ -5,54 +5,84 @@
  * Provides caching and search functionality.
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-const { log } = require('./logger');
+import { promises as fs } from 'fs';
+import path from 'path';
+import { log } from './logger';
+
+interface SectionInfo {
+  id: string;
+  title: string;
+  icon?: string;
+  parent?: string;
+}
+
+interface ContentIndex {
+  sections: SectionInfo[];
+}
+
+interface SearchResult {
+  sectionId: string;
+  sectionTitle: string;
+  snippet: string;
+  matchIndex: number;
+}
+
+interface ContentManagerOptions {
+  cacheTTL?: number;
+  watchFiles?: boolean;
+}
+
+interface SearchOptions {
+  maxMatchesPerSection?: number;
+  snippetRadius?: number;
+}
 
 class ContentManager {
+  private contentDir: string;
+  private cacheTTL: number;
+  private watchFiles: boolean;
+
+  // Cache storage
+  private indexCache: ContentIndex | null = null;
+  private indexCacheTime: number = 0;
+  private sectionCache: Map<string, string> = new Map();
+  private sectionCacheTime: Map<string, number> = new Map();
+
+  // Icons cache
+  private icons: Record<string, string> | null = null;
+  private iconsPath: string | null = null;
+
   /**
    * Create a content manager
-   * @param {string} contentDir - Path to content directory
-   * @param {Object} [options]
-   * @param {number} [options.cacheTTL=300000] - Cache TTL in ms (default 5 min)
-   * @param {boolean} [options.watchFiles=false] - Watch files for changes (dev mode)
+   * @param contentDir - Path to content directory
+   * @param options - Configuration options
    */
-  constructor(contentDir, options = {}) {
+  constructor(contentDir: string, options: ContentManagerOptions = {}) {
     this.contentDir = contentDir;
     this.cacheTTL = options.cacheTTL ?? 300000; // 5 minutes default
     this.watchFiles = options.watchFiles ?? false;
-
-    // Cache storage
-    this.indexCache = null;
-    this.indexCacheTime = 0;
-    this.sectionCache = new Map();
-    this.sectionCacheTime = new Map();
-
-    // Icons cache (shared across content managers)
-    this.icons = null;
-    this.iconsPath = null;
   }
 
   /**
    * Set icons path for icon processing
-   * @param {string} iconsPath - Path to icons.json
+   * @param iconsPath - Path to icons.json
    */
-  setIconsPath(iconsPath) {
+  setIconsPath(iconsPath: string): void {
     this.iconsPath = iconsPath;
   }
 
   /**
    * Load icons from JSON file
    */
-  async loadIcons() {
+  async loadIcons(): Promise<Record<string, string>> {
     if (!this.iconsPath) return {};
 
     try {
       const content = await fs.readFile(this.iconsPath, 'utf8');
       this.icons = JSON.parse(content);
-      return this.icons;
+      return this.icons!;
     } catch (err) {
-      log.warn('Failed to load icons:', err.message);
+      log.warn('Failed to load icons:', (err as Error).message);
       this.icons = {};
       return {};
     }
@@ -61,28 +91,26 @@ class ContentManager {
   /**
    * Get icons (loads if not cached)
    */
-  async getIcons() {
+  async getIcons(): Promise<Record<string, string>> {
     if (this.icons === null) {
       await this.loadIcons();
     }
-    return this.icons;
+    return this.icons!;
   }
 
   /**
    * Check if cache is valid
-   * @param {number} cacheTime - When cache was set
-   * @returns {boolean}
+   * @param cacheTime - When cache was set
    */
-  isCacheValid(cacheTime) {
+  isCacheValid(cacheTime: number): boolean {
     if (!cacheTime) return false;
     return (Date.now() - cacheTime) < this.cacheTTL;
   }
 
   /**
    * Load the content index
-   * @returns {Promise<Object>} Parsed index.json
    */
-  async loadIndex() {
+  async loadIndex(): Promise<ContentIndex> {
     if (this.indexCache && this.isCacheValid(this.indexCacheTime)) {
       return this.indexCache;
     }
@@ -92,22 +120,21 @@ class ContentManager {
     this.indexCache = JSON.parse(content);
     this.indexCacheTime = Date.now();
 
-    return this.indexCache;
+    return this.indexCache!;
   }
 
   /**
    * Load a markdown section
-   * @param {string} sectionId - Section ID
-   * @returns {Promise<string>} Markdown content
+   * @param sectionId - Section ID
    */
-  async loadSection(sectionId) {
+  async loadSection(sectionId: string): Promise<string> {
     // Sanitize to prevent path traversal
     const sanitized = sectionId.replace(/[^a-z0-9-]/gi, '');
 
     // Check cache
     if (this.sectionCache.has(sanitized) &&
-        this.isCacheValid(this.sectionCacheTime.get(sanitized))) {
-      return this.sectionCache.get(sanitized);
+        this.isCacheValid(this.sectionCacheTime.get(sanitized) || 0)) {
+      return this.sectionCache.get(sanitized)!;
     }
 
     const filePath = path.join(this.contentDir, `${sanitized}.md`);
@@ -124,15 +151,14 @@ class ContentManager {
    * Process icon expressions in content
    * Supports: {{icon:rocket}} or {{icon:rocket:24}}
    *
-   * @param {string} content - Content with icon expressions
-   * @returns {Promise<string>} Processed content
+   * @param content - Content with icon expressions
    */
-  async processIcons(content) {
+  async processIcons(content: string): Promise<string> {
     if (!content) return content;
 
     const icons = await this.getIcons();
 
-    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (match, iconName, sizeStr) => {
+    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (match, iconName: string, sizeStr?: string) => {
       const size = sizeStr || '20';
       const svg = icons[iconName];
       if (svg) {
@@ -144,13 +170,10 @@ class ContentManager {
 
   /**
    * Search content for a query string
-   * @param {string} query - Search query (min 2 chars)
-   * @param {Object} [options]
-   * @param {number} [options.maxMatchesPerSection=3] - Max matches per section
-   * @param {number} [options.snippetRadius=50] - Characters around match
-   * @returns {Promise<Array>} Search results
+   * @param query - Search query (min 2 chars)
+   * @param options - Search options
    */
-  async search(query, options = {}) {
+  async search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
     const { maxMatchesPerSection = 3, snippetRadius = 50 } = options;
 
     if (!query || query.length < 2) {
@@ -158,7 +181,7 @@ class ContentManager {
     }
 
     const index = await this.loadIndex();
-    const results = [];
+    const results: SearchResult[] = [];
     const queryLower = query.toLowerCase();
 
     for (const section of index.sections) {
@@ -193,7 +216,7 @@ class ContentManager {
           }
         }
       } catch (err) {
-        log.warn(`Failed to search section ${section.id}:`, err.message);
+        log.warn(`Failed to search section ${section.id}:`, (err as Error).message);
       }
     }
 
@@ -204,7 +227,7 @@ class ContentManager {
    * Clear all caches
    * Useful for testing or when content files change
    */
-  clearCache() {
+  clearCache(): void {
     this.indexCache = null;
     this.indexCacheTime = 0;
     this.sectionCache.clear();
@@ -214,13 +237,17 @@ class ContentManager {
 
   /**
    * Get section info from index
-   * @param {string} sectionId - Section ID
-   * @returns {Promise<Object|null>} Section info or null
+   * @param sectionId - Section ID
    */
-  async getSectionInfo(sectionId) {
+  async getSectionInfo(sectionId: string): Promise<SectionInfo | null> {
     const index = await this.loadIndex();
     return index.sections.find(s => s.id === sectionId) || null;
   }
 }
 
+export type { SectionInfo, ContentIndex };
+
+export default ContentManager;
+
+// CommonJS compatibility for existing require() calls
 module.exports = ContentManager;

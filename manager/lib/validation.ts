@@ -149,6 +149,23 @@ export function isJoiAvailable(): boolean {
 // Query Parameter Helpers
 // ============================================
 
+/**
+ * Safely extract a string query parameter
+ * Express query params can be string | string[] | ParsedQs | ParsedQs[] | undefined
+ * This normalizes to string | undefined
+ * @param value - Query param value
+ * @returns String value or undefined
+ */
+export function queryString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0];
+    return typeof first === 'string' ? first : undefined;
+  }
+  return undefined;
+}
+
 interface ParseQueryIntOptions {
   min?: number;
   max?: number;
@@ -366,4 +383,5 @@ module.exports = {
   isJoiAvailable,
   parseQueryInt,
   parseQueryParams,
+  queryString,
 };

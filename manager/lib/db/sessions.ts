@@ -3,8 +3,80 @@
  * Handles both active sessions and session history for analytics
  */
 
-const { getDb } = require('../db');
-const { log } = require('../logger');
+import { getDb } from '../db';
+import { log } from '../logger';
+
+// ============================================
+// Types
+// ============================================
+
+export interface Session {
+  user: string;
+  status: string | null;
+  ide: string;
+  jobId: string | null;
+  node: string | null;
+  cpus: number | null;
+  memory: string | null;
+  walltime: string | null;
+  gpu: string | null;
+  releaseVersion: string | null;
+  account: string | null;
+  token: string | null;
+  submittedAt: string | null;
+  startedAt: string | null;
+  error: string | null;
+  timeLeftSeconds: number | null;
+  lastActivity: string | null;
+  usedShiny: boolean;
+  usedLiveServer: boolean;
+  tunnelProcess: unknown | null;
+}
+
+interface SessionRow {
+  session_key: string;
+  user: string;
+  hpc: string;
+  ide: string;
+  status: string | null;
+  job_id: string | null;
+  node: string | null;
+  cpus: number | null;
+  memory: string | null;
+  walltime: string | null;
+  gpu: string | null;
+  release_version: string | null;
+  account: string | null;
+  token: string | null;
+  submitted_at: string | null;
+  started_at: string | null;
+  error: string | null;
+  time_left_seconds: number | null;
+  last_activity: string | null;
+  used_shiny: number;
+  used_live_server: number;
+}
+
+interface ParsedSessionKey {
+  user: string;
+  hpc: string;
+  ide: string;
+}
+
+interface DeleteOptions {
+  endReason?: string;
+  errorMessage?: string | null;
+  archive?: boolean;
+}
+
+interface GetHistoryOptions {
+  days?: number;
+  user?: string;
+  hpc?: string;
+  ide?: string;
+  limit?: number;
+  offset?: number;
+}
 
 // ============================================
 // Active Sessions
@@ -12,25 +84,19 @@ const { log } = require('../logger');
 
 /**
  * Build session key from components
- * @param {string} user
- * @param {string} hpc
- * @param {string} ide
- * @returns {string}
  */
-function buildSessionKey(user, hpc, ide) {
+function buildSessionKey(user: string, hpc: string, ide: string): string {
   return `${user}-${hpc}-${ide}`;
 }
 
 /**
  * Parse session key into components
- * @param {string} sessionKey
- * @returns {{user: string, hpc: string, ide: string}|null}
  */
-function parseSessionKey(sessionKey) {
+function parseSessionKey(sessionKey: string): ParsedSessionKey | null {
   const parts = sessionKey.split('-');
   if (parts.length >= 3) {
-    const ide = parts.pop();
-    const hpc = parts.pop();
+    const ide = parts.pop()!;
+    const hpc = parts.pop()!;
     const user = parts.join('-');
     return { user, hpc, ide };
   }
@@ -39,10 +105,8 @@ function parseSessionKey(sessionKey) {
 
 /**
  * Convert database row to session object
- * @param {Object} row
- * @returns {Object}
  */
-function rowToSession(row) {
+function rowToSession(row: SessionRow | undefined): Session | null {
   if (!row) return null;
   return {
     user: row.user,
@@ -70,32 +134,24 @@ function rowToSession(row) {
 
 /**
  * Get active session by key
- * @param {string} sessionKey
- * @returns {Object|null}
  */
-function getActiveSession(sessionKey) {
+function getActiveSession(sessionKey: string): Session | null {
   const db = getDb();
-  const row = db.prepare('SELECT * FROM active_sessions WHERE session_key = ?').get(sessionKey);
+  const row = db.prepare('SELECT * FROM active_sessions WHERE session_key = ?').get(sessionKey) as SessionRow | undefined;
   return rowToSession(row);
 }
 
 /**
  * Get active session by user, hpc, ide
- * @param {string} user
- * @param {string} hpc
- * @param {string} ide
- * @returns {Object|null}
  */
-function getSession(user, hpc, ide) {
+function getSession(user: string, hpc: string, ide: string): Session | null {
   return getActiveSession(buildSessionKey(user, hpc, ide));
 }
 
 /**
  * Create or update an active session
- * @param {string} sessionKey
- * @param {Object} session
  */
-function saveActiveSession(sessionKey, session) {
+function saveActiveSession(sessionKey: string, session: Partial<Session>): void {
   const db = getDb();
   const parsed = parseSessionKey(sessionKey);
   if (!parsed) {
@@ -138,14 +194,8 @@ function saveActiveSession(sessionKey, session) {
 
 /**
  * Delete active session and optionally archive to history
- * @param {string} sessionKey
- * @param {Object} [options]
- * @param {string} [options.endReason] - completed, cancelled, timeout, error
- * @param {string} [options.errorMessage] - Error message if applicable
- * @param {boolean} [options.archive=true] - Whether to archive to history
- * @returns {boolean} True if session was deleted
  */
-function deleteActiveSession(sessionKey, options = {}) {
+function deleteActiveSession(sessionKey: string, options: DeleteOptions = {}): boolean {
   const db = getDb();
   const { endReason = 'completed', errorMessage = null, archive = true } = options;
 
@@ -169,15 +219,17 @@ function deleteActiveSession(sessionKey, options = {}) {
 
 /**
  * Get all active sessions
- * @returns {Object} Map of sessionKey -> session
  */
-function getAllActiveSessions() {
+function getAllActiveSessions(): Record<string, Session> {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM active_sessions').all();
-  const sessions = {};
+  const rows = db.prepare('SELECT * FROM active_sessions').all() as SessionRow[];
+  const sessions: Record<string, Session> = {};
 
   for (const row of rows) {
-    sessions[row.session_key] = rowToSession(row);
+    const session = rowToSession(row);
+    if (session) {
+      sessions[row.session_key] = session;
+    }
   }
 
   return sessions;
@@ -185,16 +237,17 @@ function getAllActiveSessions() {
 
 /**
  * Get active sessions for a user
- * @param {string} user
- * @returns {Object} Map of sessionKey -> session
  */
-function getActiveSessionsForUser(user) {
+function getActiveSessionsForUser(user: string): Record<string, Session> {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM active_sessions WHERE user = ?').all(user);
-  const sessions = {};
+  const rows = db.prepare('SELECT * FROM active_sessions WHERE user = ?').all(user) as SessionRow[];
+  const sessions: Record<string, Session> = {};
 
   for (const row of rows) {
-    sessions[row.session_key] = rowToSession(row);
+    const session = rowToSession(row);
+    if (session) {
+      sessions[row.session_key] = session;
+    }
   }
 
   return sessions;
@@ -202,10 +255,8 @@ function getActiveSessionsForUser(user) {
 
 /**
  * Update session fields
- * @param {string} sessionKey
- * @param {Object} updates
  */
-function updateActiveSession(sessionKey, updates) {
+function updateActiveSession(sessionKey: string, updates: Partial<Session>): void {
   const session = getActiveSession(sessionKey);
   if (!session) {
     throw new Error(`No session exists: ${sessionKey}`);
@@ -217,18 +268,16 @@ function updateActiveSession(sessionKey, updates) {
 
 /**
  * Mark session as using Shiny
- * @param {string} sessionKey
  */
-function markShinyUsed(sessionKey) {
+function markShinyUsed(sessionKey: string): void {
   const db = getDb();
   db.prepare('UPDATE active_sessions SET used_shiny = 1 WHERE session_key = ?').run(sessionKey);
 }
 
 /**
  * Mark session as using Live Server
- * @param {string} sessionKey
  */
-function markLiveServerUsed(sessionKey) {
+function markLiveServerUsed(sessionKey: string): void {
   const db = getDb();
   db.prepare('UPDATE active_sessions SET used_live_server = 1 WHERE session_key = ?').run(sessionKey);
 }
@@ -239,12 +288,13 @@ function markLiveServerUsed(sessionKey) {
 
 /**
  * Archive a session to history
- * @param {Object} session - Session data
- * @param {string} sessionKey - Session key for parsing user/hpc/ide
- * @param {string} endReason - completed, cancelled, timeout, error
- * @param {string} [errorMessage] - Error message if applicable
  */
-function archiveSession(session, sessionKey, endReason, errorMessage = null) {
+function archiveSession(
+  session: Session,
+  sessionKey: string,
+  endReason: string,
+  errorMessage: string | null = null
+): void {
   const db = getDb();
   const parsed = parseSessionKey(sessionKey);
   if (!parsed) return;
@@ -252,7 +302,7 @@ function archiveSession(session, sessionKey, endReason, errorMessage = null) {
   const endedAt = new Date().toISOString();
 
   // Calculate wait time (time between submitted and started)
-  let waitSeconds = null;
+  let waitSeconds: number | null = null;
   if (session.submittedAt && session.startedAt) {
     const submitted = new Date(session.submittedAt).getTime();
     const started = new Date(session.startedAt).getTime();
@@ -262,7 +312,7 @@ function archiveSession(session, sessionKey, endReason, errorMessage = null) {
   }
 
   // Calculate duration (time between started and ended)
-  let durationMinutes = null;
+  let durationMinutes: number | null = null;
   if (session.startedAt) {
     const started = new Date(session.startedAt).getTime();
     const ended = new Date(endedAt).getTime();
@@ -313,21 +363,13 @@ function archiveSession(session, sessionKey, endReason, errorMessage = null) {
 
 /**
  * Get session history with optional filters
- * @param {Object} [options]
- * @param {number} [options.days=30] - Number of days to look back
- * @param {string} [options.user] - Filter by user
- * @param {string} [options.hpc] - Filter by cluster
- * @param {string} [options.ide] - Filter by IDE
- * @param {number} [options.limit] - Max records to return
- * @param {number} [options.offset] - Offset for pagination
- * @returns {Array<Object>}
  */
-function getSessionHistory(options = {}) {
+function getSessionHistory(options: GetHistoryOptions = {}): unknown[] {
   const db = getDb();
   const { days = 30, user, hpc, ide, limit, offset } = options;
 
   let sql = 'SELECT * FROM session_history WHERE 1=1';
-  const params = [];
+  const params: (string | number)[] = [];
 
   if (days) {
     const cutoff = new Date();
@@ -367,17 +409,13 @@ function getSessionHistory(options = {}) {
 
 /**
  * Get session history count
- * @param {Object} [options]
- * @param {number} [options.days] - Number of days to look back
- * @param {string} [options.user] - Filter by user
- * @returns {number}
  */
-function getSessionHistoryCount(options = {}) {
+function getSessionHistoryCount(options: { days?: number; user?: string } = {}): number {
   const db = getDb();
   const { days, user } = options;
 
   let sql = 'SELECT COUNT(*) as count FROM session_history WHERE 1=1';
-  const params = [];
+  const params: string[] = [];
 
   if (days) {
     const cutoff = new Date();
@@ -391,16 +429,14 @@ function getSessionHistoryCount(options = {}) {
     params.push(user);
   }
 
-  const row = db.prepare(sql).get(...params);
+  const row = db.prepare(sql).get(...params) as { count: number };
   return row.count;
 }
 
 /**
  * Migrate active sessions from state object
- * @param {Object} sessions - Sessions object from state.json
- * @returns {number} Number of sessions migrated
  */
-function migrateActiveSessions(sessions) {
+function migrateActiveSessions(sessions: Record<string, Partial<Session>>): number {
   const db = getDb();
   let count = 0;
 
@@ -424,6 +460,32 @@ function migrateActiveSessions(sessions) {
   return count;
 }
 
+export {
+  // Session key helpers
+  buildSessionKey,
+  parseSessionKey,
+
+  // Active sessions
+  getActiveSession,
+  getSession,
+  saveActiveSession,
+  deleteActiveSession,
+  getAllActiveSessions,
+  getActiveSessionsForUser,
+  updateActiveSession,
+  markShinyUsed,
+  markLiveServerUsed,
+
+  // Session history
+  archiveSession,
+  getSessionHistory,
+  getSessionHistoryCount,
+
+  // Migration
+  migrateActiveSessions,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   // Session key helpers
   buildSessionKey,

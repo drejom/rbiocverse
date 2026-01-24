@@ -10,25 +10,88 @@
  * - For single-user mode, user defaults to config.hpcUser
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-const { LockError } = require('./errors');
-const { log } = require('./logger');
-const { clusters, config } = require('../config');
-const { initializeDb, getDb } = require('./db');
-const dbSessions = require('./db/sessions');
-const dbHealth = require('./db/health');
-const { checkAndMigrate } = require('./db/migrate');
+import { promises as fs } from 'fs';
+import path from 'path';
+import { LockError } from './errors';
+import { log } from './logger';
+import { clusters, config } from '../config';
+import { initializeDb, getDb } from './db';
+import * as dbSessions from './db/sessions';
+import * as dbHealth from './db/health';
+import { checkAndMigrate } from './db/migrate';
+import type { Session } from './db/sessions';
+import type { ClusterHealth, HealthHistoryEntry } from './db/healthSchema';
+
+// Type imports for HPC service
+interface HpcService {
+  checkJobExists(jobId: string): Promise<boolean>;
+  getAllJobs(): Promise<Record<string, JobInfo>>;
+  getClusterHealth(options?: { userAccount?: string | null }): Promise<ClusterHealth>;
+  getUserDefaultAccount(user: string): Promise<string | null>;
+}
+
+interface JobInfo {
+  jobId: string;
+  state: string;
+  node?: string;
+  timeLeftSeconds?: number;
+}
+
+type HpcServiceFactory = (hpc: string) => HpcService;
+
+interface ParsedSessionKey {
+  user: string;
+  hpc: string;
+  ide: string;
+}
+
+interface ActiveSession {
+  user: string;
+  hpc: string;
+  ide: string;
+}
+
+interface ClusterHealthState {
+  current: ClusterHealth | null;
+  history: HealthHistoryEntry[];
+  lastRolloverAt?: number;
+  consecutiveFailures: number;
+}
+
+interface AppState {
+  sessions: Record<string, Session | null>;
+  activeSession: ActiveSession | null;
+  clusterHealth?: Record<string, ClusterHealthState>;
+}
+
+interface UserAccountCache {
+  account: string | null;
+  fetchedAt: number;
+}
+
+interface PollingInfo {
+  jobPolling: {
+    lastPollTime: number | null;
+    nextPollTime: number | null;
+    consecutiveUnchangedPolls: number;
+    currentInterval: number;
+  };
+  healthPolling: {
+    lastPollTime: number | null;
+    interval: number;
+  };
+}
+
+interface ClearSessionOptions {
+  endReason?: string;
+  errorMessage?: string | null;
+}
 
 /**
  * Build session key from components
  * Format: user-hpc-ide (e.g., domeally-gemini-vscode)
- * @param {string} user - Username (defaults to config.hpcUser for single-user mode)
- * @param {string} hpc - Cluster name
- * @param {string} ide - IDE type
- * @returns {string} Session key
  */
-function buildSessionKey(user, hpc, ide) {
+function buildSessionKey(user: string | null, hpc: string, ide: string): string {
   const effectiveUser = user || config.hpcUser;
   return `${effectiveUser}-${hpc}-${ide}`;
 }
@@ -36,16 +99,14 @@ function buildSessionKey(user, hpc, ide) {
 /**
  * Parse session key into components
  * Format: user-hpc-ide (e.g., domeally-gemini-vscode)
- * @param {string} sessionKey - Session key
- * @returns {{user: string, hpc: string, ide: string}|null} Parsed components or null
  */
-function parseSessionKey(sessionKey) {
+function parseSessionKey(sessionKey: string): ParsedSessionKey | null {
   const parts = sessionKey.split('-');
   if (parts.length >= 3) {
     // user-hpc-ide format (user may contain hyphens)
     // IDE is always last, HPC is second-to-last, user is everything before
-    const ide = parts.pop();
-    const hpc = parts.pop();
+    const ide = parts.pop()!;
+    const hpc = parts.pop()!;
     const user = parts.join('-');
     return { user, hpc, ide };
   }
@@ -100,13 +161,12 @@ const POLLING_CONFIG = {
 /**
  * Create a fresh idle session object
  * Use this to ensure consistent session structure across the codebase
- * @param {string} ide - IDE type ('vscode', 'rstudio', 'jupyter')
- * @returns {Object} Fresh idle session
  */
-function createIdleSession(ide) {
+function createIdleSession(ide: string): Session {
   return {
     status: 'idle',
     ide: ide,
+    user: '',
     jobId: null,
     node: null,
     tunnelProcess: null,
@@ -119,10 +179,33 @@ function createIdleSession(ide) {
     token: null,
     releaseVersion: null,
     gpu: null,
+    account: null,
+    submittedAt: null,
+    timeLeftSeconds: null,
+    usedShiny: false,
+    usedLiveServer: false,
   };
 }
 
 class StateManager {
+  private stateFile: string;
+  private enablePersistence: boolean;
+  private useSqlite: boolean;
+  private state: AppState;
+  private locks: Map<string, number>;
+  private ready: boolean;
+  private jobPollTimer: ReturnType<typeof setTimeout> | null;
+  private consecutiveUnchangedPolls: number;
+  private lastStateSnapshot: string | null;
+  private lastJobPollTime: number | null;
+  private nextJobPollTime: number | null;
+  private healthPollTimer: ReturnType<typeof setTimeout> | null;
+  private lastHealthPollTime: number | null;
+  private pollingStopped: boolean;
+  private hpcServiceFactory: HpcServiceFactory | null;
+  private userAccounts: Map<string, UserAccountCache>;
+  onSessionCleared: ((user: string, hpc: string, ide: string) => void) | null;
+
   constructor() {
     // Read environment variables at construction time (not module load time)
     this.stateFile = process.env.STATE_FILE || '/data/state.json';
@@ -171,18 +254,16 @@ class StateManager {
 
   /**
    * Check if state manager is ready (loaded)
-   * @returns {boolean}
    */
-  isReady() {
+  isReady(): boolean {
     return this.ready;
   }
 
   /**
    * Acquire lock for an operation
-   * @param {string} operation - Lock name (e.g., 'launch:gemini')
-   * @throws {Error} If lock already held
+   * @throws {LockError} If lock already held
    */
-  acquireLock(operation) {
+  acquireLock(operation: string): void {
     if (this.locks.has(operation)) {
       throw new LockError('Operation already in progress', { operation });
     }
@@ -192,11 +273,10 @@ class StateManager {
 
   /**
    * Release lock for an operation
-   * @param {string} operation - Lock name
    */
-  releaseLock(operation) {
+  releaseLock(operation: string): void {
     if (this.locks.has(operation)) {
-      const held = Date.now() - this.locks.get(operation);
+      const held = Date.now() - this.locks.get(operation)!;
       log.lock(`Released: ${operation}`, { heldMs: held });
       this.locks.delete(operation);
     }
@@ -204,18 +284,15 @@ class StateManager {
 
   /**
    * Check if lock is held
-   * @param {string} operation - Lock name
-   * @returns {boolean}
    */
-  isLocked(operation) {
+  isLocked(operation: string): boolean {
     return this.locks.has(operation);
   }
 
   /**
    * Get all active locks (for debugging)
-   * @returns {Array} Active lock names
    */
-  getActiveLocks() {
+  getActiveLocks(): string[] {
     return Array.from(this.locks.keys());
   }
 
@@ -223,7 +300,7 @@ class StateManager {
    * Load state from disk/database on startup
    * Reconcile with squeue to detect orphaned jobs
    */
-  async load() {
+  async load(): Promise<void> {
     // Initialize SQLite database and run migration if needed
     if (this.useSqlite) {
       try {
@@ -231,7 +308,7 @@ class StateManager {
         checkAndMigrate();
         log.state('SQLite database initialized');
       } catch (err) {
-        log.error('Failed to initialize SQLite database', { error: err.message });
+        log.error('Failed to initialize SQLite database', { error: (err as Error).message });
         // Fall back to JSON persistence
         this.useSqlite = false;
       }
@@ -253,7 +330,7 @@ class StateManager {
 
         // Load active session reference from app_state
         const db = getDb();
-        const activeRow = db.prepare('SELECT value FROM app_state WHERE key = ?').get('activeSession');
+        const activeRow = db.prepare('SELECT value FROM app_state WHERE key = ?').get('activeSession') as { value: string } | undefined;
         if (activeRow?.value) {
           this.state.activeSession = JSON.parse(activeRow.value);
         }
@@ -274,7 +351,7 @@ class StateManager {
           activeSession: this.state.activeSession,
         });
       } catch (err) {
-        log.error('Failed to load from SQLite', { error: err.message });
+        log.error('Failed to load from SQLite', { error: (err as Error).message });
       }
     }
 
@@ -318,14 +395,15 @@ class StateManager {
               }
             }
             if (session) {
-              session.tunnelProcess = null;
+              (session as Session).tunnelProcess = null;
             }
-            this.state.sessions[sessionKey] = session;
+            this.state.sessions[sessionKey] = session as Session | null;
           }
         }
       } catch (e) {
-        if (e.code !== 'ENOENT') {
-          log.error('Failed to load state from JSON', { error: e.message });
+        const nodeErr = e as NodeJS.ErrnoException;
+        if (nodeErr.code !== 'ENOENT') {
+          log.error('Failed to load state from JSON', { error: (e as Error).message });
         }
       }
     }
@@ -338,7 +416,7 @@ class StateManager {
    * Save state to disk/database after every change
    * Excludes non-serializable fields like tunnelProcess
    */
-  async save() {
+  async save(): Promise<void> {
     // Save to SQLite if enabled
     if (this.useSqlite) {
       try {
@@ -355,7 +433,7 @@ class StateManager {
           .run('activeSession', JSON.stringify(this.state.activeSession));
 
       } catch (err) {
-        log.error('Failed to save to SQLite', { error: err.message });
+        log.error('Failed to save to SQLite', { error: (err as Error).message });
       }
     }
 
@@ -372,7 +450,11 @@ class StateManager {
       await fs.mkdir(dir, { recursive: true });
 
       // Create a clean copy without non-serializable fields
-      const cleanState = {
+      const cleanState: {
+        activeSession: ActiveSession | null;
+        clusterHealth: Record<string, ClusterHealthState>;
+        sessions: Record<string, Partial<Session> | null>;
+      } = {
         activeSession: this.state.activeSession,
         clusterHealth: this.state.clusterHealth || {},
         sessions: {},
@@ -381,7 +463,8 @@ class StateManager {
       for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
         if (session) {
           // Exclude tunnelProcess - it's a process handle that can't be serialized
-          const { tunnelProcess, ...rest } = session;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { tunnelProcess: _unused, ...rest } = session;
           cleanState.sessions[sessionKey] = rest;
         } else {
           cleanState.sessions[sessionKey] = null;
@@ -390,7 +473,7 @@ class StateManager {
 
       await fs.writeFile(this.stateFile, JSON.stringify(cleanState, null, 2));
     } catch (e) {
-      log.error('Failed to save state', { error: e.message });
+      log.error('Failed to save state', { error: (e as Error).message });
     }
   }
 
@@ -399,7 +482,7 @@ class StateManager {
    * Check if "running" jobs still exist in squeue
    * Mark as idle if job no longer exists
    */
-  async reconcile() {
+  async reconcile(): Promise<void> {
     for (const [sessionKey, session] of Object.entries(this.state.sessions)) {
       if (session?.status === 'running' && session.jobId) {
         const parsed = parseSessionKey(sessionKey);
@@ -426,11 +509,8 @@ class StateManager {
   /**
    * Check if job exists in squeue
    * Uses injected hpcServiceFactory if available
-   * @param {string} hpc - Cluster name (gemini, apollo)
-   * @param {string} jobId - SLURM job ID
-   * @returns {Promise<boolean>} True if job exists
    */
-  async checkJobExists(hpc, jobId) {
+  async checkJobExists(hpc: string, jobId: string): Promise<boolean> {
     if (!this.hpcServiceFactory) {
       // No HPC service factory - assume job exists (safer than prematurely clearing)
       return true;
@@ -440,7 +520,7 @@ class StateManager {
       const hpcService = this.hpcServiceFactory(hpc);
       return await hpcService.checkJobExists(jobId);
     } catch (e) {
-      log.warn('Failed to check job existence, assuming exists', { hpc, jobId, error: e.message });
+      log.warn('Failed to check job existence, assuming exists', { hpc, jobId, error: (e as Error).message });
       return true; // Safe fallback
     }
   }
@@ -451,12 +531,9 @@ class StateManager {
 
   /**
    * Clear activeSession if it matches the given user, hpc and ide
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
    * @private
    */
-  _clearActiveSessionIfMatches(user, hpc, ide) {
+  private _clearActiveSessionIfMatches(user: string | null, hpc: string, ide: string): void {
     const effectiveUser = user || config.hpcUser;
     if (
       this.state.activeSession?.user === effectiveUser &&
@@ -474,14 +551,8 @@ class StateManager {
   /**
    * Create a new session with optional initial properties
    * Throws if session already exists (use getOrCreateSession for get-or-create pattern)
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name (gemini, apollo)
-   * @param {string} ide - IDE type (vscode, jupyter, rstudio)
-   * @param {Object} initialProperties - Optional initial values to merge
-   * @returns {Promise<Object>} The created session
-   * @throws {Error} If session already exists
    */
-  async createSession(user, hpc, ide, initialProperties = {}) {
+  async createSession(user: string | null, hpc: string, ide: string, initialProperties: Partial<Session> = {}): Promise<Session> {
     const sessionKey = buildSessionKey(user, hpc, ide);
     log.state('Creating session', { sessionKey, user: user || config.hpcUser, hpc, ide });
     if (this.state.sessions[sessionKey]) {
@@ -491,18 +562,14 @@ class StateManager {
     newSession.user = user || config.hpcUser;  // Store user in session
     this.state.sessions[sessionKey] = Object.assign(newSession, initialProperties);
     await this.save();
-    return this.state.sessions[sessionKey];
+    return this.state.sessions[sessionKey]!;
   }
 
   /**
    * Get session, or create one if it doesn't exist
    * Handles race condition where concurrent callers may try to create simultaneously
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
-   * @returns {Promise<Object>} The existing or newly created session
    */
-  async getOrCreateSession(user, hpc, ide) {
+  async getOrCreateSession(user: string | null, hpc: string, ide: string): Promise<Session> {
     const existing = this.getSession(user, hpc, ide);
     if (existing) {
       return existing;
@@ -513,7 +580,7 @@ class StateManager {
       return await this.createSession(user, hpc, ide);
     } catch (err) {
       // If another concurrent caller created the session first, gracefully return it.
-      if (err && typeof err.message === 'string' && err.message.includes('Session already exists')) {
+      if (err && typeof (err as Error).message === 'string' && (err as Error).message.includes('Session already exists')) {
         const session = this.getSession(user, hpc, ide);
         if (session) {
           return session;
@@ -525,26 +592,16 @@ class StateManager {
 
   /**
    * Get session by user, hpc and ide
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
-   * @returns {Object|null} Session or null
    */
-  getSession(user, hpc, ide) {
+  getSession(user: string | null, hpc: string, ide: string): Session | null {
     const sessionKey = buildSessionKey(user, hpc, ide);
     return this.state.sessions[sessionKey] || null;
   }
 
   /**
    * Update session and persist
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
-   * @param {Object} updates - Fields to update
-   * @returns {Promise<Object>} Updated session
-   * @throws {Error} If session doesn't exist
    */
-  async updateSession(user, hpc, ide, updates) {
+  async updateSession(user: string | null, hpc: string, ide: string, updates: Partial<Session>): Promise<Session> {
     const sessionKey = buildSessionKey(user, hpc, ide);
     const session = this.state.sessions[sessionKey];
     if (!session) {
@@ -558,14 +615,8 @@ class StateManager {
 
   /**
    * Clear (delete) session and archive to history
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
-   * @param {Object} [options] - Optional archive options
-   * @param {string} [options.endReason='completed'] - completed, cancelled, timeout, error
-   * @param {string} [options.errorMessage] - Error message if applicable
    */
-  async clearSession(user, hpc, ide, options = {}) {
+  async clearSession(user: string | null, hpc: string, ide: string, options: ClearSessionOptions = {}): Promise<void> {
     const sessionKey = buildSessionKey(user, hpc, ide);
     const session = this.state.sessions[sessionKey];
     if (!session) {
@@ -583,7 +634,7 @@ class StateManager {
         // Also delete from active_sessions table
         dbSessions.deleteActiveSession(sessionKey, { archive: false }); // Already archived above
       } catch (err) {
-        log.error('Failed to archive session to history', { sessionKey, error: err.message });
+        log.error('Failed to archive session to history', { sessionKey, error: (err as Error).message });
       }
     }
 
@@ -593,24 +644,21 @@ class StateManager {
 
     // Notify listener (e.g., for tunnel cleanup)
     if (this.onSessionCleared) {
-      this.onSessionCleared(user, hpc, ide);
+      this.onSessionCleared(user || config.hpcUser, hpc, ide);
     }
   }
 
   /**
    * Get all sessions (shallow copy)
-   * @returns {Object} All sessions keyed by sessionKey
    */
-  getAllSessions() {
+  getAllSessions(): Record<string, Session | null> {
     return { ...this.state.sessions };
   }
 
   /**
    * Get all sessions for a specific user
-   * @param {string} user - Username (null for default/single-user mode)
-   * @returns {Object} Sessions for user keyed by sessionKey
    */
-  getSessionsForUser(user) {
+  getSessionsForUser(user: string | null): Record<string, Session | null> {
     const effectiveUser = user || config.hpcUser;
     return Object.fromEntries(
       Object.entries(this.state.sessions).filter(([key]) => {
@@ -622,73 +670,61 @@ class StateManager {
 
   /**
    * Get active sessions (running or pending only)
-   * @returns {Object} Active sessions keyed by sessionKey
    */
-  getActiveSessions() {
+  getActiveSessions(): Record<string, Session> {
     return Object.fromEntries(
       Object.entries(this.state.sessions).filter(
         ([, session]) => session && (session.status === 'running' || session.status === 'pending')
       )
-    );
+    ) as Record<string, Session>;
   }
 
   /**
    * Get active sessions for a specific user
-   * @param {string} user - Username (null for default/single-user mode)
-   * @returns {Object} Active sessions for user
    */
-  getActiveSessionsForUser(user) {
+  getActiveSessionsForUser(user: string | null): Record<string, Session> {
     const userSessions = this.getSessionsForUser(user);
     return Object.fromEntries(
       Object.entries(userSessions).filter(
         ([, session]) => session && (session.status === 'running' || session.status === 'pending')
       )
-    );
+    ) as Record<string, Session>;
   }
 
   /**
    * Check if a session exists and is active
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
-   * @returns {boolean}
    */
-  hasActiveSession(user, hpc, ide) {
+  hasActiveSession(user: string | null, hpc: string, ide: string): boolean {
     const session = this.getSession(user, hpc, ide);
     return !!(session && (session.status === 'running' || session.status === 'pending'));
   }
 
   /**
    * Get the active session reference
-   * @returns {Object|null} { user, hpc, ide } or null
    */
-  getActiveSession() {
+  getActiveSession(): ActiveSession | null {
     return this.state.activeSession;
   }
 
   /**
    * Clear the active session reference
    */
-  async clearActiveSession() {
+  async clearActiveSession(): Promise<void> {
     this.state.activeSession = null;
     await this.save();
   }
 
   /**
    * Get current state (for API responses)
-   * @returns {Object} Current state
    */
-  getState() {
+  getState(): AppState {
     return this.state;
   }
 
   /**
    * Set active session and persist
-   * @param {string} user - Username (null for default/single-user mode)
-   * @param {string} hpc - Cluster name
-   * @param {string} ide - IDE type
    */
-  async setActiveSession(user, hpc, ide) {
+  async setActiveSession(user: string | null, hpc: string | null, ide: string | null): Promise<void> {
     const effectiveUser = user || config.hpcUser;
     this.state.activeSession = hpc && ide ? { user: effectiveUser, hpc, ide } : null;
     await this.save();
@@ -697,7 +733,7 @@ class StateManager {
   /**
    * @deprecated Use setActiveSession instead
    */
-  async setActiveHpc(hpc) {
+  async setActiveHpc(hpc: string | null): Promise<void> {
     // For backwards compatibility, just clear activeSession if hpc is null
     if (!hpc) {
       this.state.activeSession = null;
@@ -712,10 +748,8 @@ class StateManager {
   /**
    * Get user's SLURM default account from cache
    * Note: This only reads from cache. Use fetchUserAccount() to populate cache.
-   * @param {string} user - Username (null for default/single-user mode)
-   * @returns {string|null} Account name or null if not cached
    */
-  getUserAccount(user) {
+  getUserAccount(user: string | null): string | null {
     const effectiveUser = user || config.hpcUser;
     const cached = this.userAccounts.get(effectiveUser);
     if (cached) {
@@ -726,15 +760,13 @@ class StateManager {
 
   /**
    * Fetch and cache user's SLURM default account
-   * @param {string} user - Username (null for default/single-user mode)
-   * @returns {Promise<string|null>} Account name or null
    */
-  async fetchUserAccount(user) {
+  async fetchUserAccount(user: string | null): Promise<string | null> {
     const effectiveUser = user || config.hpcUser;
 
     // Check cache first
     if (this.userAccounts.has(effectiveUser)) {
-      return this.userAccounts.get(effectiveUser).account;
+      return this.userAccounts.get(effectiveUser)!.account;
     }
 
     // Fetch from cluster
@@ -749,7 +781,7 @@ class StateManager {
       log.state('User account fetched', { user: effectiveUser, account });
       return account;
     } catch (e) {
-      log.warn('Failed to fetch user account', { user: effectiveUser, error: e.message });
+      log.warn('Failed to fetch user account', { user: effectiveUser, error: (e as Error).message });
       return null;
     }
   }
@@ -760,16 +792,8 @@ class StateManager {
 
   /**
    * Start background polling for session status and cluster health
-   *
-   * Two independent polling loops:
-   * 1. Job polling (adaptive) - 1 SSH call per cluster via getAllJobs()
-   * 2. Health polling (fixed 30 min) - 1 SSH call per cluster via getClusterHealth()
-   *
-   * On startup, fetches current user's default SLURM account (once) for fairshare queries.
-   *
-   * @param {Function} hpcServiceFactory - Factory function: (hpc) => HpcService instance
    */
-  async startPolling(hpcServiceFactory) {
+  async startPolling(hpcServiceFactory: HpcServiceFactory): Promise<void> {
     this.pollingStopped = false;
     this.hpcServiceFactory = hpcServiceFactory;
     log.state('Starting background polling (jobs: adaptive, health: 30 min)');
@@ -797,8 +821,8 @@ class StateManager {
       // Schedule next health poll after remaining TTL of oldest cluster
       const oldestCheck = Math.min(
         ...clusterNames
-          .map(hpc => this.state.clusterHealth[hpc]?.current?.lastChecked)
-          .filter(ts => ts)
+          .map(hpc => this.state.clusterHealth![hpc]?.current?.lastChecked)
+          .filter((ts): ts is number => ts !== undefined && ts !== null)
       );
       const elapsed = Date.now() - oldestCheck;
       const remaining = Math.max(INTERVAL_MS - elapsed, 1000);
@@ -812,7 +836,7 @@ class StateManager {
   /**
    * Stop background polling (both job and health)
    */
-  stopPolling() {
+  stopPolling(): void {
     this.pollingStopped = true;
     if (this.jobPollTimer) {
       clearTimeout(this.jobPollTimer);
@@ -828,7 +852,7 @@ class StateManager {
   /**
    * Schedule next job poll with adaptive interval
    */
-  scheduleJobPoll() {
+  private scheduleJobPoll(): void {
     if (this.pollingStopped) return;
     const interval = this.getOptimalJobPollInterval();
     this.nextJobPollTime = Date.now() + interval;
@@ -838,10 +862,8 @@ class StateManager {
 
   /**
    * Execute a job poll cycle
-   * Uses batch queries: 1 SSH call per cluster (parallel) via getAllJobs()
-   * Error-safe: always reschedules even if refresh fails
    */
-  async jobPoll() {
+  private async jobPoll(): Promise<void> {
     this.lastJobPollTime = Date.now();
 
     try {
@@ -855,7 +877,7 @@ class StateManager {
         log.debugFor('state', `No job changes for ${this.consecutiveUnchangedPolls} polls`);
       }
     } catch (e) {
-      log.error('Job poll cycle failed', { error: e.message });
+      log.error('Job poll cycle failed', { error: (e as Error).message });
     } finally {
       this.scheduleJobPoll();
     }
@@ -863,18 +885,18 @@ class StateManager {
 
   /**
    * Execute a health poll cycle (fixed 30-min interval)
-   * 1 SSH call per cluster (parallel) via getClusterHealth()
    */
-  async healthPoll() {
+  private async healthPoll(): Promise<void> {
     this.lastHealthPollTime = Date.now();
 
     try {
       await this.refreshClusterHealth();
     } catch (e) {
-      log.error('Health poll cycle failed', { error: e.message });
-    } finally {
-      if (this.pollingStopped) return;
-      // Always schedule next health poll at fixed interval
+      log.error('Health poll cycle failed', { error: (e as Error).message });
+    }
+
+    // Schedule next poll if not stopped
+    if (!this.pollingStopped) {
       const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
       this.healthPollTimer = setTimeout(() => this.healthPoll(), INTERVAL_MS);
       log.debugFor('state', `Next health poll in ${Math.round(INTERVAL_MS / 60000)} min`);
@@ -883,12 +905,8 @@ class StateManager {
 
   /**
    * Refresh all sessions from SLURM using batch queries
-   * 1 SSH call per cluster (parallel) via getAllJobs()
-   * Scales efficiently regardless of number of active sessions
-   *
-   * @returns {Promise<boolean>} True if significant changes detected (for backoff reset)
    */
-  async refreshAllSessions() {
+  private async refreshAllSessions(): Promise<boolean> {
     if (!this.hpcServiceFactory) return false;
 
     let significantChange = false;
@@ -899,18 +917,18 @@ class StateManager {
     const jobResults = await Promise.all(
       clusterNames.map(async (hpc) => {
         try {
-          const hpcService = this.hpcServiceFactory(hpc);
+          const hpcService = this.hpcServiceFactory!(hpc);
           const jobs = await hpcService.getAllJobs();
           return { hpc, jobs, error: null };
         } catch (e) {
-          log.warn('Failed to fetch jobs from cluster', { hpc, error: e.message });
-          return { hpc, jobs: {}, error: e.message };
+          log.warn('Failed to fetch jobs from cluster', { hpc, error: (e as Error).message });
+          return { hpc, jobs: {} as Record<string, JobInfo>, error: (e as Error).message };
         }
       })
     );
 
     // Build a map of cluster -> ide -> jobInfo from batch results
-    const jobsByCluster = {};
+    const jobsByCluster: Record<string, Record<string, JobInfo>> = {};
     for (const { hpc, jobs } of jobResults) {
       jobsByCluster[hpc] = jobs;
     }
@@ -930,7 +948,6 @@ class StateManager {
       const jobInfo = clusterJobs[ide];
 
       // Check if our job is still in the batch results
-      // Note: getAllJobs filters by job name and states (R,PD only), so ended jobs won't appear
       if (!jobInfo || jobInfo.jobId !== session.jobId) {
         // Job no longer exists or is a different job
         log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
@@ -943,14 +960,12 @@ class StateManager {
       // Update session with fresh data from SLURM
       if (jobInfo.state === 'RUNNING' && session.status !== 'running') {
         session.status = 'running';
-        session.node = jobInfo.node;
+        session.node = jobInfo.node || null;
         significantChange = true;
       } else if (jobInfo.state === 'PENDING' && session.status !== 'pending') {
         session.status = 'pending';
         significantChange = true;
       }
-      // Note: Terminal states (COMPLETED, FAILED, etc.) won't appear in getAllJobs
-      // results since it filters by --states=R,PD. Ended jobs are caught above.
 
       // Update time remaining (not a significant change for backoff purposes)
       if (jobInfo.timeLeftSeconds !== undefined) {
@@ -975,9 +990,8 @@ class StateManager {
 
   /**
    * Calculate optimal job polling interval based on session state and backoff
-   * @returns {number} Interval in milliseconds
    */
-  getOptimalJobPollInterval() {
+  getOptimalJobPollInterval(): number {
     const { THRESHOLDS_SECONDS, INTERVALS_MS, BACKOFF } = POLLING_CONFIG.JOB_POLLING;
 
     let hasPending = false;
@@ -1010,7 +1024,7 @@ class StateManager {
     }
 
     // Determine base interval from time remaining
-    let baseInterval;
+    let baseInterval: number;
     if (minTimeLeft < THRESHOLDS_SECONDS.NEAR_EXPIRY) {
       baseInterval = INTERVALS_MS.FREQUENT;
     } else if (minTimeLeft < THRESHOLDS_SECONDS.APPROACHING_END) {
@@ -1039,9 +1053,8 @@ class StateManager {
 
   /**
    * Get polling info for API responses
-   * @returns {Object} Polling metadata
    */
-  getPollingInfo() {
+  getPollingInfo(): PollingInfo {
     return {
       jobPolling: {
         lastPollTime: this.lastJobPollTime,
@@ -1062,10 +1075,8 @@ class StateManager {
 
   /**
    * Refresh cluster health for all clusters
-   * Called from healthPoll() on fixed 30-min interval
-   * 1 SSH call per cluster (parallel) via getClusterHealth()
    */
-  async refreshClusterHealth() {
+  private async refreshClusterHealth(): Promise<void> {
     if (!this.hpcServiceFactory) return;
 
     const now = Date.now();
@@ -1091,18 +1102,17 @@ class StateManager {
     }
 
     // Fetch health from all clusters in parallel
-    // Pass userAccount for fairshare query (use current user's cached account)
-    const userAccount = this.getUserAccount(null);  // null = config.hpcUser
+    const userAccount = this.getUserAccount(null);
     const healthPromises = clusterNames.map(async (hpc) => {
       try {
-        const hpcService = this.hpcServiceFactory(hpc);
+        const hpcService = this.hpcServiceFactory!(hpc);
         const health = await hpcService.getClusterHealth({ userAccount });
 
         // Reset failure counter on success
-        this.state.clusterHealth[hpc].consecutiveFailures = 0;
+        this.state.clusterHealth![hpc].consecutiveFailures = 0;
 
         // Update current health
-        this.state.clusterHealth[hpc].current = health;
+        this.state.clusterHealth![hpc].current = health;
 
         // Save to SQLite if enabled
         if (this.useSqlite) {
@@ -1113,29 +1123,30 @@ class StateManager {
               dbHealth.addHealthSnapshot(hpc, health);
             }
           } catch (err) {
-            log.error('Failed to save cluster health to SQLite', { hpc, error: err.message });
+            log.error('Failed to save cluster health to SQLite', { hpc, error: (err as Error).message });
           }
         }
 
         // Append to in-memory history (only if online and health data is valid)
-        // Use pre-calculated percentages from hpc.js
         if (health.online && health.cpus && health.memory && health.nodes) {
-          this.state.clusterHealth[hpc].history.push({
+          this.state.clusterHealth![hpc].history.push({
             timestamp: now,
             cpus: health.cpus.percent ?? 0,
             memory: health.memory.percent ?? 0,
             nodes: health.nodes.percent ?? 0,
             gpus: health.gpus?.percent ?? null,
+            runningJobs: health.runningJobs,
+            pendingJobs: health.pendingJobs,
           });
 
           // Throttle rollover to avoid repeated file I/O (at most once per hour)
           // Skip if using SQLite (history is in database)
           if (!this.useSqlite) {
             const ROLLOVER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-            const lastRolloverAt = this.state.clusterHealth[hpc].lastRolloverAt || 0;
+            const lastRolloverAt = this.state.clusterHealth![hpc].lastRolloverAt || 0;
             if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
               await this.rolloverHealthHistory(hpc);
-              this.state.clusterHealth[hpc].lastRolloverAt = now;
+              this.state.clusterHealth![hpc].lastRolloverAt = now;
             }
           }
         }
@@ -1147,22 +1158,31 @@ class StateManager {
         });
       } catch (e) {
         // Track consecutive failures
-        this.state.clusterHealth[hpc].consecutiveFailures =
-          (this.state.clusterHealth[hpc].consecutiveFailures || 0) + 1;
+        this.state.clusterHealth![hpc].consecutiveFailures =
+          (this.state.clusterHealth![hpc].consecutiveFailures || 0) + 1;
 
         // Mark cluster as offline
-        this.state.clusterHealth[hpc].current = {
+        this.state.clusterHealth![hpc].current = {
           online: false,
-          error: e.message,
+          error: (e as Error).message,
           lastChecked: now,
+          cpus: null,
+          memory: null,
+          nodes: null,
+          gpus: null,
+          partitions: null,
+          runningJobs: 0,
+          pendingJobs: 0,
+          fairshare: null,
+          consecutiveFailures: this.state.clusterHealth![hpc].consecutiveFailures,
         };
 
         // Escalate logging if failures persist
-        const failures = this.state.clusterHealth[hpc].consecutiveFailures;
+        const failures = this.state.clusterHealth![hpc].consecutiveFailures;
         if (failures >= 5) {
-          log.error('Cluster health check failing persistently', { hpc, failures, error: e.message });
+          log.error('Cluster health check failing persistently', { hpc, failures, error: (e as Error).message });
         } else {
-          log.warn('Failed to refresh cluster health', { hpc, failures, error: e.message });
+          log.warn('Failed to refresh cluster health', { hpc, failures, error: (e as Error).message });
         }
       }
     });
@@ -1176,16 +1196,9 @@ class StateManager {
 
   /**
    * Roll over history entries older than 24h to dated archive files
-   * Keeps state.json lightweight while preserving historical data
-   *
-   * Downsampling strategy:
-   * - Current day (in state.json): full resolution (every poll)
-   * - Archives: 1 sample per hour (24 samples/day max)
-   *
-   * @param {string} hpc - Cluster name
    */
-  async rolloverHealthHistory(hpc) {
-    const history = this.state.clusterHealth[hpc]?.history || [];
+  private async rolloverHealthHistory(hpc: string): Promise<void> {
+    const history = this.state.clusterHealth?.[hpc]?.history || [];
     const cutoff = Date.now() - ONE_DAY_MS;
 
     // Find entries to archive (older than 24h)
@@ -1193,7 +1206,7 @@ class StateManager {
     if (toArchive.length === 0) return;
 
     // Group by date (YYYY-MM-DD)
-    const byDate = {};
+    const byDate: Record<string, HealthHistoryEntry[]> = {};
     for (const entry of toArchive) {
       const date = new Date(entry.timestamp).toISOString().split('T')[0];
       if (!byDate[date]) byDate[date] = [];
@@ -1208,7 +1221,7 @@ class StateManager {
       const archiveFile = path.join(archiveDir, `${hpc}-${date}.json`);
 
       // Merge with existing archive if present
-      let existing = { cluster: hpc, date, entries: [] };
+      let existing: { cluster: string; date: string; entries: HealthHistoryEntry[] } = { cluster: hpc, date, entries: [] };
       try {
         const data = await fs.readFile(archiveFile, 'utf8');
         const parsed = JSON.parse(data);
@@ -1219,9 +1232,10 @@ class StateManager {
           log.warn('Invalid archive JSON structure, using fresh archive', { archiveFile, hpc, date });
         }
       } catch (e) {
-        if (e.code !== 'ENOENT') {
+        const nodeErr = e as NodeJS.ErrnoException;
+        if (nodeErr.code !== 'ENOENT') {
           // Log unexpected errors (not just missing file)
-          log.warn('Failed to read archive file, using fresh archive', { archiveFile, hpc, date, error: e.message });
+          log.warn('Failed to read archive file, using fresh archive', { archiveFile, hpc, date, error: (e as Error).message });
         }
       }
 
@@ -1235,20 +1249,17 @@ class StateManager {
     }
 
     // Remove archived entries from state
-    this.state.clusterHealth[hpc].history = history.filter(e => e.timestamp >= cutoff);
+    this.state.clusterHealth![hpc].history = history.filter(e => e.timestamp >= cutoff);
   }
 
   /**
    * Downsample health entries to one per hour
-   * Uses the median value for each metric within each hour bucket
-   * @param {Array} entries - Health history entries
-   * @returns {Array} Downsampled entries (1 per hour)
    */
-  downsampleToHourly(entries) {
+  private downsampleToHourly(entries: HealthHistoryEntry[]): (HealthHistoryEntry & { sampleCount?: number })[] {
     if (entries.length === 0) return [];
 
     // Group by hour (YYYY-MM-DDTHH)
-    const byHour = {};
+    const byHour: Record<string, HealthHistoryEntry[]> = {};
     for (const entry of entries) {
       const hourKey = new Date(entry.timestamp).toISOString().slice(0, 13); // "2025-01-04T14"
       if (!byHour[hourKey]) byHour[hourKey] = [];
@@ -1256,8 +1267,8 @@ class StateManager {
     }
 
     // For each hour, compute representative sample (median of each metric)
-    const result = [];
-    for (const [hourKey, hourEntries] of Object.entries(byHour)) {
+    const result: (HealthHistoryEntry & { sampleCount?: number })[] = [];
+    for (const hourEntries of Object.values(byHour)) {
       // Use middle timestamp for the hour
       const sortedByTime = hourEntries.sort((a, b) => a.timestamp - b.timestamp);
       const midIndex = Math.floor(sortedByTime.length / 2);
@@ -1268,6 +1279,8 @@ class StateManager {
         memory: this.median(hourEntries.map(e => e.memory)),
         nodes: this.median(hourEntries.map(e => e.nodes)),
         gpus: this.medianNullable(hourEntries.map(e => e.gpus)),
+        runningJobs: Math.round(this.median(hourEntries.map(e => e.runningJobs))),
+        pendingJobs: Math.round(this.median(hourEntries.map(e => e.pendingJobs))),
         sampleCount: hourEntries.length, // Track how many samples were aggregated
       });
     }
@@ -1278,11 +1291,9 @@ class StateManager {
 
   /**
    * Calculate median of numeric array
-   * @param {number[]} values
-   * @returns {number}
    */
-  median(values) {
-    const sorted = values.filter(v => typeof v === 'number').sort((a, b) => a - b);
+  private median(values: (number | null)[]): number {
+    const sorted = values.filter((v): v is number => typeof v === 'number').sort((a, b) => a - b);
     if (sorted.length === 0) return 0;
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
@@ -1290,21 +1301,17 @@ class StateManager {
 
   /**
    * Calculate median for nullable values (e.g., GPUs which may be null)
-   * @param {(number|null)[]} values
-   * @returns {number|null}
    */
-  medianNullable(values) {
-    const nonNull = values.filter(v => v !== null && typeof v === 'number');
+  private medianNullable(values: (number | null)[]): number | null {
+    const nonNull = values.filter((v): v is number => v !== null && typeof v === 'number');
     if (nonNull.length === 0) return null;
     return this.median(nonNull);
   }
 
   /**
    * Get cluster health data for API responses
-   * Combines current state with history from database
-   * @returns {Object} Cluster health data with current and history
    */
-  getClusterHealth() {
+  getClusterHealth(): Record<string, ClusterHealthState> {
     const clusterHealth = this.state.clusterHealth || {};
 
     // If SQLite enabled, replace in-memory history with database history
@@ -1317,7 +1324,7 @@ class StateManager {
           }
         }
       } catch (err) {
-        log.error('Failed to get cluster history from SQLite', { error: err.message });
+        log.error('Failed to get cluster history from SQLite', { error: (err as Error).message });
       }
     }
 
@@ -1326,14 +1333,11 @@ class StateManager {
 
   /**
    * Get cluster health history from database
-   * @param {Object} [options]
-   * @param {number} [options.days=1] - Number of days to look back
-   * @returns {Object} Map of hpc -> history array
    */
-  getClusterHistory(options = {}) {
+  getClusterHistory(options: { days?: number } = {}): Record<string, HealthHistoryEntry[]> {
     if (!this.useSqlite) {
       // Return in-memory history if SQLite not enabled
-      const result = {};
+      const result: Record<string, HealthHistoryEntry[]> = {};
       for (const [hpc, data] of Object.entries(this.state.clusterHealth || {})) {
         result[hpc] = data.history || [];
       }
@@ -1343,10 +1347,13 @@ class StateManager {
     try {
       return dbHealth.getAllHealthHistory(options);
     } catch (err) {
-      log.error('Failed to get cluster history from SQLite', { error: err.message });
+      log.error('Failed to get cluster history from SQLite', { error: (err as Error).message });
       return {};
     }
   }
 }
 
-module.exports = { StateManager, POLLING_CONFIG };
+export { StateManager, POLLING_CONFIG, buildSessionKey, parseSessionKey };
+
+// CommonJS compatibility for existing require() calls
+module.exports = { StateManager, POLLING_CONFIG, buildSessionKey, parseSessionKey };

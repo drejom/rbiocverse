@@ -15,8 +15,16 @@ const debugComponents = new Set(
 );
 const debugAll = debugComponents.has('all');
 
-interface LogMeta {
+export interface LogMeta {
   [key: string]: unknown;
+}
+
+// Helper to convert string to meta object
+function toMeta(metaOrString: LogMeta | string = {}): LogMeta {
+  if (typeof metaOrString === 'string') {
+    return { detail: metaOrString };
+  }
+  return metaOrString;
 }
 
 interface TimerResult {
@@ -66,54 +74,54 @@ function isDebugEnabled(component: string): boolean {
 
 // Convenience methods for structured logging
 const log = {
-  // General logging
-  debug: (msg: string, meta: LogMeta = {}): void => { logger.debug(msg, meta); },
-  info: (msg: string, meta: LogMeta = {}): void => { logger.info(msg, meta); },
-  warn: (msg: string, meta: LogMeta = {}): void => { logger.warn(msg, meta); },
-  error: (msg: string, meta: LogMeta = {}): void => { logger.error(msg, meta); },
+  // General logging - accepts LogMeta or string for convenience
+  debug: (msg: string, meta: LogMeta | string = {}): void => { logger.debug(msg, toMeta(meta)); },
+  info: (msg: string, meta: LogMeta | string = {}): void => { logger.info(msg, toMeta(meta)); },
+  warn: (msg: string, meta: LogMeta | string = {}): void => { logger.warn(msg, toMeta(meta)); },
+  error: (msg: string, meta: LogMeta | string = {}): void => { logger.error(msg, toMeta(meta)); },
 
   // Component-specific debug logging
   // Only logs if DEBUG_COMPONENTS includes this component or 'all'
   // Components: vscode, rstudio, ssh, cache, ui, state, tunnel, liveserver
-  debugFor: (component: string, msg: string, meta: LogMeta = {}): void => {
+  debugFor: (component: string, msg: string, meta: LogMeta | string = {}): void => {
     if (logger.isLevelEnabled('debug') && isDebugEnabled(component)) {
-      logger.debug(`[${component}] ${msg}`, meta);
+      logger.debug(`[${component}] ${msg}`, toMeta(meta));
     }
   },
 
   // Domain-specific logging
-  ssh: (action: string, meta: LogMeta = {}): void => { logger.info(`[SSH] ${action}`, meta); },
-  job: (action: string, meta: LogMeta = {}): void => { logger.info(`[Job] ${action}`, meta); },
-  tunnel: (action: string, meta: LogMeta = {}): void => { logger.info(`[Tunnel] ${action}`, meta); },
-  lock: (action: string, meta: LogMeta = {}): void => { logger.debug(`[Lock] ${action}`, meta); },
-  api: (action: string, meta: LogMeta = {}): void => { logger.info(`[API] ${action}`, meta); },
-  ui: (action: string, meta: LogMeta = {}): void => { logger.debug(`[UI] ${action}`, meta); },
+  ssh: (action: string, meta: LogMeta | string = {}): void => { logger.info(`[SSH] ${action}`, toMeta(meta)); },
+  job: (action: string, meta: LogMeta | string = {}): void => { logger.info(`[Job] ${action}`, toMeta(meta)); },
+  tunnel: (action: string, meta: LogMeta | string = {}): void => { logger.info(`[Tunnel] ${action}`, toMeta(meta)); },
+  lock: (action: string, meta: LogMeta | string = {}): void => { logger.debug(`[Lock] ${action}`, toMeta(meta)); },
+  api: (action: string, meta: LogMeta | string = {}): void => { logger.info(`[API] ${action}`, toMeta(meta)); },
+  ui: (action: string, meta: LogMeta | string = {}): void => { logger.debug(`[UI] ${action}`, toMeta(meta)); },
 
   // Port check - debug level to avoid noise from polling
-  portCheck: (port: number, open: boolean, meta: LogMeta = {}): void => {
-    logger.debug(`[Port] ${port} ${open ? 'open' : 'closed'}`, meta);
+  portCheck: (port: number, open: boolean, meta: LogMeta | string = {}): void => {
+    logger.debug(`[Port] ${port} ${open ? 'open' : 'closed'}`, toMeta(meta));
   },
 
   // State operations
-  state: (action: string, meta: LogMeta = {}): void => { logger.info(`[State] ${action}`, meta); },
+  state: (action: string, meta: LogMeta | string = {}): void => { logger.info(`[State] ${action}`, toMeta(meta)); },
 
   // Proxy events - debug level for routine operations (connection refused is expected)
-  proxy: (action: string, meta: LogMeta = {}): void => { logger.debug(`[Proxy] ${action}`, meta); },
-  proxyError: (msg: string, meta: LogMeta = {}): void => { logger.debug(`[Proxy] ${msg}`, meta); },
+  proxy: (action: string, meta: LogMeta | string = {}): void => { logger.debug(`[Proxy] ${action}`, toMeta(meta)); },
+  proxyError: (msg: string, meta: LogMeta | string = {}): void => { logger.debug(`[Proxy] ${msg}`, toMeta(meta)); },
 
   // Database operations - debug level for routine queries
   // Enable with DEBUG_COMPONENTS=db or LOG_LEVEL=debug
-  db: (action: string, meta: LogMeta = {}): void => {
+  db: (action: string, meta: LogMeta | string = {}): void => {
     if (logger.isLevelEnabled('debug') && isDebugEnabled('db')) {
-      logger.debug(`[DB] ${action}`, meta);
+      logger.debug(`[DB] ${action}`, toMeta(meta));
     }
   },
 
   // Audit logging for sensitive actions (always logged at info level)
   // Use for: key generation, session start/stop, user deletion, admin actions
   // Note: winston already adds timestamp via format.timestamp()
-  audit: (action: string, meta: LogMeta = {}): void => {
-    logger.info(`[Audit] ${action}`, meta);
+  audit: (action: string, meta: LogMeta | string = {}): void => {
+    logger.info(`[Audit] ${action}`, toMeta(meta));
   },
 
   // Performance timing helper

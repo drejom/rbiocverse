@@ -5,10 +5,10 @@
 
 /**
  * Extract token value from vscode-tkn cookie
- * @param {string} cookieHeader - Cookie header string
- * @returns {string|null} Token value or null
+ * @param cookieHeader - Cookie header string
+ * @returns Token value or null
  */
-function getCookieToken(cookieHeader) {
+export function getCookieToken(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/vscode-tkn=([^;]+)/);
   return match ? match[1] : null;
@@ -17,14 +17,15 @@ function getCookieToken(cookieHeader) {
 /**
  * Check if a path is the VS Code root path (for token injection)
  * Handles query strings and trailing slashes robustly
- * @param {string} targetPath - The path to check
- * @returns {boolean} True if this is the root path
+ * @param targetPath - The path to check
+ * @returns True if this is the root path
  */
-function isVscodeRootPath(targetPath) {
+export function isVscodeRootPath(targetPath: string): boolean {
   const pathname = new URL(targetPath, 'http://localhost').pathname.replace(/\/$/, '');
   return pathname === '/vscode-direct';
 }
 
+// CommonJS compatibility for existing require() calls
 module.exports = {
   getCookieToken,
   isVscodeRootPath,

@@ -3,15 +3,35 @@
  * Replaces lib/auth/user-store.js JSON file operations
  */
 
-const { getDb } = require('../db');
-const { log } = require('../logger');
+import { getDb } from '../db';
+import { log } from '../logger';
+
+export interface User {
+  username: string;
+  fullName: string | null;
+  publicKey: string | null;
+  privateKey: string | null;
+  setupComplete: boolean;
+  createdAt: string | null;
+  lastLogin: string | null;
+}
+
+interface UserRow {
+  username: string;
+  full_name: string | null;
+  public_key: string | null;
+  private_key_encrypted: string | null;
+  setup_complete: number;
+  created_at: string | null;
+  last_login: string | null;
+}
 
 /**
  * Convert database row to user object
- * @param {Object} row - Database row
- * @returns {Object} User object
+ * @param row - Database row
+ * @returns User object
  */
-function rowToUser(row) {
+function rowToUser(row: UserRow): User {
   return {
     username: row.username,
     fullName: row.full_name,
@@ -25,22 +45,22 @@ function rowToUser(row) {
 
 /**
  * Get a user by username
- * @param {string} username
- * @returns {Object|undefined} User object or undefined
+ * @param username
+ * @returns User object or undefined
  */
-function getUser(username) {
+function getUser(username: string): User | undefined {
   const db = getDb();
-  const row = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const row = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as UserRow | undefined;
   if (!row) return undefined;
   return rowToUser(row);
 }
 
 /**
  * Set/update a user record
- * @param {string} username
- * @param {Object} user - User data
+ * @param username
+ * @param user - User data
  */
-function setUser(username, user) {
+function setUser(username: string, user: Partial<User>): void {
   const db = getDb();
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO users (
@@ -62,10 +82,10 @@ function setUser(username, user) {
 
 /**
  * Delete a user
- * @param {string} username
- * @returns {boolean} True if user was deleted
+ * @param username
+ * @returns True if user was deleted
  */
-function deleteUser(username) {
+function deleteUser(username: string): boolean {
   const db = getDb();
   const result = db.prepare('DELETE FROM users WHERE username = ?').run(username);
   return result.changes > 0;
@@ -73,12 +93,12 @@ function deleteUser(username) {
 
 /**
  * Get all users
- * @returns {Map<string, Object>} Map of username -> user object
+ * @returns Map of username -> user object
  */
-function getAllUsers() {
+function getAllUsers(): Map<string, User> {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM users').all();
-  const users = new Map();
+  const rows = db.prepare('SELECT * FROM users').all() as UserRow[];
+  const users = new Map<string, User>();
 
   for (const row of rows) {
     users.set(row.username, rowToUser(row));
@@ -89,19 +109,19 @@ function getAllUsers() {
 
 /**
  * Get user count
- * @returns {number} Total number of users
+ * @returns Total number of users
  */
-function getUserCount() {
+function getUserCount(): number {
   const db = getDb();
-  const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
   return row.count;
 }
 
 /**
  * Update user's last login timestamp
- * @param {string} username
+ * @param username
  */
-function updateLastLogin(username) {
+function updateLastLogin(username: string): void {
   const db = getDb();
   db.prepare('UPDATE users SET last_login = ? WHERE username = ?')
     .run(new Date().toISOString(), username);
@@ -109,10 +129,10 @@ function updateLastLogin(username) {
 
 /**
  * Migrate users from JSON file to database
- * @param {Object} usersData - Object mapping username -> user data
- * @returns {number} Number of users migrated
+ * @param usersData - Object mapping username -> user data
+ * @returns Number of users migrated
  */
-function migrateFromJson(usersData) {
+function migrateFromJson(usersData: Record<string, Partial<User>>): number {
   const db = getDb();
   let count = 0;
 
@@ -143,6 +163,17 @@ function migrateFromJson(usersData) {
   return count;
 }
 
+export {
+  getUser,
+  setUser,
+  deleteUser,
+  getAllUsers,
+  getUserCount,
+  updateLastLogin,
+  migrateFromJson,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   getUser,
   setUser,

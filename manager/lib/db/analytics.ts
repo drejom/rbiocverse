@@ -3,14 +3,12 @@
  * Provides aggregated data for admin reports and visualizations
  */
 
-const { getDb } = require('../db');
+import { getDb } from '../db';
 
 /**
  * Get ISO date string for N days ago
- * @param {number} days - Number of days to go back
- * @returns {string} ISO date string
  */
-function daysAgo(days) {
+function daysAgo(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString();
@@ -18,10 +16,8 @@ function daysAgo(days) {
 
 /**
  * Get ISO date string for N months ago
- * @param {number} months - Number of months to go back
- * @returns {string} ISO date string
  */
-function monthsAgo(months) {
+function monthsAgo(months: number): string {
   const date = new Date();
   date.setMonth(date.getMonth() - months);
   return date.toISOString();
@@ -29,10 +25,8 @@ function monthsAgo(months) {
 
 /**
  * Get release version usage statistics
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Array<Object>}
  */
-function getReleaseUsage(days = 30) {
+function getReleaseUsage(days: number = 30): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -50,10 +44,8 @@ function getReleaseUsage(days = 30) {
 
 /**
  * Get resource request patterns
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Object}
  */
-function getResourcePatterns(days = 30) {
+function getResourcePatterns(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -67,7 +59,7 @@ function getResourcePatterns(days = 30) {
       COUNT(DISTINCT user) as uniqueUsers
     FROM session_history
     WHERE started_at >= ?
-  `).get(cutoff);
+  `).get(cutoff) as Record<string, unknown>;
 
   // CPU distribution
   const cpuDistribution = db.prepare(`
@@ -109,10 +101,8 @@ function getResourcePatterns(days = 30) {
 
 /**
  * Get IDE popularity statistics
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Array<Object>}
  */
-function getIdePopularity(days = 30) {
+function getIdePopularity(days: number = 30): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -131,31 +121,29 @@ function getIdePopularity(days = 30) {
 
 /**
  * Get feature usage (Shiny, Live Server)
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Object}
  */
-function getFeatureUsage(days = 30) {
+function getFeatureUsage(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
   // Only VS Code sessions can use Shiny and Live Server
-  const vscodeTotal = db.prepare(`
+  const vscodeTotal = (db.prepare(`
     SELECT COUNT(*) as count
     FROM session_history
     WHERE started_at >= ? AND ide = 'vscode'
-  `).get(cutoff).count;
+  `).get(cutoff) as { count: number }).count;
 
-  const shinyCount = db.prepare(`
+  const shinyCount = (db.prepare(`
     SELECT COUNT(*) as count
     FROM session_history
     WHERE started_at >= ? AND ide = 'vscode' AND used_shiny = 1
-  `).get(cutoff).count;
+  `).get(cutoff) as { count: number }).count;
 
-  const liveServerCount = db.prepare(`
+  const liveServerCount = (db.prepare(`
     SELECT COUNT(*) as count
     FROM session_history
     WHERE started_at >= ? AND ide = 'vscode' AND used_live_server = 1
-  `).get(cutoff).count;
+  `).get(cutoff) as { count: number }).count;
 
   return {
     vscodeTotal,
@@ -172,11 +160,8 @@ function getFeatureUsage(days = 30) {
 
 /**
  * Get per-user usage summary
- * @param {string} username
- * @param {number} [days=90] - Number of days to analyze
- * @returns {Object}
  */
-function getUserUsageSummary(username, days = 90) {
+function getUserUsageSummary(username: string, days: number = 90): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -190,7 +175,7 @@ function getUserUsageSummary(username, days = 90) {
       MAX(started_at) as lastSession
     FROM session_history
     WHERE user = ? AND started_at >= ?
-  `).get(username, cutoff);
+  `).get(username, cutoff) as Record<string, unknown>;
 
   const ideBreakdown = db.prepare(`
     SELECT ide, COUNT(*) as count
@@ -215,14 +200,17 @@ function getUserUsageSummary(username, days = 90) {
   };
 }
 
+interface PowerUserThresholds {
+  minAvgCpus?: number;
+  minAvgDuration?: number;
+  minSessions?: number;
+}
+
 /**
  * Get power users (candidates for HPC training)
  * Users with high resource usage patterns
- * @param {number} [days=30] - Number of days to analyze
- * @param {Object} [thresholds]
- * @returns {Array<Object>}
  */
-function getPowerUsers(days = 30, thresholds = {}) {
+function getPowerUsers(days: number = 30, thresholds: PowerUserThresholds = {}): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -248,10 +236,8 @@ function getPowerUsers(days = 30, thresholds = {}) {
 /**
  * Get inactive users (cleanup candidates)
  * Users with no activity in specified period
- * @param {number} [inactiveDays=90] - Days of inactivity threshold
- * @returns {Array<Object>}
  */
-function getInactiveUsers(inactiveDays = 90) {
+function getInactiveUsers(inactiveDays: number = 90): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(inactiveDays);
 
@@ -271,10 +257,8 @@ function getInactiveUsers(inactiveDays = 90) {
 
 /**
  * Get new user success rate
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Object}
  */
-function getNewUserSuccessRate(days = 30) {
+function getNewUserSuccessRate(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -307,7 +291,7 @@ function getNewUserSuccessRate(days = 30) {
       fs.end_reason as firstSessionEndReason
     FROM user_stats us
     LEFT JOIN first_sessions fs ON us.user = fs.user AND fs.rn = 1
-  `).all(cutoff);
+  `).all(cutoff) as Array<{ user: string; firstSession: string; totalSessions: number; completedSessions: number; firstSessionEndReason: string }>;
 
   const withSuccessfulFirst = newUsers.filter(u => u.firstSessionEndReason === 'completed');
 
@@ -328,10 +312,8 @@ function getNewUserSuccessRate(days = 30) {
 
 /**
  * Get capacity planning metrics
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Object}
  */
-function getCapacityMetrics(days = 30) {
+function getCapacityMetrics(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -358,7 +340,7 @@ function getCapacityMetrics(days = 30) {
     FROM session_history
     WHERE started_at >= ? AND wait_seconds IS NOT NULL
     ORDER BY wait_seconds
-  `).all(cutoff);
+  `).all(cutoff) as Array<{ wait_seconds: number }>;
 
   const p50 = percentile(waitTimes.map(w => w.wait_seconds), 50);
   const p90 = percentile(waitTimes.map(w => w.wait_seconds), 90);
@@ -369,14 +351,14 @@ function getCapacityMetrics(days = 30) {
     SELECT COUNT(*) as count, COUNT(DISTINCT user) as users
     FROM session_history
     WHERE started_at >= ?
-  `).get(cutoff);
+  `).get(cutoff) as { count: number; users: number };
 
   const olderCutoff = daysAgo(days * 2);
   const previousSessions = db.prepare(`
     SELECT COUNT(*) as count, COUNT(DISTINCT user) as users
     FROM session_history
     WHERE started_at >= ? AND started_at < ?
-  `).get(olderCutoff, cutoff);
+  `).get(olderCutoff, cutoff) as { count: number; users: number };
 
   const sessionGrowth = previousSessions.count > 0
     ? Math.round(((recentSessions.count - previousSessions.count) / previousSessions.count) * 100)
@@ -407,10 +389,8 @@ function getCapacityMetrics(days = 30) {
 
 /**
  * Get usage by Slurm account/PI
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Array<Object>}
  */
-function getUsageByAccount(days = 30) {
+function getUsageByAccount(days: number = 30): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -432,10 +412,8 @@ function getUsageByAccount(days = 30) {
 
 /**
  * Get daily session counts for heatmap
- * @param {number} [days=365] - Number of days
- * @returns {Array<Object>}
  */
-function getDailySessionCounts(days = 365) {
+function getDailySessionCounts(days: number = 365): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -453,10 +431,8 @@ function getDailySessionCounts(days = 365) {
 
 /**
  * Get release adoption curve
- * @param {string} version - Release version to track
- * @returns {Array<Object>}
  */
-function getReleaseAdoption(version) {
+function getReleaseAdoption(version: string): unknown[] {
   const db = getDb();
 
   // Get cumulative unique users over time for this version
@@ -479,10 +455,8 @@ function getReleaseAdoption(version) {
 
 /**
  * Get month-over-month growth trends
- * @param {number} [months=12] - Number of months to analyze
- * @returns {Array<Object>}
  */
-function getGrowthTrends(months = 12) {
+function getGrowthTrends(months: number = 12): unknown[] {
   const db = getDb();
   const cutoff = monthsAgo(months);
 
@@ -502,10 +476,8 @@ function getGrowthTrends(months = 12) {
 
 /**
  * Get queue wait time statistics by cluster
- * @param {number} [days=30] - Number of days to analyze
- * @returns {Object}
  */
-function getQueueWaitTimesByCluster(days = 30) {
+function getQueueWaitTimesByCluster(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -519,9 +491,9 @@ function getQueueWaitTimesByCluster(days = 30) {
     FROM session_history
     WHERE started_at >= ? AND wait_seconds IS NOT NULL
     GROUP BY hpc
-  `).all(cutoff);
+  `).all(cutoff) as Array<{ hpc: string; count: number; avg_wait: number | null; wait_values: string | null }>;
 
-  const result = {};
+  const result: Record<string, unknown> = {};
   for (const row of clusterStats) {
     // Parse concatenated values for percentile calculation
     const values = row.wait_values
@@ -542,10 +514,8 @@ function getQueueWaitTimesByCluster(days = 30) {
 
 /**
  * Export raw session data as CSV-friendly format
- * @param {number} [days=30] - Number of days to export
- * @returns {Array<Object>}
  */
-function exportRawSessions(days = 30) {
+function exportRawSessions(days: number = 30): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -572,10 +542,8 @@ function exportRawSessions(days = 30) {
 
 /**
  * Export aggregated summary data
- * @param {number} [days=30] - Number of days to summarize
- * @returns {Array<Object>}
  */
-function exportSummary(days = 30) {
+function exportSummary(days: number = 30): unknown[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -601,13 +569,42 @@ function exportSummary(days = 30) {
 }
 
 // Helper function to calculate percentile
-function percentile(arr, p) {
+function percentile(arr: number[], p: number): number | null {
   if (arr.length === 0) return null;
   const sorted = [...arr].sort((a, b) => a - b);
   const index = Math.ceil((p / 100) * sorted.length) - 1;
   return sorted[Math.max(0, index)];
 }
 
+export {
+  // Usage patterns
+  getReleaseUsage,
+  getResourcePatterns,
+  getIdePopularity,
+  getFeatureUsage,
+
+  // User insights
+  getUserUsageSummary,
+  getPowerUsers,
+  getInactiveUsers,
+  getNewUserSuccessRate,
+
+  // Capacity planning
+  getCapacityMetrics,
+  getQueueWaitTimesByCluster,
+
+  // Reporting
+  getUsageByAccount,
+  getDailySessionCounts,
+  getReleaseAdoption,
+  getGrowthTrends,
+
+  // Export
+  exportRawSessions,
+  exportSummary,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   // Usage patterns
   getReleaseUsage,

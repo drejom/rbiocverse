@@ -5,9 +5,10 @@
  * Uses healthSchema.js for all field mappings (DRY principle)
  */
 
-const { getDb } = require('../db');
-const { log } = require('../logger');
-const schema = require('./healthSchema');
+import { getDb } from '../db';
+import { log } from '../logger';
+import * as schema from './healthSchema';
+import type { ClusterHealth, HealthHistoryEntry } from './healthSchema';
 
 // ============================================
 // Cluster Cache (Current Health)
@@ -15,21 +16,17 @@ const schema = require('./healthSchema');
 
 /**
  * Get cached cluster health
- * @param {string} hpc - Cluster name
- * @returns {Object|null}
  */
-function getClusterCache(hpc) {
+function getClusterCache(hpc: string): ClusterHealth | null {
   const db = getDb();
   const row = db.prepare('SELECT * FROM cluster_cache WHERE hpc = ?').get(hpc);
-  return schema.rowToHealth(row);
+  return schema.rowToHealth(row as Parameters<typeof schema.rowToHealth>[0]);
 }
 
 /**
  * Save cluster health to cache
- * @param {string} hpc - Cluster name
- * @param {Object} health - Health data
  */
-function saveClusterCache(hpc, health) {
+function saveClusterCache(hpc: string, health: Partial<ClusterHealth>): void {
   const db = getDb();
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO cluster_cache (
@@ -46,16 +43,18 @@ function saveClusterCache(hpc, health) {
 
 /**
  * Get all cluster caches
- * @returns {Object} Map of hpc -> health
  */
-function getAllClusterCaches() {
+function getAllClusterCaches(): Record<string, ClusterHealth> {
   const db = getDb();
   // Single query to get all clusters at once (no N+1)
-  const rows = db.prepare('SELECT * FROM cluster_cache').all();
-  const caches = {};
+  const rows = db.prepare('SELECT * FROM cluster_cache').all() as Array<{ hpc: string } & Parameters<typeof schema.rowToHealth>[0]>;
+  const caches: Record<string, ClusterHealth> = {};
 
   for (const row of rows) {
-    caches[row.hpc] = schema.rowToHealth(row);
+    const health = schema.rowToHealth(row);
+    if (health) {
+      caches[row.hpc] = health;
+    }
   }
 
   return caches;
@@ -63,10 +62,8 @@ function getAllClusterCaches() {
 
 /**
  * Update consecutive failures counter
- * @param {string} hpc
- * @param {number} failures
  */
-function updateConsecutiveFailures(hpc, failures) {
+function updateConsecutiveFailures(hpc: string, failures: number): void {
   const db = getDb();
   db.prepare('UPDATE cluster_cache SET consecutive_failures = ? WHERE hpc = ?')
     .run(failures, hpc);
@@ -78,10 +75,8 @@ function updateConsecutiveFailures(hpc, failures) {
 
 /**
  * Add health snapshot to history
- * @param {string} hpc - Cluster name
- * @param {Object} health - Health data with percentages
  */
-function addHealthSnapshot(hpc, health) {
+function addHealthSnapshot(hpc: string, health: Partial<ClusterHealth>): void {
   const db = getDb();
   const stmt = db.prepare(`
     INSERT INTO cluster_health (
@@ -93,15 +88,15 @@ function addHealthSnapshot(hpc, health) {
   stmt.run(...schema.healthToHistoryRow(hpc, health));
 }
 
+interface GetHistoryOptions {
+  days?: number;
+  limit?: number;
+}
+
 /**
  * Get health history for a cluster
- * @param {string} hpc - Cluster name
- * @param {Object} [options]
- * @param {number} [options.days=1] - Number of days to look back
- * @param {number} [options.limit] - Max records to return
- * @returns {Array<Object>}
  */
-function getHealthHistory(hpc, options = {}) {
+function getHealthHistory(hpc: string, options: GetHistoryOptions = {}): unknown[] {
   const db = getDb();
   const { days = 1, limit } = options;
 
@@ -112,7 +107,7 @@ function getHealthHistory(hpc, options = {}) {
     WHERE hpc = ? AND timestamp >= ?
     ORDER BY timestamp ASC
   `;
-  const params = [hpc, cutoff];
+  const params: (string | number)[] = [hpc, cutoff];
 
   if (limit) {
     sql += ' LIMIT ?';
@@ -124,11 +119,8 @@ function getHealthHistory(hpc, options = {}) {
 
 /**
  * Get health history for all clusters
- * @param {Object} [options]
- * @param {number} [options.days=1] - Number of days to look back
- * @returns {Object} Map of hpc -> history array
  */
-function getAllHealthHistory(options = {}) {
+function getAllHealthHistory(options: { days?: number } = {}): Record<string, HealthHistoryEntry[]> {
   const db = getDb();
   const { days = 1 } = options;
 
@@ -138,9 +130,9 @@ function getAllHealthHistory(options = {}) {
     SELECT * FROM cluster_health
     WHERE timestamp >= ?
     ORDER BY hpc, timestamp ASC
-  `).all(cutoff);
+  `).all(cutoff) as Array<{ hpc: string } & Parameters<typeof schema.historyRowToEntry>[0]>;
 
-  const history = {};
+  const history: Record<string, HealthHistoryEntry[]> = {};
   for (const row of rows) {
     if (!history[row.hpc]) {
       history[row.hpc] = [];
@@ -153,10 +145,8 @@ function getAllHealthHistory(options = {}) {
 
 /**
  * Delete old health history (retention policy)
- * @param {number} [daysToKeep=365] - Keep history for this many days
- * @returns {number} Number of rows deleted
  */
-function pruneHealthHistory(daysToKeep = 365) {
+function pruneHealthHistory(daysToKeep: number = 365): number {
   const db = getDb();
   const cutoff = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
   const result = db.prepare('DELETE FROM cluster_health WHERE timestamp < ?').run(cutoff);
@@ -166,13 +156,25 @@ function pruneHealthHistory(daysToKeep = 365) {
   return result.changes;
 }
 
+interface DailyHealthAggregate {
+  date: string;
+  avgCpus: number;
+  avgMemory: number;
+  avgNodes: number;
+  avgGpus: number | null;
+  avgA100: number | null;
+  avgV100: number | null;
+  maxCpus: number;
+  maxMemory: number;
+  totalRunning: number;
+  totalPending: number;
+  sampleCount: number;
+}
+
 /**
  * Get daily aggregated health data for heatmaps
- * @param {string} hpc - Cluster name
- * @param {number} [days=365] - Number of days
- * @returns {Array<Object>}
  */
-function getDailyHealthAggregates(hpc, days = 365) {
+function getDailyHealthAggregates(hpc: string, days: number = 365): DailyHealthAggregate[] {
   const db = getDb();
   const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
 
@@ -196,7 +198,20 @@ function getDailyHealthAggregates(hpc, days = 365) {
     WHERE hpc = ? AND timestamp >= ?
     GROUP BY date(timestamp / 1000, 'unixepoch')
     ORDER BY date ASC
-  `).all(hpc, cutoff);
+  `).all(hpc, cutoff) as Array<{
+    date: string;
+    avg_cpus: number | null;
+    avg_memory: number | null;
+    avg_nodes: number | null;
+    avg_gpus: number | null;
+    avg_a100: number | null;
+    avg_v100: number | null;
+    max_cpus: number;
+    max_memory: number;
+    total_running: number;
+    total_pending: number;
+    sample_count: number;
+  }>;
 
   return rows.map(row => ({
     date: row.date,
@@ -214,13 +229,18 @@ function getDailyHealthAggregates(hpc, days = 365) {
   }));
 }
 
+interface HealthHistoryJsonEntry {
+  timestamp: number;
+  cpus?: number | null;
+  memory?: number | null;
+  nodes?: number | null;
+  gpus?: number | null;
+}
+
 /**
  * Migrate health history from JSON files
- * @param {string} hpc - Cluster name
- * @param {Array<Object>} entries - Health entries from JSON
- * @returns {number} Number of entries migrated
  */
-function migrateHealthHistory(hpc, entries) {
+function migrateHealthHistory(hpc: string, entries: HealthHistoryJsonEntry[]): number {
   const db = getDb();
   let count = 0;
 
@@ -252,12 +272,16 @@ function migrateHealthHistory(hpc, entries) {
   return count;
 }
 
+interface ClusterHealthCacheJson {
+  current?: Partial<ClusterHealth>;
+  consecutiveFailures?: number;
+  history?: HealthHistoryJsonEntry[];
+}
+
 /**
  * Migrate cluster cache from state object
- * @param {Object} clusterHealth - clusterHealth object from state.json
- * @returns {number} Number of clusters migrated
  */
-function migrateClusterCache(clusterHealth) {
+function migrateClusterCache(clusterHealth: Record<string, ClusterHealthCacheJson>): number {
   const db = getDb();
   let count = 0;
 
@@ -283,6 +307,26 @@ function migrateClusterCache(clusterHealth) {
   return count;
 }
 
+export {
+  // Cluster cache
+  getClusterCache,
+  saveClusterCache,
+  getAllClusterCaches,
+  updateConsecutiveFailures,
+
+  // Health history
+  addHealthSnapshot,
+  getHealthHistory,
+  getAllHealthHistory,
+  pruneHealthHistory,
+  getDailyHealthAggregates,
+
+  // Migration
+  migrateHealthHistory,
+  migrateClusterCache,
+};
+
+// CommonJS compatibility for existing require() calls
 module.exports = {
   // Cluster cache
   getClusterCache,

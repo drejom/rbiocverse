@@ -7,28 +7,97 @@
  * When auth is added, user will come from req.session.user or similar.
  */
 
-const express = require('express');
+import express, { Request, Response, Router } from 'express';
+
 const router = express.Router();
 
 // Parse JSON bodies only for API routes (not globally, which breaks http-proxy)
 router.use(express.json());
-const HpcService = require('../services/hpc');
-const TunnelService = require('../services/tunnel');
-const { validateSbatchInputs, validateHpcName } = require('../lib/validation');
-const { parseTimeToSeconds, formatHumanTime } = require('../lib/helpers');
-const { asyncHandler } = require('../lib/asyncHandler');
-const { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters } = require('../config');
-const { log } = require('../lib/logger');
-const { createClusterCache } = require('../lib/cache');
+
+import HpcService from '../services/hpc';
+import TunnelService from '../services/tunnel';
+import { validateSbatchInputs, validateHpcName } from '../lib/validation';
+import { parseTimeToSeconds, formatHumanTime } from '../lib/helpers';
+import { asyncHandler } from '../lib/asyncHandler';
+import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters, ReleaseConfig } from '../config';
+import { log } from '../lib/logger';
+import { createClusterCache } from '../lib/cache';
+
+// Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
+const param = (req: Request, name: string): string => req.params[name] as string;
+
+// Types
+interface StateManager {
+  isReady(): boolean;
+  getActiveSession(): ActiveSession | null;
+  setActiveSession(user: string, hpc: string, ide: string): Promise<void>;
+  getSession(user: string, hpc: string, ide: string): Session | null;
+  getSessionsForUser(user: string): Record<string, Session | null>;
+  getOrCreateSession(user: string, hpc: string, ide: string): Promise<Session>;
+  updateSession(user: string, hpc: string, ide: string, updates: Partial<Session>): Promise<void>;
+  clearSession(user: string, hpc: string, ide: string, options?: { endReason?: string }): Promise<void>;
+  getPollingInfo(): { lastPollTime: number | null; nextPollTime: number | null; currentInterval: number };
+  getClusterHealth(): Record<string, unknown>;
+  acquireLock(name: string): void;
+  releaseLock(name: string): void;
+  state: {
+    sessions: Record<string, Session | null>;
+  };
+  onSessionCleared?: (user: string, hpc: string, ide: string) => void;
+}
+
+interface ActiveSession {
+  user: string;
+  hpc: string;
+  ide: string;
+}
+
+interface Session {
+  status: 'idle' | 'starting' | 'pending' | 'running';
+  ide?: string;
+  jobId?: string;
+  token?: string;
+  node?: string;
+  error?: string | null;
+  cpus?: number;
+  memory?: string;
+  walltime?: string;
+  startedAt?: string;
+  submittedAt?: string;
+  releaseVersion?: string;
+  gpu?: string | null;
+  account?: string | null;
+  tunnelProcess?: unknown;
+  usedLiveServer?: boolean;
+  usedShiny?: boolean;
+}
+
+interface JobInfo {
+  jobId: string;
+  node?: string;
+  state?: string;
+  ide?: string;
+  timeLeft?: string;
+  timeLimit?: string;
+  cpus?: number;
+  memory?: string;
+  startTime?: string;
+}
+
+interface IdeConfig {
+  name: string;
+  icon?: string;
+  proxyPath?: string;
+}
 
 /**
  * Extract user from request
  * In single-user mode, returns config.hpcUser directly.
  * When auth is implemented, this will extract from session/token.
- * @param {Request} req - Express request
- * @returns {string} Username
+ * @param req - Express request
+ * @returns Username
  */
-function getRequestUser(req) {
+function getRequestUser(_req: Request): string {
   // Future: return req.session?.user || req.user?.username || config.hpcUser;
   return config.hpcUser;  // Single-user mode: use config.hpcUser directly
 }
@@ -41,7 +110,7 @@ const tunnelService = new TunnelService();
 // Client uses time-aware adaptive polling (15s-1hr) with exponential backoff
 // This ensures multi-user environments see updates immediately via cache invalidation
 // while dramatically reducing SSH load for stable long-running jobs (6-24+ hours)
-const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL) || 1800000; // 30 minutes default
+const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL || '1800000'); // 30 minutes default
 
 // Timing constants for launch/stop operations
 const SLURM_CANCEL_DELAY_MS = 1000;    // Wait for SLURM to process cancellation
@@ -51,7 +120,7 @@ const statusCache = createClusterCache(STATUS_CACHE_TTL);
 
 // Progress weights (cumulative percentages) based on observed timing
 // Timing: submit ~3s, wait ~3.5s, tunnel+IDE ready ~2-5s (dynamic polling)
-const LAUNCH_PROGRESS = {
+const LAUNCH_PROGRESS: Record<string, number> = {
   connecting: 5,      // Quick SSH connect check
   submitting: 30,     // 2-4s SSH + sbatch
   submitted: 35,      // Instant milestone (shows job ID)
@@ -63,9 +132,9 @@ const LAUNCH_PROGRESS = {
 /**
  * Invalidate the cluster status cache
  * Call after job state changes (cancel, submit) to force fresh poll
- * @param {string} cluster - Optional cluster name ('gemini' or 'apollo'). If not provided, invalidates all.
+ * @param cluster - Optional cluster name ('gemini' or 'apollo'). If not provided, invalidates all.
  */
-function invalidateStatusCache(cluster = null) {
+function invalidateStatusCache(cluster: string | null = null): void {
   statusCache.invalidate(cluster);
 }
 
@@ -73,14 +142,20 @@ function invalidateStatusCache(cluster = null) {
  * Start tunnel with dynamic port discovery
  * Reads the IDE's actual port from the port file before establishing tunnel.
  * This handles port collisions when multiple users land on the same compute node.
- * @param {string} hpc - HPC cluster name
- * @param {string} node - Compute node name
- * @param {string} ide - IDE type
- * @param {Function} onExit - Callback when tunnel exits
- * @param {string} user - Username for session tracking (multi-user support)
- * @returns {Promise<Object>} Tunnel process
+ * @param hpc - HPC cluster name
+ * @param node - Compute node name
+ * @param ide - IDE type
+ * @param onExit - Callback when tunnel exits
+ * @param user - Username for session tracking (multi-user support)
+ * @returns Tunnel process
  */
-async function startTunnelWithPortDiscovery(hpc, node, ide, onExit, user) {
+async function startTunnelWithPortDiscovery(
+  hpc: string,
+  node: string,
+  ide: string,
+  onExit: (code: number | null) => void,
+  user: string
+): Promise<unknown> {
   const hpcService = new HpcService(hpc, user);
   const remotePort = await hpcService.getIdePort(ide);
   return tunnelService.start(hpc, node, ide, onExit, { remotePort, user });
@@ -89,13 +164,13 @@ async function startTunnelWithPortDiscovery(hpc, node, ide, onExit, user) {
 /**
  * Verify a session's job still exists in SLURM
  * Returns true if job exists and matches, false if stale (job gone)
- * @param {Object} session - Session object with jobId
- * @param {string} hpc - HPC cluster name
- * @param {string} ide - IDE type
- * @param {string} user - Username for SSH connection
- * @returns {Promise<boolean>} True if job exists, false if stale
+ * @param session - Session object with jobId
+ * @param hpc - HPC cluster name
+ * @param ide - IDE type
+ * @param user - Username for SSH connection
+ * @returns True if job exists, false if stale
  */
-async function verifyJobExists(session, hpc, ide, user) {
+async function verifyJobExists(session: Session, hpc: string, ide: string, user: string): Promise<boolean> {
   const hpcService = new HpcService(hpc, user);
   const jobInfo = await hpcService.getJobInfo(ide);
   return jobInfo && jobInfo.jobId === session.jobId;
@@ -103,20 +178,20 @@ async function verifyJobExists(session, hpc, ide, user) {
 
 /**
  * Fetch fresh status for a single cluster and update its cache
- * @param {string} clusterName - Cluster name ('gemini' or 'apollo')
- * @returns {Promise<Object>} Fresh cluster status data
+ * @param clusterName - Cluster name ('gemini' or 'apollo')
+ * @returns Fresh cluster status data
  */
-async function fetchSingleClusterStatus(clusterName) {
+async function fetchSingleClusterStatus(clusterName: string): Promise<Record<string, unknown>> {
   log.info(`Fetching fresh status for ${clusterName}`);
 
   const hpcService = new HpcService(clusterName);
-  const jobs = await hpcService.getAllJobs();
+  const jobs = await hpcService.getAllJobs() as unknown as Record<string, JobInfo | null>;
 
-  const formatJobStatus = (job) => {
+  const formatJobStatus = (job: JobInfo | null): Record<string, unknown> => {
     if (!job) return { status: 'idle' };
 
-    const timeLeftSeconds = parseTimeToSeconds(job.timeLeft);
-    const timeLimitSeconds = parseTimeToSeconds(job.timeLimit);
+    const timeLeftSeconds = parseTimeToSeconds(job.timeLeft || '');
+    const timeLimitSeconds = parseTimeToSeconds(job.timeLimit || '');
 
     return {
       status: job.state === 'RUNNING' ? 'running' : 'pending',
@@ -134,9 +209,9 @@ async function fetchSingleClusterStatus(clusterName) {
     };
   };
 
-  const formatClusterStatus = (jobs) => {
-    const result = {};
-    for (const [ide, job] of Object.entries(jobs)) {
+  const formatClusterStatus = (clusterJobs: Record<string, JobInfo | null>): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    for (const [ide, job] of Object.entries(clusterJobs)) {
       result[ide] = formatJobStatus(job);
     }
     return result;
@@ -152,10 +227,10 @@ async function fetchSingleClusterStatus(clusterName) {
 
 /**
  * Fetch fresh cluster status for all clusters and update cache
- * @param {StateManager} stateManager - State manager instance
- * @returns {Promise<Object>} Fresh cluster status data for all clusters
+ * @param stateManager - State manager instance
+ * @returns Fresh cluster status data for all clusters
  */
-async function fetchClusterStatus(stateManager) {
+async function fetchClusterStatus(stateManager: StateManager): Promise<Record<string, unknown>> {
   log.info('Fetching fresh cluster status for all clusters');
 
   // Fetch both clusters in parallel
@@ -169,7 +244,7 @@ async function fetchClusterStatus(stateManager) {
     apollo: apolloData,
     activeSession: stateManager.getActiveSession(),
     ides: Object.fromEntries(
-      Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
+      Object.entries(ides).map(([k, v]) => [k, { name: (v as IdeConfig).name, icon: (v as IdeConfig).icon, proxyPath: (v as IdeConfig).proxyPath }])
     ),
     updatedAt: new Date().toISOString(),
   };
@@ -177,29 +252,29 @@ async function fetchClusterStatus(stateManager) {
 
 /**
  * Initialize router with state manager dependency
- * @param {StateManager} stateManager - State manager instance
- * @returns {express.Router} Configured router
+ * @param stateManager - State manager instance
+ * @returns Configured router
  */
-function createApiRouter(stateManager) {
+function createApiRouter(stateManager: StateManager): Router {
   // Set up callback to stop tunnels when sessions are cleared
   // This handles: job expiry (walltime), reconcile cleanup, manual clear
-  stateManager.onSessionCleared = (user, hpc, ide) => {
+  stateManager.onSessionCleared = (user: string, hpc: string, ide: string) => {
     log.tunnel('Session cleared, stopping tunnel', { user, hpc, ide });
     tunnelService.stop(hpc, ide, user);
   };
 
   // Helper: build session key (user-hpc-ide format)
-  function buildSessionKey(user, hpc, ide) {
+  function buildSessionKey(user: string, hpc: string, ide: string): string {
     const effectiveUser = user || config.hpcUser;
     return `${effectiveUser}-${hpc}-${ide}`;
   }
 
   // Helper: parse session key (user-hpc-ide format)
-  function parseSessionKey(key) {
+  function parseSessionKey(key: string): { user: string; hpc: string; ide: string } | null {
     const parts = key.split('-');
     if (parts.length >= 3) {
-      const ide = parts.pop();
-      const hpc = parts.pop();
+      const ide = parts.pop()!;
+      const hpc = parts.pop()!;
       const user = parts.join('-');
       return { user, hpc, ide };
     }
@@ -208,8 +283,8 @@ function createApiRouter(stateManager) {
 
   // Helper: get sessions info for status endpoint (grouped by hpc then ide)
   // For single-user mode, shows all sessions for config.hpcUser
-  function getSessionsInfo(user) {
-    const sessions = {};
+  function getSessionsInfo(user: string): Record<string, Record<string, unknown>> {
+    const sessions: Record<string, Record<string, unknown>> = {};
     const allSessions = stateManager.getSessionsForUser(user);
     for (const [key, session] of Object.entries(allSessions)) {
       if (!session) continue;
@@ -237,7 +312,7 @@ function createApiRouter(stateManager) {
   }
 
   // Health check - returns 503 if state manager not ready
-  router.get('/health', (req, res) => {
+  router.get('/health', (req: Request, res: Response) => {
     if (!stateManager.isReady()) {
       return res.status(503).json({ status: 'starting', ready: false });
     }
@@ -245,7 +320,7 @@ function createApiRouter(stateManager) {
   });
 
   // Check dev server ports (Live Server 5500, Shiny 3838) - single SSH call
-  router.get('/dev-servers', async (req, res) => {
+  router.get('/dev-servers', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
 
     // Only check if there's an active VS Code session
@@ -264,7 +339,7 @@ function createApiRouter(stateManager) {
     try {
       const hpcService = new HpcService(hpc, user);
       // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
-      const result = await hpcService.checkPorts(session.node, [5500, 3838]);
+      const result = await hpcService.checkPorts(session.node, [5500, 3838]) as Record<number, boolean>;
       const liveServer = result[5500] || false;
       const shiny = result[3838] || false;
 
@@ -280,13 +355,13 @@ function createApiRouter(stateManager) {
 
       res.json({ liveServer, shiny });
     } catch (e) {
-      log.debugFor('api', 'dev-servers check failed', { error: e.message });
+      log.debugFor('api', 'dev-servers check failed', { error: (e as Error).message });
       res.json({ liveServer: false, shiny: false });
     }
   });
 
   // Logging middleware for user actions
-  router.use((req, res, next) => {
+  router.use((req: Request, res: Response, next) => {
     if (req.method !== 'GET') {
       log.api(`${req.method} ${req.path}`, req.body || {});
     }
@@ -296,7 +371,7 @@ function createApiRouter(stateManager) {
   // Get session status
   // Returns cached state from StateManager background polling
   // No SSH calls - instant response from cached data
-  router.get('/status', async (req, res) => {
+  router.get('/status', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
 
     // Backend polling keeps state fresh automatically
@@ -325,10 +400,9 @@ function createApiRouter(stateManager) {
   // Get job status for both clusters (checks SLURM directly)
   // Cached to reduce SSH load - use ?refresh=true to force update
   // Returns jobs grouped by cluster then IDE
-  router.get('/cluster-status', async (req, res) => {
+  router.get('/cluster-status', async (req: Request, res: Response) => {
     const forceRefresh = req.query.refresh === 'true';
     const hasLimits = req.query.hasLimits === 'true';  // Client has partition limits
-    const now = Date.now();
 
     try {
       // Check cache status for each cluster
@@ -339,7 +413,7 @@ function createApiRouter(stateManager) {
       const apolloFetchNeeded = !apolloCache.valid || forceRefresh;
 
       // Fetch stale clusters in parallel for better performance
-      const promises = [];
+      const promises: Promise<unknown>[] = [];
       if (geminiFetchNeeded) {
         promises.push(fetchSingleClusterStatus('gemini'));
       } else {
@@ -354,7 +428,7 @@ function createApiRouter(stateManager) {
         promises.push(Promise.resolve(apolloCache.data));
       }
 
-      const [geminiData, apolloData] = await Promise.all(promises);
+      const [geminiData, apolloData] = await Promise.all(promises) as [Record<string, unknown>, Record<string, unknown>];
 
       const anyFresh = geminiFetchNeeded || apolloFetchNeeded;
       const geminiCacheAge = geminiFetchNeeded ? 0 : geminiCache.age;
@@ -365,17 +439,18 @@ function createApiRouter(stateManager) {
       // SLURM doesn't track releaseVersion/gpu, so we get it from stateManager
       // If no session exists (e.g., server restart), these will be null
       const user = getRequestUser(req);
-      function enrichWithSessionData(clusterData, hpc) {
+      function enrichWithSessionData(clusterData: Record<string, unknown>, hpc: string): Record<string, unknown> {
         const enriched = { ...clusterData };
         for (const [ide, jobData] of Object.entries(enriched)) {
           const session = stateManager.getSession(user, hpc, ide);
+          const job = jobData as Record<string, unknown>;
           // DEBUG: trace session lookup for releaseVersion/gpu enrichment
-          if (jobData.status !== 'idle') {
+          if (job.status !== 'idle') {
             log.state('enrichWithSessionData lookup', {
               user,
               hpc,
               ide,
-              jobStatus: jobData.status,
+              jobStatus: job.status,
               sessionFound: !!session,
               sessionStatus: session?.status,
               releaseVersion: session?.releaseVersion,
@@ -383,7 +458,7 @@ function createApiRouter(stateManager) {
             });
           }
           enriched[ide] = {
-            ...jobData,
+            ...job,
             releaseVersion: session?.releaseVersion || null,
             gpu: session?.gpu || null,
           };
@@ -397,14 +472,17 @@ function createApiRouter(stateManager) {
         activeSession: stateManager.getActiveSession(),  // Always use current activeSession, not cached
         clusterHealth: stateManager.getClusterHealth(),  // Include cluster health data
         ides: Object.fromEntries(
-          Object.entries(ides).map(([k, v]) => [k, { name: v.name, icon: v.icon, proxyPath: v.proxyPath }])
+          Object.entries(ides).map(([k, v]) => [k, { name: (v as IdeConfig).name, icon: (v as IdeConfig).icon, proxyPath: (v as IdeConfig).proxyPath }])
         ),
         releases: Object.fromEntries(
-          Object.entries(releases).map(([k, v]) => [k, {
-            name: v.name,
-            ides: v.ides,
-            clusters: Object.keys(v.paths),  // Which clusters support this release
-          }])
+          Object.entries(releases).map(([k, v]) => {
+            const release = v as ReleaseConfig;
+            return [k, {
+              name: release.name,
+              ides: release.ides,
+              clusters: Object.keys(release.paths),  // Which clusters support this release
+            }];
+          })
         ),
         defaultReleaseVersion,
         gpuConfig,  // Include GPU config for client-side validation
@@ -413,7 +491,7 @@ function createApiRouter(stateManager) {
           partitionLimits,
           // Default partition per cluster (for client-side limit lookup)
           defaultPartitions: Object.fromEntries(
-            Object.entries(clusters).map(([k, v]) => [k, v.partition])
+            Object.entries(clusters).map(([k, v]) => [k, (v as { partition: string }).partition])
           ),
         }),
         updatedAt: new Date().toISOString(),
@@ -422,13 +500,13 @@ function createApiRouter(stateManager) {
         cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
       });
     } catch (e) {
-      log.error('Failed to fetch cluster status', { error: e.message });
-      res.status(500).json({ error: e.message });
+      log.error('Failed to fetch cluster status', { error: (e as Error).message });
+      res.status(500).json({ error: (e as Error).message });
     }
   });
 
   // Launch session for a specific IDE
-  router.post('/launch', async (req, res) => {
+  router.post('/launch', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const {
       hpc = config.defaultHpc,
@@ -439,7 +517,7 @@ function createApiRouter(stateManager) {
     } = req.body;
 
     // Validate IDE type
-    if (!ides[ide]) {
+    if (!ides[ide as keyof typeof ides]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
@@ -450,7 +528,7 @@ function createApiRouter(stateManager) {
     try {
       stateManager.acquireLock(lockName);
     } catch (e) {
-      return res.status(429).json({ error: e.message });
+      return res.status(429).json({ error: (e as Error).message });
     }
 
     try {
@@ -470,7 +548,7 @@ function createApiRouter(stateManager) {
           // Job exists - safe to reconnect
           if (!session.tunnelProcess) {
             try {
-              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
                 if (session.status === 'running') {
                   session.status = 'idle';
                 }
@@ -478,7 +556,7 @@ function createApiRouter(stateManager) {
               }, user);
             } catch (error) {
               stateManager.releaseLock(lockName);
-              return res.status(500).json({ error: error.message });
+              return res.status(500).json({ error: (error as Error).message });
             }
           }
 
@@ -500,7 +578,7 @@ function createApiRouter(stateManager) {
         validateSbatchInputs(cpus, mem, time, hpc);
       } catch (e) {
         stateManager.releaseLock(lockName);
-        return res.status(400).json({ error: e.message });
+        return res.status(400).json({ error: (e as Error).message });
       }
 
       await stateManager.updateSession(user, hpc, ide, {
@@ -514,7 +592,7 @@ function createApiRouter(stateManager) {
       const hpcService = new HpcService(hpc, user);
 
       // Use local variables to collect job data (avoid mutating session directly)
-      let jobId, token, node;
+      let jobId: string, token: string | undefined, node: string;
 
       // Check for existing job for this IDE
       const jobInfo = await hpcService.getJobInfo(ide);
@@ -534,7 +612,7 @@ function createApiRouter(stateManager) {
         log.job(`Submitted`, { hpc, ide, jobId });
       } else {
         jobId = jobInfo.jobId;
-        node = jobInfo.node;
+        node = jobInfo.node!;
         log.job(`Found existing job`, { hpc, ide, jobId });
       }
 
@@ -544,12 +622,12 @@ function createApiRouter(stateManager) {
       if (waitResult.pending) {
         throw new Error('Timeout waiting for node assignment');
       }
-      node = waitResult.node;
+      node = waitResult.node!;
       log.job(`Running on node`, { hpc, ide, node });
 
       // Start tunnel - it will verify IDE is responding before returning
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (_code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
         const currentSession = stateManager.getSession(user, hpc, ide);
@@ -571,11 +649,11 @@ function createApiRouter(stateManager) {
       // Invalidate cache for this cluster and fetch fresh status after successful launch
       // This ensures ALL users (multi-user environment) see the new job on their next poll
       invalidateStatusCache(hpc);
-      let clusterStatus = null;
+      let clusterStatus: Record<string, unknown> | null = null;
       try {
         clusterStatus = await fetchClusterStatus(stateManager);
       } catch (e) {
-        log.error('Failed to refresh cluster status after launch', { error: e.message });
+        log.error('Failed to refresh cluster status after launch', { error: (e as Error).message });
       }
 
       res.json({
@@ -588,17 +666,17 @@ function createApiRouter(stateManager) {
       });
 
     } catch (error) {
-      log.error('Launch error', { hpc, ide, error: error.message });
+      log.error('Launch error', { hpc, ide, error: (error as Error).message });
       const session = stateManager.getSession(user, hpc, ide);
       if (session) {
         await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
-          error: error.message,
+          error: (error as Error).message,
         });
       }
 
       if (!res.headersSent) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: (error as Error).message });
       }
     } finally {
       stateManager.releaseLock(lockName);
@@ -607,25 +685,29 @@ function createApiRouter(stateManager) {
 
   // Launch session with SSE progress streaming
   // Returns real-time progress events during job submission and startup
-  router.get('/launch/:hpc/:ide/stream', async (req, res) => {
+  router.get('/launch/:hpc/:ide/stream', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
-    const { hpc, ide } = req.params;
-    const cpus = req.query.cpus || config.defaultCpus;
-    const mem = req.query.mem || config.defaultMem;
-    const time = req.query.time || config.defaultTime;
-    const gpu = req.query.gpu || '';
-    const releaseVersion = req.query.releaseVersion || defaultReleaseVersion;
+    const hpc = param(req, 'hpc');
+    const ide = param(req, 'ide');
+    const cpus = (req.query.cpus as string) || config.defaultCpus;
+    const mem = (req.query.mem as string) || config.defaultMem;
+    const time = (req.query.time as string) || config.defaultTime;
+    const gpu = (req.query.gpu as string) || '';
+    const releaseVersion = (req.query.releaseVersion as string) || defaultReleaseVersion;
 
     // Validate IDE type
-    if (!ides[ide]) {
+    if (!ides[ide as keyof typeof ides]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
     // Validate releaseVersion
-    if (!releases[releaseVersion]) {
+    if (!releases[releaseVersion as keyof typeof releases]) {
       // Show releases available for this specific cluster
       const releasesForCluster = Object.entries(releases)
-        .filter(([, release]) => release.paths && release.paths[hpc])
+        .filter(([, release]) => {
+          const r = release as ReleaseConfig;
+          return r.paths && r.paths[hpc];
+        })
         .map(([version]) => version)
         .join(', ');
       return res.status(400).json({
@@ -635,21 +717,23 @@ function createApiRouter(stateManager) {
       });
     }
 
+    const releaseConfig = releases[releaseVersion as keyof typeof releases] as ReleaseConfig;
+
     // Validate release is available for this cluster
-    if (!releases[releaseVersion].paths[hpc]) {
-      const availableClusters = Object.keys(releases[releaseVersion].paths).join(', ');
-      return res.status(400).json({ error: `${releases[releaseVersion].name} is not available on ${hpc}. Available on: ${availableClusters}` });
+    if (!releaseConfig.paths[hpc]) {
+      const availableClusters = Object.keys(releaseConfig.paths).join(', ');
+      return res.status(400).json({ error: `${releaseConfig.name} is not available on ${hpc}. Available on: ${availableClusters}` });
     }
 
     // Validate IDE is available for this release
-    if (!releases[releaseVersion].ides.includes(ide)) {
-      const availableIdes = releases[releaseVersion].ides.join(', ');
-      return res.status(400).json({ error: `${ides[ide].name} is not available on ${releases[releaseVersion].name}. Available IDEs: ${availableIdes}` });
+    if (!releaseConfig.ides.includes(ide)) {
+      const availableIdes = releaseConfig.ides.join(', ');
+      return res.status(400).json({ error: `${(ides[ide as keyof typeof ides] as IdeConfig).name} is not available on ${releaseConfig.name}. Available IDEs: ${availableIdes}` });
     }
 
     // Validate GPU type
     if (gpu) {
-      const clusterGpuConfig = gpuConfig[hpc];
+      const clusterGpuConfig = gpuConfig[hpc as keyof typeof gpuConfig] as Record<string, unknown> | undefined;
       if (!clusterGpuConfig) {
         return res.status(400).json({ error: `GPU support is not available on the ${hpc} cluster` });
       }
@@ -667,20 +751,20 @@ function createApiRouter(stateManager) {
     res.flushHeaders();
 
     // Helper to send progress events
-    const sendProgress = (step, message, extra = {}) => {
+    const sendProgress = (step: string, message: string, extra: Record<string, unknown> = {}) => {
       const progress = LAUNCH_PROGRESS[step] || 0;
       const data = JSON.stringify({ type: 'progress', step, progress, message, ...extra });
       res.write(`data: ${data}\n\n`);
     };
 
     // Helper to send error event
-    const sendError = (message) => {
+    const sendError = (message: string) => {
       res.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
       res.end();
     };
 
     // Helper to send completion event
-    const sendComplete = (data) => {
+    const sendComplete = (data: Record<string, unknown>) => {
       res.write(`data: ${JSON.stringify({ type: 'complete', ...data })}\n\n`);
       res.end();
     };
@@ -692,7 +776,7 @@ function createApiRouter(stateManager) {
     try {
       stateManager.acquireLock(lockName);
     } catch (e) {
-      return sendError(e.message);
+      return sendError((e as Error).message);
     }
 
     try {
@@ -725,7 +809,7 @@ function createApiRouter(stateManager) {
           // Ensure tunnel is running for this session
           if (!session.tunnelProcess) {
             try {
-              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
                 if (session.status === 'running') {
                   session.status = 'idle';
                 }
@@ -733,14 +817,14 @@ function createApiRouter(stateManager) {
               }, user);
             } catch (error) {
               stateManager.releaseLock(lockName);
-              return sendError(error.message);
+              return sendError((error as Error).message);
             }
           }
 
           await stateManager.setActiveSession(user, hpc, ide);
           stateManager.releaseLock(lockName);
 
-          const ideConfig = ides[ide];
+          const ideConfig = ides[ide as keyof typeof ides] as IdeConfig;
           return sendComplete({
             status: 'connected',
             hpc,
@@ -764,13 +848,13 @@ function createApiRouter(stateManager) {
         validateSbatchInputs(cpus, mem, time, hpc, gpu);
       } catch (e) {
         stateManager.releaseLock(lockName);
-        return sendError(e.message);
+        return sendError((e as Error).message);
       }
 
       await stateManager.updateSession(user, hpc, ide, {
         status: 'starting',
         error: null,
-        cpus: cpus,
+        cpus: parseInt(cpus as string, 10),
         memory: mem,
         walltime: time,
       });
@@ -781,9 +865,9 @@ function createApiRouter(stateManager) {
       const hpcService = new HpcService(hpc, user);
 
       // Use local variables to collect job data (avoid mutating session directly)
-      let jobId, token, node;
+      let jobId: string, token: string | undefined, node: string;
       let jobReleaseVersion = releaseVersion;
-      let jobGpu = gpu || null;
+      let jobGpu: string | null = gpu || null;
 
       // Check for existing job for this IDE
       const jobInfo = await hpcService.getJobInfo(ide);
@@ -796,7 +880,7 @@ function createApiRouter(stateManager) {
       }
 
       // Helper to wait for node assignment (avoids duplication)
-      const handleWaitForNode = async (currentJobId) => {
+      const handleWaitForNode = async (currentJobId: string): Promise<{ success: boolean; node?: string }> => {
         const waitResult = await hpcService.waitForNode(currentJobId, ide, {
           maxAttempts: 6,
           returnPendingOnTimeout: true,
@@ -825,7 +909,7 @@ function createApiRouter(stateManager) {
         sendProgress('submitting', `Requesting resources${gpuLabel}...`);
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time, gpu: gpu || 'none', releaseVersion });
 
-        const result = await hpcService.submitJob(cpus, mem, time, ide, { gpu, releaseVersion });
+        const result = await hpcService.submitJob(parseInt(cpus, 10), mem, time, ide, { gpu, releaseVersion });
         jobId = result.jobId;
         token = result.token;
 
@@ -848,11 +932,11 @@ function createApiRouter(stateManager) {
         if (!waitResult.success) {
           return;
         }
-        node = waitResult.node;
+        node = waitResult.node!;
       } else {
         // Found existing job - connect to it
         jobId = jobInfo.jobId;
-        node = jobInfo.node;
+        node = jobInfo.node!;
 
         if (jobInfo.node) {
           // Job is running - skip straight to connecting
@@ -868,7 +952,7 @@ function createApiRouter(stateManager) {
           if (!waitResult.success) {
             return;
           }
-          node = waitResult.node;
+          node = waitResult.node!;
         }
       }
       log.job(`Running on node`, { hpc, ide, node });
@@ -878,7 +962,7 @@ function createApiRouter(stateManager) {
 
       // Start tunnel and wait for it to establish
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (_code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
         const currentSession = stateManager.getSession(user, hpc, ide);
@@ -915,7 +999,7 @@ function createApiRouter(stateManager) {
         releaseVersion: jobReleaseVersion,
       });
 
-      const ideConfig = ides[ide];
+      const ideConfig = ides[ide as keyof typeof ides] as IdeConfig;
       sendComplete({
         status: 'running',
         jobId,
@@ -926,27 +1010,28 @@ function createApiRouter(stateManager) {
       });
 
     } catch (error) {
-      log.error('Launch stream error', { hpc, ide, error: error.message });
+      log.error('Launch stream error', { hpc, ide, error: (error as Error).message });
       const session = stateManager.getSession(user, hpc, ide);
       if (session) {
         await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
-          error: error.message,
+          error: (error as Error).message,
         });
       }
-      sendError(error.message);
+      sendError((error as Error).message);
     } finally {
       stateManager.releaseLock(lockName);
     }
   });
 
   // Switch active session (connect to different HPC/IDE)
-  router.post('/switch/:hpc/:ide', async (req, res) => {
+  router.post('/switch/:hpc/:ide', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
-    const { hpc, ide } = req.params;
+    const hpc = param(req, 'hpc');
+    const ide = param(req, 'ide');
 
     // Validate IDE type
-    if (!ides[ide]) {
+    if (!ides[ide as keyof typeof ides]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
@@ -968,7 +1053,7 @@ function createApiRouter(stateManager) {
     // Start tunnel to the requested HPC/IDE
     try {
       if (!session.tunnelProcess) {
-        session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node, ide, (code) => {
+        session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
           if (session.status === 'running') {
             session.status = 'idle';
           }
@@ -980,20 +1065,21 @@ function createApiRouter(stateManager) {
       log.api(`Switched to ${hpc} ${ide}`, { hpc, ide });
       res.json({ status: 'switched', hpc, ide });
     } catch (error) {
-      log.error('Switch error', { hpc, ide, error: error.message });
-      res.status(500).json({ error: error.message });
+      log.error('Switch error', { hpc, ide, error: (error as Error).message });
+      res.status(500).json({ error: (error as Error).message });
     }
   });
 
   // Stop session for specific HPC/IDE
   // When cancelJob=true, also refreshes cluster status cache so UI sees freed slot
-  router.post('/stop/:hpc/:ide', async (req, res) => {
+  router.post('/stop/:hpc/:ide', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const { cancelJob = false } = req.body;
-    const { hpc, ide } = req.params;
+    const hpc = param(req, 'hpc');
+    const ide = param(req, 'ide');
 
     // Validate IDE type
-    if (!ides[ide]) {
+    if (!ides[ide as keyof typeof ides]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
@@ -1025,7 +1111,7 @@ function createApiRouter(stateManager) {
           jobCancelled = true;
         }
       } catch (e) {
-        log.error('Failed to cancel job', { hpc, ide, error: e.message });
+        log.error('Failed to cancel job', { hpc, ide, error: (e as Error).message });
       }
     } else {
       log.audit('Session stopped', { user, hpc, ide, jobId: session?.jobId, cancelled: false });
@@ -1036,7 +1122,7 @@ function createApiRouter(stateManager) {
 
     // If we cancelled a job, invalidate cache for this cluster and fetch fresh status
     // This ensures ALL users (multi-user environment) immediately see the freed slot
-    let clusterStatus = null;
+    let clusterStatus: Record<string, unknown> | null = null;
     if (jobCancelled) {
       invalidateStatusCache(hpc);
       try {
@@ -1044,7 +1130,7 @@ function createApiRouter(stateManager) {
         await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
         clusterStatus = await fetchClusterStatus(stateManager);
       } catch (e) {
-        log.error('Failed to refresh cluster status after cancel', { error: e.message });
+        log.error('Failed to refresh cluster status after cancel', { error: (e as Error).message });
       }
     }
 
@@ -1058,12 +1144,13 @@ function createApiRouter(stateManager) {
 
   // Stop session with SSE progress streaming (indeterminate progress)
   // Due to high variance in cancel times (CV 74%), uses indeterminate animation
-  router.get('/stop/:hpc/:ide/stream', async (req, res) => {
+  router.get('/stop/:hpc/:ide/stream', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
-    const { hpc, ide } = req.params;
+    const hpc = param(req, 'hpc');
+    const ide = param(req, 'ide');
 
     // Validate IDE type
-    if (!ides[ide]) {
+    if (!ides[ide as keyof typeof ides]) {
       return res.status(400).json({ error: `Unknown IDE: ${ide}` });
     }
 
@@ -1075,18 +1162,18 @@ function createApiRouter(stateManager) {
     res.flushHeaders();
 
     // Helper to send progress events (indeterminate - no percentage)
-    const sendProgress = (step, message) => {
+    const sendProgress = (step: string, message: string) => {
       res.write(`data: ${JSON.stringify({ type: 'progress', step, message })}\n\n`);
     };
 
     // Helper to send completion event
-    const sendComplete = (data) => {
+    const sendComplete = (data: Record<string, unknown>) => {
       res.write(`data: ${JSON.stringify({ type: 'complete', ...data })}\n\n`);
       res.end();
     };
 
     // Helper to send error event
-    const sendError = (message) => {
+    const sendError = (message: string) => {
       res.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
       res.end();
     };
@@ -1135,8 +1222,8 @@ function createApiRouter(stateManager) {
       });
 
     } catch (error) {
-      log.error('Stop stream error', { hpc, ide, error: error.message });
-      sendError(error.message);
+      log.error('Stop stream error', { hpc, ide, error: (error as Error).message });
+      sendError((error as Error).message);
     }
   });
 
@@ -1145,8 +1232,8 @@ function createApiRouter(stateManager) {
    * Stop all user's jobs on a cluster (batch operation)
    * More efficient than individual stops when user has multiple jobs
    */
-  router.post('/stop-all/:hpc', asyncHandler(async (req, res) => {
-    const { hpc } = req.params;
+  router.post('/stop-all/:hpc', asyncHandler(async (req: Request, res: Response) => {
+    const hpc = param(req, 'hpc');
     validateHpcName(hpc);
 
     const user = getRequestUser(req);
@@ -1154,8 +1241,8 @@ function createApiRouter(stateManager) {
 
     // Collect running/pending jobs on this cluster
     // Map jobId -> sessionKey so we can clear only successfully cancelled sessions
-    const jobsToCancel = [];
-    const jobIdToSessionKey = new Map();
+    const jobsToCancel: string[] = [];
+    const jobIdToSessionKey = new Map<string, string>();
 
     for (const [sessionKey, session] of Object.entries(sessions)) {
       if (!session?.jobId) continue;
@@ -1178,7 +1265,7 @@ function createApiRouter(stateManager) {
     // Clear sessions only for successfully cancelled jobs (stop tunnels too)
     // Jobs that failed to cancel keep their sessions so they can be retried
     // Run in parallel for efficiency when multiple jobs cancelled
-    await Promise.all(result.cancelled.map(jobId => {
+    await Promise.all(result.cancelled.map((jobId: string) => {
       const sessionKey = jobIdToSessionKey.get(jobId);
       if (!sessionKey) return;
 
@@ -1211,4 +1298,7 @@ function createApiRouter(stateManager) {
   return router;
 }
 
+export default createApiRouter;
+
+// CommonJS compatibility for existing require() calls
 module.exports = createApiRouter;

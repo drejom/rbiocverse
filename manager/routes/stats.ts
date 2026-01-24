@@ -10,22 +10,71 @@
  * No PII or user-specific data is exposed.
  */
 
-const express = require('express');
+import express, { Request, Response } from 'express';
+import asyncHandler from '../lib/asyncHandler';
+import * as analytics from '../lib/db/analytics';
+import * as partitions from '../lib/partitions';
+import { parseQueryInt } from '../lib/validation';
+
 const router = express.Router();
-const asyncHandler = require('../lib/asyncHandler');
-const analytics = require('../lib/db/analytics');
-const partitions = require('../lib/partitions');
-const { parseQueryInt } = require('../lib/validation');
+
+// Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
+const param = (req: Request, name: string): string => req.params[name] as string;
+
+// StateManager type (simplified for this module)
+interface StateManager {
+  getClusterHealth(): Record<string, {
+    current?: {
+      online?: boolean;
+      cpus?: { percent?: number | null; used?: number | null; total?: number | null };
+      memory?: { percent?: number | null };
+      nodes?: { percent?: number | null; idle?: number | null; busy?: number | null; down?: number | null };
+      gpus?: unknown;
+      runningJobs?: number;
+      pendingJobs?: number;
+      lastChecked?: string | null;
+    };
+  }>;
+}
 
 // StateManager injected via setStateManager()
-let stateManager = null;
+let stateManager: StateManager | null = null;
 
 /**
  * Set the state manager for cluster health data
- * @param {StateManager} sm - State manager instance
+ * @param sm - State manager instance
  */
-function setStateManager(sm) {
+function setStateManager(sm: StateManager): void {
   stateManager = sm;
+}
+
+interface ReleaseUsage {
+  version: string;
+  sessions: number;
+  uniqueUsers: number;
+}
+
+interface IdeUsage {
+  ide: string;
+  sessions: number;
+  avgDurationMinutes: number | null;
+}
+
+interface DailySession {
+  date: string;
+  sessions: number;
+}
+
+interface PartitionLimits {
+  isDefault?: boolean;
+  maxCpus?: number;
+  maxMemMB?: number | null;
+  maxTime?: string;
+  defaultTime?: string;
+  gpuType?: string | null;
+  gpuCount?: number | null;
+  restricted?: boolean;
+  restrictionReason?: string | null;
 }
 
 /**
@@ -34,13 +83,13 @@ function setStateManager(sm) {
  *
  * Returns current cluster status without sensitive data.
  */
-router.get('/clusters', asyncHandler(async (req, res) => {
+router.get('/clusters', asyncHandler(async (req: Request, res: Response) => {
   if (!stateManager) {
     return res.status(503).json({ error: 'Stats service not available' });
   }
 
   const clusterHealth = stateManager.getClusterHealth();
-  const summary = {};
+  const summary: Record<string, unknown> = {};
 
   for (const [cluster, health] of Object.entries(clusterHealth)) {
     if (!health?.current) continue;
@@ -81,15 +130,20 @@ router.get('/clusters', asyncHandler(async (req, res) => {
  *
  * Aggregate stats without usernames or PII.
  */
-router.get('/usage', asyncHandler(async (req, res) => {
+router.get('/usage', asyncHandler(async (req: Request, res: Response) => {
   const days = parseQueryInt(req.query, 'days', 7, { min: 1, max: 365 });
 
   // Get aggregate stats (no usernames)
-  const releases = analytics.getReleaseUsage(days);
-  const ides = analytics.getIdePopularity(days);
-  const features = analytics.getFeatureUsage(days);
-  const capacity = analytics.getCapacityMetrics(days);
-  const dailySessions = analytics.getDailySessionCounts(days);
+  const releases = analytics.getReleaseUsage(days) as ReleaseUsage[];
+  const ides = analytics.getIdePopularity(days) as IdeUsage[];
+  const features = analytics.getFeatureUsage(days) as {
+    shiny?: { percent?: number };
+    liveServer?: { percent?: number };
+  };
+  const capacity = analytics.getCapacityMetrics(days) as {
+    queueWaitTimes?: { avg?: number | null; p50?: number | null; p90?: number | null };
+  };
+  const dailySessions = analytics.getDailySessionCounts(days) as DailySession[];
 
   // Calculate totals
   const totalSessions = releases.reduce((sum, r) => sum + r.sessions, 0);
@@ -135,32 +189,35 @@ router.get('/usage', asyncHandler(async (req, res) => {
  * Help content can use {{variableName}} syntax.
  * These variables are computed from recent data.
  */
-router.get('/variables', asyncHandler(async (req, res) => {
+router.get('/variables', asyncHandler(async (req: Request, res: Response) => {
   const days = 7; // Week of data for averages
 
-  const capacity = analytics.getCapacityMetrics(days);
-  const dailySessions = analytics.getDailySessionCounts(days);
+  const capacity = analytics.getCapacityMetrics(days) as {
+    queueWaitTimes?: { avg?: number | null; p90?: number | null };
+    growth?: { sessionGrowthPercent?: number | null; userGrowthPercent?: number | null };
+  };
+  const dailySessions = analytics.getDailySessionCounts(days) as DailySession[];
 
   // Calculate weekly totals
   const totalSessionsThisWeek = dailySessions.reduce((sum, d) => sum + d.sessions, 0);
 
   // Get cluster-specific queue wait times
-  const queueWaitByCluster = analytics.getQueueWaitTimesByCluster(days);
+  const queueWaitByCluster = analytics.getQueueWaitTimesByCluster(days) as Record<string, { avg?: number | null }>;
 
   // Build variables map
-  const variables = {
+  const variables: Record<string, unknown> = {
     // Session stats
     totalSessionsThisWeek,
     avgSessionsPerDay: Math.round(totalSessionsThisWeek / Math.max(days, 1)),
 
     // Queue wait times (in human-readable format)
     avgQueueWaitSeconds: capacity.queueWaitTimes?.avg ?? null,
-    avgQueueWaitFormatted: formatSeconds(capacity.queueWaitTimes?.avg),
-    p90QueueWaitFormatted: formatSeconds(capacity.queueWaitTimes?.p90),
+    avgQueueWaitFormatted: formatSeconds(capacity.queueWaitTimes?.avg ?? null),
+    p90QueueWaitFormatted: formatSeconds(capacity.queueWaitTimes?.p90 ?? null),
 
     // Cluster-specific wait times
-    geminiQueueWait: formatSeconds(queueWaitByCluster.gemini?.avg),
-    apolloQueueWait: formatSeconds(queueWaitByCluster.apollo?.avg),
+    geminiQueueWait: formatSeconds(queueWaitByCluster.gemini?.avg ?? null),
+    apolloQueueWait: formatSeconds(queueWaitByCluster.apollo?.avg ?? null),
 
     // Growth
     sessionGrowthPercent: capacity.growth?.sessionGrowthPercent ?? null,
@@ -193,11 +250,17 @@ router.get('/variables', asyncHandler(async (req, res) => {
  * GET /api/stats/queue/:cluster
  * Queue wait time stats for a specific cluster
  */
-router.get('/queue/:cluster', asyncHandler(async (req, res) => {
-  const { cluster } = req.params;
+router.get('/queue/:cluster', asyncHandler(async (req: Request, res: Response) => {
+  const cluster = param(req, 'cluster');
   const days = parseQueryInt(req.query, 'days', 7, { min: 1, max: 365 });
 
-  const queueWaitByCluster = analytics.getQueueWaitTimesByCluster(days);
+  const queueWaitByCluster = analytics.getQueueWaitTimesByCluster(days) as Record<string, {
+    count?: number;
+    avg?: number | null;
+    p50?: number | null;
+    p90?: number | null;
+    p99?: number | null;
+  }>;
   const clusterStats = queueWaitByCluster[cluster];
 
   if (!clusterStats) {
@@ -213,13 +276,13 @@ router.get('/queue/:cluster', asyncHandler(async (req, res) => {
     stats: {
       count: clusterStats.count,
       avgSeconds: clusterStats.avg,
-      avgFormatted: formatSeconds(clusterStats.avg),
+      avgFormatted: formatSeconds(clusterStats.avg ?? null),
       p50Seconds: clusterStats.p50,
-      p50Formatted: formatSeconds(clusterStats.p50),
+      p50Formatted: formatSeconds(clusterStats.p50 ?? null),
       p90Seconds: clusterStats.p90,
-      p90Formatted: formatSeconds(clusterStats.p90),
+      p90Formatted: formatSeconds(clusterStats.p90 ?? null),
       p99Seconds: clusterStats.p99,
-      p99Formatted: formatSeconds(clusterStats.p99),
+      p99Formatted: formatSeconds(clusterStats.p99 ?? null),
     },
     generatedAt: new Date().toISOString(),
   });
@@ -227,10 +290,10 @@ router.get('/queue/:cluster', asyncHandler(async (req, res) => {
 
 /**
  * Transform partition limits for public API responses
- * @param {Object} limits - Raw partition limits from DB
- * @returns {Object} Transformed object for API response
+ * @param limits - Raw partition limits from DB
+ * @returns Transformed object for API response
  */
-function transformPartitionForApi(limits) {
+function transformPartitionForApi(limits: PartitionLimits): Record<string, unknown> {
   return {
     isDefault: limits.isDefault,
     maxCpus: limits.maxCpus,
@@ -251,12 +314,12 @@ function transformPartitionForApi(limits) {
  *
  * Returns dynamic partition data for resource validation.
  */
-router.get('/partitions', asyncHandler(async (req, res) => {
-  const allPartitions = partitions.getAllPartitions();
+router.get('/partitions', asyncHandler(async (req: Request, res: Response) => {
+  const allPartitions = partitions.getAllPartitions() as Record<string, Record<string, PartitionLimits>>;
   const lastUpdated = partitions.getLastUpdated();
 
   // Transform for API response
-  const result = {};
+  const result: Record<string, Record<string, unknown>> = {};
   for (const [cluster, clusterPartitions] of Object.entries(allPartitions)) {
     result[cluster] = {};
     for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
@@ -275,9 +338,9 @@ router.get('/partitions', asyncHandler(async (req, res) => {
  * GET /api/stats/partitions/:cluster
  * Partition limits for a specific cluster (public)
  */
-router.get('/partitions/:cluster', asyncHandler(async (req, res) => {
-  const { cluster } = req.params;
-  const clusterPartitions = partitions.getClusterPartitions(cluster);
+router.get('/partitions/:cluster', asyncHandler(async (req: Request, res: Response) => {
+  const cluster = param(req, 'cluster');
+  const clusterPartitions = partitions.getClusterPartitions(cluster) as Record<string, PartitionLimits>;
   const lastUpdated = partitions.getLastUpdated(cluster);
 
   if (Object.keys(clusterPartitions).length === 0) {
@@ -288,7 +351,7 @@ router.get('/partitions/:cluster', asyncHandler(async (req, res) => {
   }
 
   // Transform for API response
-  const result = {};
+  const result: Record<string, unknown> = {};
   for (const [partitionName, limits] of Object.entries(clusterPartitions)) {
     result[partitionName] = transformPartitionForApi(limits);
   }
@@ -303,10 +366,10 @@ router.get('/partitions/:cluster', asyncHandler(async (req, res) => {
 
 /**
  * Format seconds into human-readable string
- * @param {number|null} seconds
- * @returns {string}
+ * @param seconds
+ * @returns Formatted string
  */
-function formatSeconds(seconds) {
+function formatSeconds(seconds: number | null): string {
   if (seconds === null || seconds === undefined) return 'N/A';
 
   if (seconds < 60) {
@@ -321,5 +384,9 @@ function formatSeconds(seconds) {
   }
 }
 
+export default router;
+export { setStateManager };
+
+// CommonJS compatibility for existing require() calls
 module.exports = router;
 module.exports.setStateManager = setStateManager;
