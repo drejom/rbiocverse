@@ -268,3 +268,13 @@ export function needsMigration(): boolean {
 
   return fs.existsSync(usersJson) || fs.existsSync(stateJson);
 }
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  initializeDb,
+  getDb,
+  closeDb,
+  resetDb,
+  needsMigration,
+  DEFAULT_DB_PATH,
+};

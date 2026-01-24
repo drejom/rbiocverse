@@ -68,3 +68,6 @@ function clearQueues(): void {
 }
 
 export { withClusterQueue, getQueueStats, clearQueues };
+
+// CommonJS compatibility for existing require() calls
+module.exports = { withClusterQueue, getQueueStats, clearQueues };

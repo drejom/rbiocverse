@@ -353,3 +353,17 @@ export function validateHpcName(hpc: string): void {
     throw new Error(`Invalid HPC: must be one of ${validHpcs.join(', ')}`);
   }
 }
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  validateSbatchInputs,
+  validateHpcName,
+  getPartitionLimits,
+  parseTimeToSeconds,
+  parseMemToMB,
+  schemas,
+  validate,
+  isJoiAvailable,
+  parseQueryInt,
+  parseQueryParams,
+};

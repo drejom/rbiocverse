@@ -250,3 +250,14 @@ function rowToLimits(row: PartitionRow): PartitionLimits {
     updatedAt: row.updated_at,
   };
 }
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  upsertPartition,
+  getPartitionLimits,
+  getClusterPartitions,
+  getAllPartitions,
+  deleteStalePartitions,
+  getLastUpdated,
+  getDefaultPartition,
+};

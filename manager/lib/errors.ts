@@ -109,3 +109,14 @@ export {
   LockError,
   NotFoundError,
 };
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  HpcError,
+  ValidationError,
+  SshError,
+  JobError,
+  TunnelError,
+  LockError,
+  NotFoundError,
+};

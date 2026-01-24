@@ -123,3 +123,6 @@ export function createClusterCache<T = unknown>(
     },
   };
 }
+
+// CommonJS compatibility for existing require() calls
+module.exports = { createClusterCache, DEFAULT_CACHE_TTL, DEFAULT_CLUSTERS };

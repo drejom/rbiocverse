@@ -140,3 +140,6 @@ const log = {
 };
 
 export { logger, log };
+
+// CommonJS compatibility for existing require() calls
+module.exports = { logger, log };

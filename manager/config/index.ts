@@ -537,3 +537,19 @@ export {
 
 // Also export types that other modules need
 export type { AppConfig, PartitionLimits };
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  config,
+  clusters,
+  ides,
+  gpuConfig,
+  partitionLimits,
+  releases,
+  defaultReleaseVersion,
+  getReleasePaths,
+  pythonEnv,
+  vscodeDefaults,
+  rstudioDefaults,
+  jupyterlabDefaults,
+};

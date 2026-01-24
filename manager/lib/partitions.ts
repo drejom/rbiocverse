@@ -392,3 +392,18 @@ export async function initialize(): Promise<void> {
     // Continue with stale/config data
   }
 }
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  initialize,
+  setHpcService,
+  refreshAllPartitions,
+  refreshClusterPartitions,
+  getPartitionLimits,
+  getAllPartitions,
+  getClusterPartitions,
+  getLastUpdated,
+  parseScontrolOutput,
+  parsePartitionLine,
+  parseGpuInfo,
+};
