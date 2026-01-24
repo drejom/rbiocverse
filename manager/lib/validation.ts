@@ -297,7 +297,12 @@ export function getPartitionLimits(hpc: string, gpu: string = ''): PartitionLimi
   // Try dynamic limits first (from SLURM via SSH)
   const dynamicLimits = dynamicPartitions.getPartitionLimits(hpc, partition);
   if (dynamicLimits && dynamicLimits.maxCpus && dynamicLimits.maxMemMB && dynamicLimits.maxTime) {
-    return dynamicLimits;
+    // Type narrowing: we've verified all required fields are non-null above
+    return {
+      maxCpus: dynamicLimits.maxCpus,
+      maxMemMB: dynamicLimits.maxMemMB,
+      maxTime: dynamicLimits.maxTime,
+    };
   }
 
   // Fall back to hardcoded config values

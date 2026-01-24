@@ -19,12 +19,16 @@ export interface LogMeta {
   [key: string]: unknown;
 }
 
-// Helper to convert string to meta object
-function toMeta(metaOrString: LogMeta | string = {}): LogMeta {
+// Helper to convert string to meta object (with overloads for type safety)
+function toMeta(): LogMeta;
+function toMeta(meta: LogMeta): LogMeta;
+function toMeta(detail: string): LogMeta;
+function toMeta(metaOrString: LogMeta | string): LogMeta;
+function toMeta(metaOrString?: LogMeta | string): LogMeta {
   if (typeof metaOrString === 'string') {
     return { detail: metaOrString };
   }
-  return metaOrString;
+  return metaOrString ?? {};
 }
 
 interface TimerResult {

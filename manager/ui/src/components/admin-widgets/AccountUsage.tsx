@@ -142,7 +142,7 @@ export function AccountUsage({ getAuthHeader }: AccountUsageProps) {
           <tfoot>
             <tr>
               <td><strong>Total</strong></td>
-              <td><strong>{new Set(data.flatMap(() => 1)).size}</strong></td>
+              <td><strong>{data.reduce((sum, d) => sum + d.uniqueUsers, 0)}</strong></td>
               <td><strong>{data.reduce((sum, d) => sum + d.sessions, 0)}</strong></td>
               <td className="compute-hours">
                 <strong>{formatHours(data.reduce((sum, d) => sum + (d.computeHours || 0), 0))}</strong>

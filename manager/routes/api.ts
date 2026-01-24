@@ -173,7 +173,7 @@ async function startTunnelWithPortDiscovery(
 async function verifyJobExists(session: Session, hpc: string, ide: string, user: string): Promise<boolean> {
   const hpcService = new HpcService(hpc, user);
   const jobInfo = await hpcService.getJobInfo(ide);
-  return jobInfo && jobInfo.jobId === session.jobId;
+  return jobInfo !== null && jobInfo.jobId === session.jobId;
 }
 
 /**
@@ -602,7 +602,7 @@ function createApiRouter(stateManager: StateManager): Router {
         log.job(`Submitting new job`, { hpc, ide, cpus, mem, time });
         const result = await hpcService.submitJob(cpus, mem, time, ide);
         jobId = result.jobId;
-        token = result.token;  // Auth token for VS Code/Jupyter
+        token = result.token ?? undefined;  // Auth token for VS Code/Jupyter
 
         // Record submission time for wait time analytics
         await stateManager.updateSession(user, hpc, ide, {
@@ -627,7 +627,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
       // Start tunnel - it will verify IDE is responding before returning
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (_code) => {
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
         const currentSession = stateManager.getSession(user, hpc, ide);
@@ -911,7 +911,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
         const result = await hpcService.submitJob(parseInt(cpus, 10), mem, time, ide, { gpu, releaseVersion });
         jobId = result.jobId;
-        token = result.token;
+        token = result.token ?? undefined;
 
         // Record submission time for wait time analytics
         await stateManager.updateSession(user, hpc, ide, {
@@ -962,7 +962,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
       // Start tunnel and wait for it to establish
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (_code) => {
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
         // Tunnel exit callback - refetch session since local ref may be stale
         log.tunnel(`Exit callback`, { hpc, ide, code });
         const currentSession = stateManager.getSession(user, hpc, ide);

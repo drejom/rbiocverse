@@ -35,9 +35,11 @@ const param = (req: Request, name: string): string => req.params[name] as string
 
 // Extend Express Request to include user property
 // TokenPayload has { iat, exp, [key]: unknown }, token includes username/fullName at runtime
+// Note: username is always present when token is valid (set during login)
+// fullName may be undefined for older tokens or system accounts
 interface AuthenticatedRequest extends Request {
   user?: TokenPayload & {
-    username?: string;
+    username: string;
     fullName?: string;
   };
 }
@@ -121,7 +123,8 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  req.user = payload;
+  // Cast is safe because we always include username in token during login
+  req.user = payload as TokenPayload & { username: string; fullName?: string };
   next();
 }
 
@@ -355,12 +358,13 @@ router.post('/complete-setup', requireAuth, async (req: AuthenticatedRequest, re
     log.info('User setup completed', { username: user.username });
   }
 
+  // user is guaranteed to be assigned in both branches above
   res.json({
     user: {
-      username: user.username,
-      fullName: user.fullName,
-      publicKey: user.publicKey,
-      setupComplete: user.setupComplete,
+      username: user!.username,
+      fullName: user!.fullName,
+      publicKey: user!.publicKey,
+      setupComplete: user!.setupComplete,
     },
   });
 });

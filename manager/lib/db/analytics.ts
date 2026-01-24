@@ -5,6 +5,105 @@
 
 import { getDb } from '../db';
 
+// Result interfaces for analytics queries
+export interface ReleaseUsageRow {
+  version: string;
+  sessions: number;
+  uniqueUsers: number;
+}
+
+export interface IdePopularityRow {
+  ide: string;
+  sessions: number;
+  uniqueUsers: number;
+  avgDurationMinutes: number | null;
+}
+
+export interface PowerUserRow {
+  user: string;
+  sessions: number;
+  avgCpus: number;
+  avgDuration: number;
+  maxCpus: number;
+  maxDuration: number;
+  gpuSessions: number;
+}
+
+export interface InactiveUserRow {
+  user: string;
+  lastSession: string;
+  totalSessions: number;
+  daysSinceLastSession: number;
+}
+
+export interface AccountUsageRow {
+  account: string;
+  sessions: number;
+  uniqueUsers: number;
+  totalMinutes: number | null;
+  computeHours: number | null;
+  avgCpus: number | null;
+  gpuSessions: number;
+}
+
+export interface DailySessionRow {
+  date: string;
+  sessions: number;
+  uniqueUsers: number;
+}
+
+export interface ReleaseAdoptionRow {
+  date: string;
+  newUsers: number;
+  cumulativeUsers: number;
+}
+
+export interface GrowthTrendRow {
+  month: string;
+  sessions: number;
+  uniqueUsers: number;
+  totalMinutes: number | null;
+  computeHours: number | null;
+}
+
+export interface RawSessionRow {
+  user: string;
+  hpc: string;
+  ide: string;
+  account: string | null;
+  cpus: number | null;
+  memory: string | null;
+  walltime: string | null;
+  gpu: string | null;
+  releaseVersion: string | null;
+  submittedAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  waitSeconds: number | null;
+  durationMinutes: number | null;
+  endReason: string | null;
+  errorMessage: string | null;
+  usedShiny: number;
+  usedLiveServer: number;
+  jobId: string | null;
+  node: string | null;
+}
+
+export interface SummaryRow {
+  user: string;
+  account: string | null;
+  ide: string;
+  hpc: string;
+  sessions: number;
+  totalMinutes: number | null;
+  computeHours: number | null;
+  avgCpus: number | null;
+  avgWaitSeconds: number | null;
+  gpuSessions: number;
+  shinySessions: number;
+  liveServerSessions: number;
+}
+
 /**
  * Get ISO date string for N days ago
  */
@@ -26,7 +125,7 @@ function monthsAgo(months: number): string {
 /**
  * Get release version usage statistics
  */
-function getReleaseUsage(days: number = 30): unknown[] {
+function getReleaseUsage(days: number = 30): ReleaseUsageRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -39,7 +138,7 @@ function getReleaseUsage(days: number = 30): unknown[] {
     WHERE started_at >= ? AND release_version IS NOT NULL
     GROUP BY release_version
     ORDER BY sessions DESC
-  `).all(cutoff);
+  `).all(cutoff) as ReleaseUsageRow[];
 }
 
 /**
@@ -102,7 +201,7 @@ function getResourcePatterns(days: number = 30): Record<string, unknown> {
 /**
  * Get IDE popularity statistics
  */
-function getIdePopularity(days: number = 30): unknown[] {
+function getIdePopularity(days: number = 30): IdePopularityRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -116,7 +215,7 @@ function getIdePopularity(days: number = 30): unknown[] {
     WHERE started_at >= ?
     GROUP BY ide
     ORDER BY sessions DESC
-  `).all(cutoff);
+  `).all(cutoff) as IdePopularityRow[];
 }
 
 /**
@@ -210,7 +309,7 @@ interface PowerUserThresholds {
  * Get power users (candidates for HPC training)
  * Users with high resource usage patterns
  */
-function getPowerUsers(days: number = 30, thresholds: PowerUserThresholds = {}): unknown[] {
+function getPowerUsers(days: number = 30, thresholds: PowerUserThresholds = {}): PowerUserRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -230,14 +329,14 @@ function getPowerUsers(days: number = 30, thresholds: PowerUserThresholds = {}):
     GROUP BY user
     HAVING (AVG(cpus) > ? OR AVG(duration_minutes) > ?) AND COUNT(*) >= ?
     ORDER BY avgCpus DESC, avgDuration DESC
-  `).all(cutoff, minAvgCpus, minAvgDuration, minSessions);
+  `).all(cutoff, minAvgCpus, minAvgDuration, minSessions) as PowerUserRow[];
 }
 
 /**
  * Get inactive users (cleanup candidates)
  * Users with no activity in specified period
  */
-function getInactiveUsers(inactiveDays: number = 90): unknown[] {
+function getInactiveUsers(inactiveDays: number = 90): InactiveUserRow[] {
   const db = getDb();
   const cutoff = daysAgo(inactiveDays);
 
@@ -252,7 +351,7 @@ function getInactiveUsers(inactiveDays: number = 90): unknown[] {
     GROUP BY user
     HAVING MAX(started_at) < ?
     ORDER BY lastSession ASC
-  `).all(cutoff);
+  `).all(cutoff) as InactiveUserRow[];
 }
 
 /**
@@ -390,7 +489,7 @@ function getCapacityMetrics(days: number = 30): Record<string, unknown> {
 /**
  * Get usage by Slurm account/PI
  */
-function getUsageByAccount(days: number = 30): unknown[] {
+function getUsageByAccount(days: number = 30): AccountUsageRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -407,13 +506,13 @@ function getUsageByAccount(days: number = 30): unknown[] {
     WHERE started_at >= ?
     GROUP BY account
     ORDER BY computeHours DESC
-  `).all(cutoff);
+  `).all(cutoff) as AccountUsageRow[];
 }
 
 /**
  * Get daily session counts for heatmap
  */
-function getDailySessionCounts(days: number = 365): unknown[] {
+function getDailySessionCounts(days: number = 365): DailySessionRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -426,13 +525,13 @@ function getDailySessionCounts(days: number = 365): unknown[] {
     WHERE started_at >= ?
     GROUP BY date(started_at)
     ORDER BY date ASC
-  `).all(cutoff);
+  `).all(cutoff) as DailySessionRow[];
 }
 
 /**
  * Get release adoption curve
  */
-function getReleaseAdoption(version: string): unknown[] {
+function getReleaseAdoption(version: string): ReleaseAdoptionRow[] {
   const db = getDb();
 
   // Get cumulative unique users over time for this version
@@ -450,13 +549,13 @@ function getReleaseAdoption(version: string): unknown[] {
     FROM first_use
     GROUP BY date(first_use_date)
     ORDER BY date ASC
-  `).all(version);
+  `).all(version) as ReleaseAdoptionRow[];
 }
 
 /**
  * Get month-over-month growth trends
  */
-function getGrowthTrends(months: number = 12): unknown[] {
+function getGrowthTrends(months: number = 12): GrowthTrendRow[] {
   const db = getDb();
   const cutoff = monthsAgo(months);
 
@@ -471,7 +570,7 @@ function getGrowthTrends(months: number = 12): unknown[] {
     WHERE started_at >= ?
     GROUP BY strftime('%Y-%m', started_at)
     ORDER BY month ASC
-  `).all(cutoff);
+  `).all(cutoff) as GrowthTrendRow[];
 }
 
 /**
@@ -515,7 +614,7 @@ function getQueueWaitTimesByCluster(days: number = 30): Record<string, unknown> 
 /**
  * Export raw session data as CSV-friendly format
  */
-function exportRawSessions(days: number = 30): unknown[] {
+function exportRawSessions(days: number = 30): RawSessionRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -537,13 +636,13 @@ function exportRawSessions(days: number = 30): unknown[] {
     FROM session_history
     WHERE started_at >= ?
     ORDER BY started_at DESC
-  `).all(cutoff);
+  `).all(cutoff) as RawSessionRow[];
 }
 
 /**
  * Export aggregated summary data
  */
-function exportSummary(days: number = 30): unknown[] {
+function exportSummary(days: number = 30): SummaryRow[] {
   const db = getDb();
   const cutoff = daysAgo(days);
 
@@ -565,7 +664,7 @@ function exportSummary(days: number = 30): unknown[] {
     WHERE started_at >= ?
     GROUP BY user, account, ide, hpc
     ORDER BY computeHours DESC
-  `).all(cutoff);
+  `).all(cutoff) as SummaryRow[];
 }
 
 // Helper function to calculate percentile

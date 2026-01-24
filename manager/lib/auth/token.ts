@@ -26,8 +26,9 @@ function generateToken(
     exp: Date.now() + expiresIn * 1000,
   };
   const payloadStr = Buffer.from(JSON.stringify(data)).toString('base64url');
+  // jwtSecret is validated at startup in config/index.ts - app won't run without it
   const signature = crypto
-    .createHmac('sha256', config.jwtSecret)
+    .createHmac('sha256', config.jwtSecret!)
     .update(payloadStr)
     .digest('base64url');
   return `${payloadStr}.${signature}`;
@@ -43,8 +44,9 @@ function verifyToken(token: string | undefined | null): TokenPayload | null {
   if (!payloadStr || !signature) return null;
 
   // Verify signature using constant-time comparison to prevent timing attacks
+  // jwtSecret is validated at startup in config/index.ts - app won't run without it
   const expectedSig = crypto
-    .createHmac('sha256', config.jwtSecret)
+    .createHmac('sha256', config.jwtSecret!)
     .update(payloadStr)
     .digest('base64url');
 

@@ -132,11 +132,11 @@ function rowToHealth(row: ClusterCacheRow | undefined): ClusterHealth | null {
     } : null,
     gpus: row.gpus_json ? JSON.parse(row.gpus_json) : null,
     partitions: row.partitions_json ? JSON.parse(row.partitions_json) : null,
-    runningJobs: row.running_jobs || 0,
-    pendingJobs: row.pending_jobs || 0,
+    runningJobs: row.running_jobs ?? 0,
+    pendingJobs: row.pending_jobs ?? 0,
     fairshare: row.fairshare,
-    lastChecked: row.last_checked || Date.now(),
-    consecutiveFailures: row.consecutive_failures || 0,
+    lastChecked: row.last_checked ?? Date.now(),
+    consecutiveFailures: row.consecutive_failures ?? 0,
     error: row.error,
   };
 }

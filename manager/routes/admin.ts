@@ -626,7 +626,7 @@ router.get('/analytics/by-account', asyncHandler(async (req: Request, res: Respo
  */
 router.get('/analytics/export/raw', asyncHandler(async (req: Request, res: Response) => {
   const { days } = parseQueryParams(req.query);
-  const data = analytics.exportRawSessions(days) as Array<Record<string, unknown>>;
+  const data = analytics.exportRawSessions(days) as unknown as Array<Record<string, unknown>>;
 
   // Convert to CSV
   if (data.length === 0) {
@@ -661,7 +661,7 @@ router.get('/analytics/export/raw', asyncHandler(async (req: Request, res: Respo
  */
 router.get('/analytics/export/summary', asyncHandler(async (req: Request, res: Response) => {
   const { days } = parseQueryParams(req.query);
-  const data = analytics.exportSummary(days) as Array<Record<string, unknown>>;
+  const data = analytics.exportSummary(days) as unknown as Array<Record<string, unknown>>;
 
   // Convert to CSV
   if (data.length === 0) {

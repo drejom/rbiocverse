@@ -28,7 +28,7 @@ describe('E2E: Launcher Page', function() {
     try {
       require('fs').accessSync(CHROME_PATH);
       launchOptions.executablePath = CHROME_PATH;
-    } catch (e) {
+    } catch {
       // Fall back to bundled Chromium
     }
 
@@ -183,8 +183,8 @@ describe('E2E: Launcher Page', function() {
         { timeout: 10000 }
       );
 
-      // Get initial cache age text
-      const initialText = await page.$eval('#cache-indicator', el => el.textContent);
+      // Verify cache indicator exists by reading it
+      await page.$eval('#cache-indicator', el => el.textContent);
 
       // Click refresh
       await page.click('#refresh-btn');
@@ -277,7 +277,7 @@ describe('E2E: VS Code Session (requires running job)', function() {
     try {
       require('fs').accessSync(CHROME_PATH);
       launchOptions.executablePath = CHROME_PATH;
-    } catch (e) {
+    } catch {
       // Fall back to bundled Chromium
     }
 

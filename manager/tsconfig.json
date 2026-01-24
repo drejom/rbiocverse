@@ -16,7 +16,7 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": false,
-    "strictNullChecks": false,
+    "strictNullChecks": true,
     "allowJs": true,
     "checkJs": false,
     "noUnusedLocals": false,
@@ -26,17 +26,8 @@
       "@/*": ["./*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.js"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "ui",
-    "coverage",
-    "public"
-  ],
+  "include": ["**/*.ts", "**/*.js"],
+  "exclude": ["node_modules", "dist", "ui", "coverage", "public"],
   "ts-node": {
     "transpileOnly": true,
     "compilerOptions": {

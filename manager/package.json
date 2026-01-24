@@ -4,6 +4,7 @@
   "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
   "main": "server.js",
   "scripts": {
+    "prestart": "npm run build:ts",
     "start": "node dist/server.js",
     "dev": "ts-node server.ts",
     "dev:watch": "node --watch -r ts-node/register server.ts",

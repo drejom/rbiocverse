@@ -33,7 +33,31 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  // Test file configuration
   {
-    ignores: ['node_modules/**', 'dist/**', 'ui/**', 'public/**', 'coverage/**', 'test/**'],
+    files: ['test/**/*.ts', 'test/**/*.js'],
+    languageOptions: {
+      globals: {
+        // Mocha globals
+        describe: 'readonly',
+        it: 'readonly',
+        before: 'readonly',
+        after: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        // Browser globals (for e2e/puppeteer tests)
+        document: 'readonly',
+        window: 'readonly',
+        fetch: 'readonly',
+        getComputedStyle: 'readonly',
+      },
+    },
+    rules: {
+      // Allow chai expect() expressions
+      '@typescript-eslint/no-unused-expressions': 'off',
+    },
+  },
+  {
+    ignores: ['node_modules/**', 'dist/**', 'ui/**', 'public/**', 'coverage/**'],
   }
 );
