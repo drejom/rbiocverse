@@ -6,19 +6,48 @@
  * Falls back to config values when clusters are unreachable.
  */
 
-const { log } = require('./logger');
-const db = require('./db/partitions');
-const { clusters } = require('../config');
+import { log } from './logger';
+import * as db from './db/partitions';
+import { clusters } from '../config';
+import type { PartitionLimits } from './db/partitions';
+
+// HpcService type - injected to avoid circular dependency
+interface HpcServiceInstance {
+  sshExec(command: string): Promise<string>;
+}
+
+interface HpcServiceConstructor {
+  new (clusterName: string, user?: string): HpcServiceInstance;
+}
 
 // HpcService is injected to avoid circular dependency
-let HpcServiceClass = null;
+let HpcServiceClass: HpcServiceConstructor | null = null;
 
 /**
  * Set HpcService class for SSH operations
- * @param {Class} ServiceClass - HpcService class
+ * @param ServiceClass - HpcService class
  */
-function setHpcService(ServiceClass) {
+export function setHpcService(ServiceClass: HpcServiceConstructor): void {
   HpcServiceClass = ServiceClass;
+}
+
+/**
+ * Parsed partition info from scontrol
+ */
+export interface ParsedPartition {
+  name: string;
+  isDefault: boolean;
+  maxCpus: number | null;
+  maxMemMB: number | null;
+  maxTime: string | null;
+  defaultTime: string | null;
+  totalCpus: number | null;
+  totalNodes: number | null;
+  totalMemMB: number | null;
+  restricted: boolean;
+  restrictionReason: string | null;
+  gpuType?: string;
+  gpuCount?: number;
 }
 
 /**
@@ -29,11 +58,11 @@ function setHpcService(ServiceClass) {
  *   MaxCPUsPerNode=44 ... MaxMemPerNode=640000 ... TotalCPUs=4776 TotalNodes=85 ...
  *   TRES=cpu=4606,mem=62356400M,node=85,billing=12217,gres/gpu=120
  *
- * @param {string} output - Raw scontrol output
- * @returns {Object[]} Array of partition objects
+ * @param output - Raw scontrol output
+ * @returns Array of partition objects
  */
-function parseScontrolOutput(output) {
-  const partitions = [];
+export function parseScontrolOutput(output: string): ParsedPartition[] {
+  const partitions: ParsedPartition[] = [];
   const lines = output.split('\n').filter(line => line.trim());
 
   for (const line of lines) {
@@ -48,10 +77,10 @@ function parseScontrolOutput(output) {
 
 /**
  * Parse a single partition line from scontrol output
- * @param {string} line - Single line of scontrol output
- * @returns {Object|null} Parsed partition or null
+ * @param line - Single line of scontrol output
+ * @returns Parsed partition or null
  */
-function parsePartitionLine(line) {
+export function parsePartitionLine(line: string): ParsedPartition | null {
   // Extract partition name
   const nameMatch = line.match(/PartitionName=(\S+)/);
   if (!nameMatch) return null;
@@ -63,11 +92,11 @@ function parsePartitionLine(line) {
 
   // MaxCPUsPerNode (may be UNLIMITED)
   const maxCpusMatch = line.match(/MaxCPUsPerNode=(\S+)/);
-  let maxCpus = maxCpusMatch ? maxCpusMatch[1] : null;
+  const maxCpusRaw = maxCpusMatch ? maxCpusMatch[1] : null;
 
   // MaxMemPerNode in MB (may be UNLIMITED)
   const maxMemMatch = line.match(/MaxMemPerNode=(\S+)/);
-  let maxMemMB = maxMemMatch ? maxMemMatch[1] : null;
+  const maxMemRaw = maxMemMatch ? maxMemMatch[1] : null;
 
   // MaxTime (may be UNLIMITED)
   const maxTimeMatch = line.match(/MaxTime=(\S+)/);
@@ -95,7 +124,7 @@ function parsePartitionLine(line) {
   const denyAccounts = denyAccountsMatch ? denyAccountsMatch[1] : null;
 
   let restricted = false;
-  let restrictionReason = null;
+  let restrictionReason: string | null = null;
 
   if (allowAccounts !== 'ALL') {
     restricted = true;
@@ -106,16 +135,18 @@ function parsePartitionLine(line) {
   }
 
   // Handle UNLIMITED values by deriving from totals (with division-by-zero protection)
-  if (maxCpus === 'UNLIMITED') {
-    maxCpus = (totalCpus && totalNodes > 0) ? Math.floor(totalCpus / totalNodes) : null;
+  let maxCpus: number | null;
+  if (maxCpusRaw === 'UNLIMITED') {
+    maxCpus = (totalCpus && totalNodes && totalNodes > 0) ? Math.floor(totalCpus / totalNodes) : null;
   } else {
-    maxCpus = maxCpus ? parseInt(maxCpus, 10) : null;
+    maxCpus = maxCpusRaw ? parseInt(maxCpusRaw, 10) : null;
   }
 
-  if (maxMemMB === 'UNLIMITED') {
-    maxMemMB = (totalMemMB && totalNodes > 0) ? Math.floor(totalMemMB / totalNodes) : null;
+  let maxMemMB: number | null;
+  if (maxMemRaw === 'UNLIMITED') {
+    maxMemMB = (totalMemMB && totalNodes && totalNodes > 0) ? Math.floor(totalMemMB / totalNodes) : null;
   } else {
-    maxMemMB = maxMemMB ? parseInt(maxMemMB, 10) : null;
+    maxMemMB = maxMemRaw ? parseInt(maxMemRaw, 10) : null;
   }
 
   // Handle UNLIMITED time - cap at 14 days
@@ -139,16 +170,24 @@ function parsePartitionLine(line) {
 }
 
 /**
+ * GPU info from sinfo
+ */
+interface GpuInfo {
+  gpuType: string;
+  gpuCount: number;
+}
+
+/**
  * Parse GPU info from sinfo output
  *
  * Example:
  * gpu-a100 gpu:A100:4
  *
- * @param {string} output - Raw sinfo -O gres output
- * @returns {Object} Map of partition -> { gpuType, gpuCount }
+ * @param output - Raw sinfo -O gres output
+ * @returns Map of partition -> { gpuType, gpuCount }
  */
-function parseGpuInfo(output) {
-  const gpus = {};
+export function parseGpuInfo(output: string): Record<string, GpuInfo> {
+  const gpus: Record<string, GpuInfo> = {};
   const lines = output.split('\n').filter(line => line.trim());
 
   for (const line of lines) {
@@ -168,10 +207,10 @@ function parseGpuInfo(output) {
 
 /**
  * Fetch partition info from a single cluster
- * @param {string} clusterName - Cluster name (gemini, apollo)
- * @returns {Promise<Object[]>} Array of partition objects
+ * @param clusterName - Cluster name (gemini, apollo)
+ * @returns Array of partition objects
  */
-async function fetchClusterPartitions(clusterName) {
+async function fetchClusterPartitions(clusterName: string): Promise<ParsedPartition[]> {
   if (!HpcServiceClass) {
     throw new Error('HpcService not initialized - call setHpcService first');
   }
@@ -201,7 +240,7 @@ async function fetchClusterPartitions(clusterName) {
         }
       }
     } catch (e) {
-      log.warn('Failed to fetch GPU info', { cluster: clusterName, error: e.message });
+      log.warn('Failed to fetch GPU info', { cluster: clusterName, error: (e as Error).message });
     }
   }
 
@@ -209,17 +248,26 @@ async function fetchClusterPartitions(clusterName) {
 }
 
 /**
- * Refresh partitions for a single cluster
- * @param {string} clusterName - Cluster name
- * @returns {Promise<Object>} { success, partitions, error }
+ * Refresh result for a cluster
  */
-async function refreshClusterPartitions(clusterName) {
+interface RefreshResult {
+  success: boolean;
+  partitions?: ParsedPartition[];
+  error?: string;
+}
+
+/**
+ * Refresh partitions for a single cluster
+ * @param clusterName - Cluster name
+ * @returns Refresh result
+ */
+export async function refreshClusterPartitions(clusterName: string): Promise<RefreshResult> {
   try {
     log.info('Refreshing partition info', { cluster: clusterName });
     const partitions = await fetchClusterPartitions(clusterName);
 
     // Store in database
-    const partitionNames = [];
+    const partitionNames: string[] = [];
     for (const partition of partitions) {
       db.upsertPartition(clusterName, partition.name, {
         isDefault: partition.isDefault,
@@ -244,16 +292,16 @@ async function refreshClusterPartitions(clusterName) {
     log.info('Partition refresh complete', { cluster: clusterName, count: partitions.length });
     return { success: true, partitions };
   } catch (e) {
-    log.warn('Failed to refresh partitions', { cluster: clusterName, error: e.message });
-    return { success: false, error: e.message };
+    log.warn('Failed to refresh partitions', { cluster: clusterName, error: (e as Error).message });
+    return { success: false, error: (e as Error).message };
   }
 }
 
 /**
  * Refresh partitions for all configured clusters
- * @returns {Promise<Object>} Results per cluster
+ * @returns Results per cluster
  */
-async function refreshAllPartitions() {
+export async function refreshAllPartitions(): Promise<Record<string, RefreshResult>> {
   // Fetch from all clusters in parallel
   const clusterNames = Object.keys(clusters);
   const resultsArray = await Promise.all(
@@ -261,7 +309,7 @@ async function refreshAllPartitions() {
   );
 
   // Build results object after all promises resolve (avoids race condition)
-  const results = {};
+  const results: Record<string, RefreshResult> = {};
   clusterNames.forEach((name, index) => {
     results[name] = resultsArray[index];
   });
@@ -273,49 +321,56 @@ async function refreshAllPartitions() {
  * Get partition limits for validation
  * Returns dynamic limits from DB, or null if not available
  *
- * @param {string} cluster - Cluster name
- * @param {string} partition - Partition name
- * @returns {Object|null} { maxCpus, maxMemMB, maxTime } or null
+ * @param cluster - Cluster name
+ * @param partition - Partition name
+ * @returns Partition limits or null
  */
-function getPartitionLimits(cluster, partition) {
+export function getPartitionLimits(cluster: string, partition: string): PartitionLimits | null {
   const limits = db.getPartitionLimits(cluster, partition);
   if (!limits) return null;
 
   return {
+    partition: limits.partition,
+    isDefault: limits.isDefault,
     maxCpus: limits.maxCpus,
     maxMemMB: limits.maxMemMB,
     maxTime: limits.maxTime,
+    defaultTime: limits.defaultTime,
+    totalCpus: limits.totalCpus,
+    totalNodes: limits.totalNodes,
+    totalMemMB: limits.totalMemMB,
     // Include additional fields for API responses
     gpuType: limits.gpuType,
     gpuCount: limits.gpuCount,
     restricted: limits.restricted,
     restrictionReason: limits.restrictionReason,
+    updatedAt: limits.updatedAt,
   };
 }
 
 /**
  * Get all partitions (for API responses)
- * @returns {Object} Map of cluster -> { partition -> limits }
+ * @returns Map of cluster -> { partition -> limits }
  */
-function getAllPartitions() {
+export function getAllPartitions(): Record<string, Record<string, PartitionLimits>> {
   return db.getAllPartitions();
 }
 
 /**
  * Get partitions for a specific cluster
- * @param {string} cluster - Cluster name
- * @returns {Object} Map of partition -> limits
+ * @param cluster - Cluster name
+ * @returns Map of partition -> limits
  */
-function getClusterPartitions(cluster) {
+export function getClusterPartitions(cluster: string): Record<string, PartitionLimits> {
   return db.getClusterPartitions(cluster);
 }
 
 /**
  * Get last update timestamp
- * @param {string} [cluster] - Optional cluster filter
- * @returns {number|null} Timestamp in ms
+ * @param cluster - Optional cluster filter
+ * @returns Timestamp in ms
  */
-function getLastUpdated(cluster = null) {
+export function getLastUpdated(cluster: string | null = null): number | null {
   return db.getLastUpdated(cluster);
 }
 
@@ -323,7 +378,7 @@ function getLastUpdated(cluster = null) {
  * Initialize partition service
  * Fetches partition info on startup
  */
-async function initialize() {
+export async function initialize(): Promise<void> {
   log.info('Initializing partition service');
 
   // Don't block startup if clusters are unreachable
@@ -333,28 +388,7 @@ async function initialize() {
     const total = Object.keys(results).length;
     log.info('Partition service initialized', { successful, total });
   } catch (e) {
-    log.warn('Partition service initialization failed', { error: e.message });
+    log.warn('Partition service initialization failed', { error: (e as Error).message });
     // Continue with stale/config data
   }
 }
-
-module.exports = {
-  // Initialization
-  initialize,
-  setHpcService,
-
-  // Refresh operations
-  refreshAllPartitions,
-  refreshClusterPartitions,
-
-  // Query operations
-  getPartitionLimits,
-  getAllPartitions,
-  getClusterPartitions,
-  getLastUpdated,
-
-  // Parsing (exported for testing)
-  parseScontrolOutput,
-  parsePartitionLine,
-  parseGpuInfo,
-};

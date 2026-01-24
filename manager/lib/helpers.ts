@@ -6,10 +6,10 @@
 /**
  * Parse time string to seconds
  * Handles: "HH:MM:SS", "D-HH:MM:SS", "MM:SS" (SLURM short format)
- * @param {string} timeStr - Time string from SLURM
- * @returns {number|null} Total seconds, or null if invalid
+ * @param timeStr - Time string from SLURM
+ * @returns Total seconds, or null if invalid
  */
-function parseTimeToSeconds(timeStr) {
+export function parseTimeToSeconds(timeStr: string | null | undefined): number | null {
   if (!timeStr) return null;
   const parts = timeStr.split(':');
 
@@ -34,10 +34,10 @@ function parseTimeToSeconds(timeStr) {
 
 /**
  * Format seconds to human-readable time (11h 45m)
- * @param {number} seconds - Total seconds
- * @returns {string} Formatted time string
+ * @param seconds - Total seconds
+ * @returns Formatted time string
  */
-function formatHumanTime(seconds) {
+export function formatHumanTime(seconds: number | null | undefined): string {
   if (!seconds || seconds <= 0) return '0m';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -47,11 +47,14 @@ function formatHumanTime(seconds) {
 
 /**
  * Calculate remaining time for a job
- * @param {string|Date} startedAt - When job started
- * @param {string} walltime - Job walltime in HH:MM:SS format
- * @returns {string|null} Remaining time in HH:MM:SS format, or null if invalid
+ * @param startedAt - When job started
+ * @param walltime - Job walltime in HH:MM:SS format
+ * @returns Remaining time in HH:MM:SS format, or null if invalid
  */
-function calculateRemainingTime(startedAt, walltime) {
+export function calculateRemainingTime(
+  startedAt: string | Date | null | undefined,
+  walltime: string | null | undefined
+): string | null {
   if (!startedAt || !walltime) return null;
 
   // Parse walltime (HH:MM:SS)
@@ -69,9 +72,3 @@ function calculateRemainingTime(startedAt, walltime) {
 
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
-
-module.exports = {
-  parseTimeToSeconds,
-  formatHumanTime,
-  calculateRemainingTime,
-};

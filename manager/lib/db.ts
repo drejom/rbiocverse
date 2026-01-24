@@ -9,15 +9,18 @@
  * - (new) session_history table for analytics
  */
 
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+// Type for database instance
+type DatabaseInstance = Database.Database;
 
 // Database path priority:
 // 1. DB_PATH env var (for testing or custom paths)
 // 2. /data/app.db (Docker volume mount - production)
 // 3. ./data/app.db (local development fallback)
-function getDefaultDbPath() {
+function getDefaultDbPath(): string {
   if (process.env.DB_PATH) return process.env.DB_PATH;
 
   // In production (Docker), use the mounted /data volume
@@ -30,16 +33,16 @@ function getDefaultDbPath() {
   return path.join(__dirname, '..', 'data', 'app.db');
 }
 
-const DEFAULT_DB_PATH = getDefaultDbPath();
+export const DEFAULT_DB_PATH = getDefaultDbPath();
 
-let db = null;
+let db: DatabaseInstance | null = null;
 
 /**
  * Initialize database connection and schema
- * @param {string} [dbPath] - Optional database path (defaults to DEFAULT_DB_PATH)
- * @returns {Database} The database connection
+ * @param dbPath - Optional database path (defaults to DEFAULT_DB_PATH)
+ * @returns The database connection
  */
-function initializeDb(dbPath = DEFAULT_DB_PATH) {
+export function initializeDb(dbPath: string = DEFAULT_DB_PATH): DatabaseInstance {
   if (db) return db;
 
   // Ensure data directory exists
@@ -200,13 +203,17 @@ function initializeDb(dbPath = DEFAULT_DB_PATH) {
   return db;
 }
 
+interface TableColumn {
+  name: string;
+}
+
 /**
  * Run database migrations for schema changes
- * @param {Database} database - The database connection
+ * @param database - The database connection
  */
-function runMigrations(database) {
+function runMigrations(database: DatabaseInstance): void {
   // Check if partition columns exist in cluster_health
-  const tableInfo = database.prepare('PRAGMA table_info(cluster_health)').all();
+  const tableInfo = database.prepare('PRAGMA table_info(cluster_health)').all() as TableColumn[];
   const columns = new Set(tableInfo.map(col => col.name));
 
   // Migration: Add partition CPU columns
@@ -220,20 +227,20 @@ function runMigrations(database) {
 
 /**
  * Get database connection (initializes if needed)
- * @param {string} [dbPath] - Optional database path
- * @returns {Database} The database connection
+ * @param dbPath - Optional database path
+ * @returns The database connection
  */
-function getDb(dbPath) {
+export function getDb(dbPath?: string): DatabaseInstance {
   if (!db) {
     initializeDb(dbPath);
   }
-  return db;
+  return db!;
 }
 
 /**
  * Close database connection
  */
-function closeDb() {
+export function closeDb(): void {
   if (db) {
     db.close();
     db = null;
@@ -242,31 +249,22 @@ function closeDb() {
 
 /**
  * Reset database connection (for testing)
- * @param {string} [dbPath] - Optional database path
- * @returns {Database} The new database connection
+ * @param dbPath - Optional database path
+ * @returns The new database connection
  */
-function resetDb(dbPath) {
+export function resetDb(dbPath?: string): DatabaseInstance {
   closeDb();
   return initializeDb(dbPath);
 }
 
 /**
  * Check if migration from JSON files is needed
- * @returns {boolean} True if JSON files exist and need migration
+ * @returns True if JSON files exist and need migration
  */
-function needsMigration() {
+export function needsMigration(): boolean {
   const dataDir = path.join(__dirname, '..', 'data');
   const usersJson = path.join(dataDir, 'users.json');
   const stateJson = path.join(dataDir, 'state.json');
 
   return fs.existsSync(usersJson) || fs.existsSync(stateJson);
 }
-
-module.exports = {
-  initializeDb,
-  getDb,
-  closeDb,
-  resetDb,
-  needsMigration,
-  DEFAULT_DB_PATH,
-};

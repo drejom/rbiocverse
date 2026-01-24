@@ -3,10 +3,117 @@
  * Centralizes all environment variables and cluster-specific settings
  */
 
+// Type definitions for configuration objects
+
+interface AppConfig {
+  hpcUser: string;
+  defaultHpc: string;
+  defaultIde: string;
+  defaultCpus: string;
+  defaultMem: string;
+  defaultTime: string;
+  additionalPorts: number[];
+  sessionIdleTimeout: number;
+  adminEmail: string | null;
+  jwtSecret: string | undefined;
+  sessionExpiryDays: number;
+}
+
+interface VsCodeKeybinding {
+  key: string;
+  command: string;
+  when: string;
+  args?: string | { snippet?: string; text?: string };
+}
+
+interface VsCodeDefaults {
+  settings: Record<string, unknown>;
+  builtinExtensionsDir: string;
+  keybindings: VsCodeKeybinding[];
+}
+
+interface RStudioDefaults {
+  save_workspace: string;
+  load_workspace: boolean;
+  restore_source_documents: boolean;
+  always_save_history: boolean;
+  restore_last_project: boolean;
+  insert_native_pipe_operator: boolean;
+  rainbow_parentheses: boolean;
+  highlight_r_function_calls: boolean;
+  auto_append_newline: boolean;
+  strip_trailing_whitespace: boolean;
+  font_size_points: number;
+  browser_fixed_width_fonts: string[];
+  posix_terminal_shell: string;
+  terminal_initial_directory: string;
+}
+
+interface JupyterLabDefaults {
+  '@jupyterlab/terminal-extension:plugin': {
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    scrollback: number;
+    theme: string;
+  };
+  '@jupyterlab/apputils-extension:themes': {
+    'code-font-family': string;
+    'code-font-size': string;
+  };
+  '@jupyterlab/notebook-extension:tracker': {
+    codeCellConfig: {
+      lineNumbers: boolean;
+    };
+  };
+}
+
+export interface IdeConfig {
+  name: string;
+  icon: string;
+  port: number;
+  jobName: string;
+  proxyPath: string;
+}
+
+export interface GpuPartitionConfig {
+  partition: string;
+  gres: string;
+  maxTime: string;
+  mem: string;
+}
+
+interface PartitionLimits {
+  maxCpus: number;
+  maxMemMB: number;
+  maxTime: string;
+}
+
+export interface ClusterPaths {
+  singularityImage: string;
+  rLibsSite: string;
+  pythonEnv: string;
+}
+
+export interface ReleaseConfig {
+  name: string;
+  ides: string[];
+  paths: Record<string, ClusterPaths>;
+}
+
+export interface ClusterConfig {
+  host: string;
+  partition: string;
+  singularityBin: string;
+  singularityImage: string;
+  rLibsSite: string;
+  bindPaths: string;
+}
+
 // Parse additional ports from comma-separated string (e.g., "5500,3000,5173")
 // Returns default [5500,3838] if env var not set, empty array if set to empty string
 // Default includes Live Server (5500) and Shiny (3838)
-function parseAdditionalPorts(envValue, defaultValue = '5500,3838') {
+function parseAdditionalPorts(envValue: string | undefined, defaultValue = '5500,3838'): number[] {
   // If env var is explicitly set (even to empty string), use it
   if (envValue !== undefined) {
     if (envValue === '') return [];
@@ -19,7 +126,7 @@ function parseAdditionalPorts(envValue, defaultValue = '5500,3838') {
   return parseAdditionalPorts(defaultValue);
 }
 
-const config = {
+const config: AppConfig = {
   hpcUser: process.env.HPC_SSH_USER || 'domeally',
   defaultHpc: process.env.DEFAULT_HPC || 'gemini',
   defaultIde: process.env.DEFAULT_IDE || 'vscode',
@@ -58,7 +165,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // VS Code global defaults - written to Machine settings, user settings override
-const vscodeDefaults = {
+const vscodeDefaults: VsCodeDefaults = {
   // Machine settings (lowest priority - user/workspace settings override)
   settings: {
     // R + radian terminal
@@ -188,7 +295,7 @@ const vscodeDefaults = {
 // RStudio global defaults - written to rstudio-prefs.json
 // Font settings: browser_fixed_width_fonts tells RStudio which local fonts to try
 // User needs FiraCode Nerd Font installed locally for nerd font glyphs
-const rstudioDefaults = {
+const rstudioDefaults: RStudioDefaults = {
   // Workspace behavior (HPC-friendly - no large .RData files)
   save_workspace: 'never',
   load_workspace: false,
@@ -224,7 +331,7 @@ const rstudioDefaults = {
 // JupyterLab global defaults - written to overrides.json
 // Settings in $JUPYTER_DATA_DIR/lab/settings/overrides.json
 // Font settings rendered by browser from local fonts (user needs Nerd Font installed)
-const jupyterlabDefaults = {
+const jupyterlabDefaults: JupyterLabDefaults = {
   // Terminal settings - Nerd Font fallback chain for starship/powerline icons
   '@jupyterlab/terminal-extension:plugin': {
     fontFamily: "'FiraCode Nerd Font', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'Fira Code', monospace",
@@ -248,7 +355,7 @@ const jupyterlabDefaults = {
 
 // IDE definitions
 // Icons from devicon.dev
-const ides = {
+const ides: Record<string, IdeConfig> = {
   vscode: {
     name: 'VS Code',
     icon: 'devicon-vscode-plain',
@@ -274,7 +381,7 @@ const ides = {
 
 // GPU partitions (Gemini only - A100 and V100 available)
 // Apollo has no GPU support
-const gpuConfig = {
+const gpuConfig: Record<string, Record<string, GpuPartitionConfig> | null> = {
   gemini: {
     a100: { partition: 'gpu-a100', gres: 'gpu:A100:1', maxTime: '4-00:00:00', mem: '256G' },
     v100: { partition: 'gpu-v100', gres: 'gpu:V100:1', maxTime: '8-00:00:00', mem: '96G' },
@@ -285,7 +392,7 @@ const gpuConfig = {
 // Partition resource limits (from scontrol show partition)
 // Used for input validation - prevents submitting jobs that exceed queue limits
 // Memory in MB (MaxMemPerNode), time in SLURM format, UNLIMITED = no limit
-const partitionLimits = {
+const partitionLimits: Record<string, Record<string, PartitionLimits>> = {
   gemini: {
     compute: {
       maxCpus: 44,            // MaxCPUsPerNode=44
@@ -319,7 +426,7 @@ const partitionLimits = {
 // Each release specifies which IDEs are available and paths per cluster
 
 // Cluster base paths for Singularity images and libraries
-const clusterBasePaths = {
+const clusterBasePaths: Record<string, string> = {
   gemini: '/packages/singularity/shared_cache/rbioc',
   apollo: '/opt/singularity-images/rbioc',
 };
@@ -327,8 +434,8 @@ const clusterBasePaths = {
 // Helper to generate paths for a given release version and clusters
 // Usage: createReleasePaths('3.22') for all clusters
 //        createReleasePaths('3.18', ['apollo']) for Apollo-only
-function createReleasePaths(version, supportedClusters = ['gemini', 'apollo']) {
-  const paths = {};
+function createReleasePaths(version: string, supportedClusters: string[] = ['gemini', 'apollo']): Record<string, ClusterPaths> {
+  const paths: Record<string, ClusterPaths> = {};
   for (const cluster of supportedClusters) {
     const basePath = clusterBasePaths[cluster];
     if (basePath) {
@@ -342,7 +449,7 @@ function createReleasePaths(version, supportedClusters = ['gemini', 'apollo']) {
   return paths;
 }
 
-const releases = {
+const releases: Record<string, ReleaseConfig> = {
   '3.22': {
     name: 'Bioconductor 3.22',
     ides: ['vscode', 'rstudio', 'jupyter'],
@@ -370,7 +477,7 @@ const defaultReleaseVersion = '3.22';
 // Cluster configurations (non-release-specific settings)
 // Note: singularityImage and rLibsSite use default release for backward compat
 // New code should use getReleasePaths() for release-specific paths
-const clusters = {
+const clusters: Record<string, ClusterConfig> = {
   gemini: {
     host: process.env.GEMINI_SSH_HOST || 'gemini-login2.coh.org',
     partition: 'compute',
@@ -394,7 +501,7 @@ const clusters = {
 };
 
 // Helper to get release-specific paths for a cluster
-function getReleasePaths(clusterName, releaseVersion = defaultReleaseVersion) {
+function getReleasePaths(clusterName: string, releaseVersion: string = defaultReleaseVersion): ClusterPaths {
   const releaseConfig = releases[releaseVersion];
   if (!releaseConfig) {
     throw new Error(`Unknown release: ${releaseVersion}`);
@@ -408,12 +515,12 @@ function getReleasePaths(clusterName, releaseVersion = defaultReleaseVersion) {
 
 // Legacy pythonEnv export (deprecated - use getReleasePaths instead)
 // Kept for backward compatibility with existing hpc.js code
-const pythonEnv = {
+const pythonEnv: Record<string, string> = {
   gemini: releases[defaultReleaseVersion].paths.gemini.pythonEnv,
   apollo: releases[defaultReleaseVersion].paths.apollo.pythonEnv,
 };
 
-module.exports = {
+export {
   config,
   clusters,
   ides,
@@ -427,3 +534,6 @@ module.exports = {
   rstudioDefaults,
   jupyterlabDefaults,
 };
+
+// Also export types that other modules need
+export type { AppConfig, PartitionLimits };

@@ -8,28 +8,79 @@
  * - Fallback data when clusters are unreachable
  */
 
-const { getDb } = require('../db');
-const { log } = require('../logger');
+import { getDb } from '../db';
+import { log } from '../logger';
+
+/**
+ * Partition limits input data from SLURM
+ */
+export interface PartitionLimitsInput {
+  isDefault?: boolean;
+  maxCpus?: number | null;
+  maxMemMB?: number | null;
+  maxTime?: string | null;
+  defaultTime?: string | null;
+  totalCpus?: number | null;
+  totalNodes?: number | null;
+  totalMemMB?: number | null;
+  gpuCount?: number | null;
+  gpuType?: string | null;
+  restricted?: boolean;
+  restrictionReason?: string | null;
+}
+
+/**
+ * Partition limits output data
+ */
+export interface PartitionLimits {
+  partition: string;
+  isDefault: boolean;
+  maxCpus: number | null;
+  maxMemMB: number | null;
+  maxTime: string | null;
+  defaultTime: string | null;
+  totalCpus: number | null;
+  totalNodes: number | null;
+  totalMemMB: number | null;
+  gpuCount: number | null;
+  gpuType: string | null;
+  restricted: boolean;
+  restrictionReason: string | null;
+  updatedAt: number | null;
+}
+
+/**
+ * Database row type for partition_limits table
+ */
+interface PartitionRow {
+  partition: string;
+  is_default: number;
+  max_cpus: number | null;
+  max_mem_mb: number | null;
+  max_time: string | null;
+  default_time: string | null;
+  total_cpus: number | null;
+  total_nodes: number | null;
+  total_mem_mb: number | null;
+  gpu_count: number | null;
+  gpu_type: string | null;
+  restricted: number;
+  restriction_reason: string | null;
+  updated_at: number | null;
+  cluster?: string;
+}
 
 /**
  * Upsert partition limits
- * @param {string} cluster - Cluster name (gemini, apollo)
- * @param {string} partition - Partition name
- * @param {Object} limits - Partition limits
- * @param {boolean} limits.isDefault - Is this the default partition
- * @param {number|null} limits.maxCpus - Max CPUs per node
- * @param {number|null} limits.maxMemMB - Max memory in MB
- * @param {string|null} limits.maxTime - Max walltime (SLURM format)
- * @param {string|null} limits.defaultTime - Default walltime
- * @param {number|null} limits.totalCpus - Total CPUs in partition
- * @param {number|null} limits.totalNodes - Total nodes in partition
- * @param {number|null} limits.totalMemMB - Total memory in partition (MB)
- * @param {number|null} limits.gpuCount - GPUs per node
- * @param {string|null} limits.gpuType - GPU type (A100, V100, etc.)
- * @param {boolean} limits.restricted - Whether partition has access restrictions
- * @param {string|null} limits.restrictionReason - Why partition is restricted
+ * @param cluster - Cluster name (gemini, apollo)
+ * @param partition - Partition name
+ * @param limits - Partition limits
  */
-function upsertPartition(cluster, partition, limits) {
+export function upsertPartition(
+  cluster: string,
+  partition: string,
+  limits: PartitionLimitsInput
+): void {
   const db = getDb();
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO partition_limits (
@@ -62,31 +113,34 @@ function upsertPartition(cluster, partition, limits) {
 
 /**
  * Get partition limits for a specific cluster/partition
- * @param {string} cluster - Cluster name
- * @param {string} partition - Partition name
- * @returns {Object|null} Partition limits or null if not found
+ * @param cluster - Cluster name
+ * @param partition - Partition name
+ * @returns Partition limits or null if not found
  */
-function getPartitionLimits(cluster, partition) {
+export function getPartitionLimits(
+  cluster: string,
+  partition: string
+): PartitionLimits | null {
   const db = getDb();
   const row = db.prepare(`
     SELECT * FROM partition_limits WHERE cluster = ? AND partition = ?
-  `).get(cluster, partition);
+  `).get(cluster, partition) as PartitionRow | undefined;
 
   return row ? rowToLimits(row) : null;
 }
 
 /**
  * Get all partitions for a cluster
- * @param {string} cluster - Cluster name
- * @returns {Object} Map of partition name -> limits
+ * @param cluster - Cluster name
+ * @returns Map of partition name -> limits
  */
-function getClusterPartitions(cluster) {
+export function getClusterPartitions(cluster: string): Record<string, PartitionLimits> {
   const db = getDb();
   const rows = db.prepare(`
     SELECT * FROM partition_limits WHERE cluster = ? ORDER BY is_default DESC, partition ASC
-  `).all(cluster);
+  `).all(cluster) as PartitionRow[];
 
-  const partitions = {};
+  const partitions: Record<string, PartitionLimits> = {};
   for (const row of rows) {
     partitions[row.partition] = rowToLimits(row);
   }
@@ -95,15 +149,15 @@ function getClusterPartitions(cluster) {
 
 /**
  * Get all partitions across all clusters
- * @returns {Object} Map of cluster -> { partition -> limits }
+ * @returns Map of cluster -> { partition -> limits }
  */
-function getAllPartitions() {
+export function getAllPartitions(): Record<string, Record<string, PartitionLimits>> {
   const db = getDb();
   const rows = db.prepare(`
     SELECT * FROM partition_limits ORDER BY cluster, is_default DESC, partition ASC
-  `).all();
+  `).all() as (PartitionRow & { cluster: string })[];
 
-  const result = {};
+  const result: Record<string, Record<string, PartitionLimits>> = {};
   for (const row of rows) {
     if (!result[row.cluster]) {
       result[row.cluster] = {};
@@ -115,11 +169,11 @@ function getAllPartitions() {
 
 /**
  * Delete partitions not in the provided list (cleanup after refresh)
- * @param {string} cluster - Cluster name
- * @param {string[]} validPartitions - List of valid partition names
- * @returns {number} Number of rows deleted
+ * @param cluster - Cluster name
+ * @param validPartitions - List of valid partition names
+ * @returns Number of rows deleted
  */
-function deleteStalePartitions(cluster, validPartitions) {
+export function deleteStalePartitions(cluster: string, validPartitions: string[]): number {
   const db = getDb();
 
   if (validPartitions.length === 0) {
@@ -142,43 +196,43 @@ function deleteStalePartitions(cluster, validPartitions) {
 
 /**
  * Get the timestamp of the most recent update
- * @param {string} [cluster] - Optional cluster filter
- * @returns {number|null} Timestamp in ms or null if no data
+ * @param cluster - Optional cluster filter
+ * @returns Timestamp in ms or null if no data
  */
-function getLastUpdated(cluster = null) {
+export function getLastUpdated(cluster: string | null = null): number | null {
   const db = getDb();
   let sql = 'SELECT MAX(updated_at) as last_updated FROM partition_limits';
-  const params = [];
+  const params: string[] = [];
 
   if (cluster) {
     sql += ' WHERE cluster = ?';
     params.push(cluster);
   }
 
-  const row = db.prepare(sql).get(...params);
+  const row = db.prepare(sql).get(...params) as { last_updated: number | null } | undefined;
   return row?.last_updated ?? null;
 }
 
 /**
  * Get default partition for a cluster
- * @param {string} cluster - Cluster name
- * @returns {Object|null} Default partition limits or null
+ * @param cluster - Cluster name
+ * @returns Default partition limits or null
  */
-function getDefaultPartition(cluster) {
+export function getDefaultPartition(cluster: string): PartitionLimits | null {
   const db = getDb();
   const row = db.prepare(`
     SELECT * FROM partition_limits WHERE cluster = ? AND is_default = 1
-  `).get(cluster);
+  `).get(cluster) as PartitionRow | undefined;
 
   return row ? rowToLimits(row) : null;
 }
 
 /**
  * Convert database row to limits object
- * @param {Object} row - Database row
- * @returns {Object} Limits object
+ * @param row - Database row
+ * @returns Limits object
  */
-function rowToLimits(row) {
+function rowToLimits(row: PartitionRow): PartitionLimits {
   return {
     partition: row.partition,
     isDefault: row.is_default === 1,
@@ -196,13 +250,3 @@ function rowToLimits(row) {
     updatedAt: row.updated_at,
   };
 }
-
-module.exports = {
-  upsertPartition,
-  getPartitionLimits,
-  getClusterPartitions,
-  getAllPartitions,
-  deleteStalePartitions,
-  getLastUpdated,
-  getDefaultPartition,
-};

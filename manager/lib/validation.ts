@@ -5,15 +5,44 @@
  * Also provides Joi schemas for API request validation.
  */
 
-const { partitionLimits, clusters, gpuConfig } = require('../config');
-const dynamicPartitions = require('./partitions');
+import { Request, Response, NextFunction } from 'express';
+import { partitionLimits, clusters, gpuConfig, GpuPartitionConfig } from '../config';
+import * as dynamicPartitions from './partitions';
 
 // Joi is optional - gracefully handle if not installed
-let Joi = null;
+let Joi: typeof import('joi') | null = null;
 try {
   Joi = require('joi');
-} catch (e) {
+} catch {
   // Joi not installed - schema validation will be a no-op
+}
+
+// Type for partition limits
+interface PartitionLimit {
+  maxCpus: number;
+  maxMemMB: number;
+  maxTime: string;
+  gpuType?: string;
+  gpuCount?: number;
+  restricted?: boolean;
+  restrictionReason?: string | null;
+}
+
+// Type for Joi validation error detail
+interface JoiErrorDetail {
+  path: (string | number)[];
+  message: string;
+}
+
+// Type for Joi validation result
+interface JoiValidationResult<T> {
+  error?: { details: JoiErrorDetail[] };
+  value: T;
+}
+
+// Type for Joi schema
+interface JoiSchema {
+  validate(data: unknown, options?: { abortEarly?: boolean; stripUnknown?: boolean }): JoiValidationResult<unknown>;
 }
 
 // ============================================
@@ -23,7 +52,7 @@ try {
 /**
  * Create validation schemas (only if Joi is available)
  */
-const schemas = Joi ? {
+export const schemas: Record<string, JoiSchema | null> = Joi ? {
   // User management schemas
   updateUser: Joi.object({
     fullName: Joi.string().max(100).allow('', null).optional(),
@@ -71,12 +100,15 @@ const schemas = Joi ? {
 
 /**
  * Express middleware factory for Joi validation
- * @param {Object} schema - Joi schema
- * @param {string} [property='body'] - Request property to validate ('body', 'query', 'params')
- * @returns {Function} Express middleware
+ * @param schema - Joi schema
+ * @param property - Request property to validate ('body', 'query', 'params')
+ * @returns Express middleware
  */
-function validate(schema, property = 'body') {
-  return (req, res, next) => {
+export function validate(
+  schema: JoiSchema | null | undefined,
+  property: 'body' | 'query' | 'params' = 'body'
+): (req: Request, res: Response, next: NextFunction) => void {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (!Joi || !schema) {
       return next(); // Skip validation if Joi not available
     }
@@ -99,16 +131,17 @@ function validate(schema, property = 'body') {
     }
 
     // Replace with validated/sanitized values
-    req[property] = value;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any)[property] = value;
     next();
   };
 }
 
 /**
  * Check if Joi is available
- * @returns {boolean}
+ * @returns Whether Joi is installed
  */
-function isJoiAvailable() {
+export function isJoiAvailable(): boolean {
   return Joi !== null;
 }
 
@@ -116,23 +149,31 @@ function isJoiAvailable() {
 // Query Parameter Helpers
 // ============================================
 
+interface ParseQueryIntOptions {
+  min?: number;
+  max?: number;
+}
+
 /**
  * Parse integer query parameter with default value
- * @param {Object} query - Express req.query object
- * @param {string} name - Parameter name
- * @param {number} defaultValue - Default if missing or invalid
- * @param {Object} [options]
- * @param {number} [options.min] - Minimum allowed value
- * @param {number} [options.max] - Maximum allowed value
- * @returns {number}
+ * @param query - Express req.query object
+ * @param name - Parameter name
+ * @param defaultValue - Default if missing or invalid
+ * @param options - Min/max bounds
+ * @returns Parsed integer value
  */
-function parseQueryInt(query, name, defaultValue, options = {}) {
+export function parseQueryInt(
+  query: Record<string, unknown> | undefined,
+  name: string,
+  defaultValue: number,
+  options: ParseQueryIntOptions = {}
+): number {
   const raw = query?.[name];
   if (raw === undefined || raw === null || raw === '') {
     return defaultValue;
   }
 
-  const parsed = parseInt(raw, 10);
+  const parsed = parseInt(String(raw), 10);
   if (isNaN(parsed)) {
     return defaultValue;
   }
@@ -148,16 +189,28 @@ function parseQueryInt(query, name, defaultValue, options = {}) {
   return parsed;
 }
 
+interface QueryParams {
+  days: number;
+  limit: number;
+  offset: number;
+}
+
+interface QueryParamsDefaults {
+  days?: number;
+  limit?: number;
+  offset?: number;
+}
+
 /**
  * Extract common pagination/filter params from query
- * @param {Object} query - Express req.query object
- * @param {Object} [defaults]
- * @param {number} [defaults.days=30]
- * @param {number} [defaults.limit=100]
- * @param {number} [defaults.offset=0]
- * @returns {{ days: number, limit: number, offset: number }}
+ * @param query - Express req.query object
+ * @param defaults - Default values
+ * @returns Parsed query parameters
  */
-function parseQueryParams(query, defaults = {}) {
+export function parseQueryParams(
+  query: Record<string, unknown> | undefined,
+  defaults: QueryParamsDefaults = {}
+): QueryParams {
   return {
     days: parseQueryInt(query, 'days', defaults.days ?? 30, { min: 1, max: 365 }),
     limit: parseQueryInt(query, 'limit', defaults.limit ?? 100, { min: 1, max: 1000 }),
@@ -167,10 +220,10 @@ function parseQueryParams(query, defaults = {}) {
 
 /**
  * Parse time string to seconds
- * @param {string} time - Time in format "HH:MM:SS" or "D-HH:MM:SS"
- * @returns {number} Time in seconds
+ * @param time - Time in format "HH:MM:SS" or "D-HH:MM:SS"
+ * @returns Time in seconds
  */
-function parseTimeToSeconds(time) {
+export function parseTimeToSeconds(time: string): number {
   const dayMatch = time.match(/^(\d+)-(\d+):(\d+):(\d+)$/);
   if (dayMatch) {
     const [, days, hours, mins, secs] = dayMatch.map(Number);
@@ -186,10 +239,10 @@ function parseTimeToSeconds(time) {
 
 /**
  * Parse memory string to MB
- * @param {string} mem - Memory like "40G" or "100M"
- * @returns {number} Memory in MB
+ * @param mem - Memory like "40G" or "100M"
+ * @returns Memory in MB
  */
-function parseMemToMB(mem) {
+export function parseMemToMB(mem: string): number {
   const match = mem.match(/^(\d+)([gGmM])$/);
   if (!match) return 0;
   const [, value, unit] = match;
@@ -198,13 +251,16 @@ function parseMemToMB(mem) {
 
 /**
  * Get partition name for a cluster and GPU type
- * @param {string} hpc - Cluster name
- * @param {string} gpu - GPU type ('' for none)
- * @returns {string} Partition name
+ * @param hpc - Cluster name
+ * @param gpu - GPU type ('' for none)
+ * @returns Partition name
  */
-function getPartitionName(hpc, gpu = '') {
-  if (gpu && gpuConfig[hpc] && gpuConfig[hpc][gpu]) {
-    return gpuConfig[hpc][gpu].partition;
+export function getPartitionName(hpc: string, gpu: string = ''): string | null {
+  if (gpu && gpuConfig[hpc]) {
+    const clusterGpuConfig = gpuConfig[hpc] as Record<string, GpuPartitionConfig> | null;
+    if (clusterGpuConfig && clusterGpuConfig[gpu]) {
+      return clusterGpuConfig[gpu].partition;
+    }
   }
   return clusters[hpc]?.partition || null;
 }
@@ -213,11 +269,11 @@ function getPartitionName(hpc, gpu = '') {
  * Get partition limits for a cluster and GPU type
  * Uses dynamic limits from SLURM with fallback to config
  *
- * @param {string} hpc - Cluster name
- * @param {string} gpu - GPU type ('' for none)
- * @returns {Object} Partition limits { maxCpus, maxMemMB, maxTime }
+ * @param hpc - Cluster name
+ * @param gpu - GPU type ('' for none)
+ * @returns Partition limits { maxCpus, maxMemMB, maxTime }
  */
-function getPartitionLimits(hpc, gpu = '') {
+export function getPartitionLimits(hpc: string, gpu: string = ''): PartitionLimit | null {
   const partition = getPartitionName(hpc, gpu);
   if (!partition) return null;
 
@@ -236,14 +292,20 @@ function getPartitionLimits(hpc, gpu = '') {
 
 /**
  * Validate sbatch job parameters against cluster limits
- * @param {string} cpus - Number of CPUs
- * @param {string} mem - Memory allocation (format: "40G", "100M")
- * @param {string} time - Walltime (format: "HH:MM:SS" or "D-HH:MM:SS")
- * @param {string} hpc - Cluster name (required for limit checking)
- * @param {string} gpu - GPU type (optional, affects partition limits)
- * @throws {Error} If any parameter is invalid or exceeds limits
+ * @param cpus - Number of CPUs
+ * @param mem - Memory allocation (format: "40G", "100M")
+ * @param time - Walltime (format: "HH:MM:SS" or "D-HH:MM:SS")
+ * @param hpc - Cluster name (required for limit checking)
+ * @param gpu - GPU type (optional, affects partition limits)
+ * @throws Error if any parameter is invalid or exceeds limits
  */
-function validateSbatchInputs(cpus, mem, time, hpc, gpu = '') {
+export function validateSbatchInputs(
+  cpus: string,
+  mem: string,
+  time: string,
+  hpc: string,
+  gpu: string = ''
+): void {
   // CPUs: must be integer 1-128
   if (!/^\d+$/.test(cpus) || parseInt(cpus) < 1 || parseInt(cpus) > 128) {
     throw new Error('Invalid CPU value: must be integer 1-128');
@@ -282,30 +344,12 @@ function validateSbatchInputs(cpus, mem, time, hpc, gpu = '') {
 
 /**
  * Validate HPC cluster name
- * @param {string} hpc - Cluster name
- * @throws {Error} If cluster name is invalid
+ * @param hpc - Cluster name
+ * @throws Error if cluster name is invalid
  */
-function validateHpcName(hpc) {
+export function validateHpcName(hpc: string): void {
   const validHpcs = ['gemini', 'apollo'];
   if (!validHpcs.includes(hpc)) {
     throw new Error(`Invalid HPC: must be one of ${validHpcs.join(', ')}`);
   }
 }
-
-module.exports = {
-  // Sbatch validation
-  validateSbatchInputs,
-  validateHpcName,
-  getPartitionLimits,
-  parseTimeToSeconds,
-  parseMemToMB,
-
-  // Joi schemas and middleware
-  schemas,
-  validate,
-  isJoiAvailable,
-
-  // Query parameter helpers
-  parseQueryInt,
-  parseQueryParams,
-};
