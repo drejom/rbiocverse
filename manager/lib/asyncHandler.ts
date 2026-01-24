@@ -96,3 +96,10 @@ function errorMiddleware(err: EnrichedError, req: Request, res: Response, _next:
 
 export default asyncHandler;
 export { asyncHandler, errorMiddleware, getRequestContext };
+
+// CommonJS compatibility for existing require() calls
+// Supports both: require('./asyncHandler') and require('./asyncHandler').asyncHandler
+module.exports = asyncHandler;
+module.exports.asyncHandler = asyncHandler;
+module.exports.errorMiddleware = errorMiddleware;
+module.exports.getRequestContext = getRequestContext;

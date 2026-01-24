@@ -403,7 +403,7 @@ class TunnelService {
    * Stop all tunnels
    */
   stopAll(): void {
-    for (const [key, tunnel] of this.tunnels.entries()) {
+    for (const tunnel of this.tunnels.values()) {
       tunnel.kill();
     }
     this.tunnels.clear();
@@ -411,3 +411,6 @@ class TunnelService {
 }
 
 export default TunnelService;
+
+// CommonJS compatibility for existing require() calls
+module.exports = TunnelService;

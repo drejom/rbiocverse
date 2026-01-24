@@ -3,7 +3,7 @@
  * Handles SLURM job management and SSH operations for HPC clusters
  */
 
-import { exec, ChildProcess } from 'child_process';
+import { exec } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -123,7 +123,7 @@ function getKeyFilePath(username: string, privateKey: string): string {
     try {
       const existingHash = fs.readFileSync(hashPath, 'utf8').trim();
       needsWrite = (existingHash !== keyHash);
-    } catch (e) {
+    } catch {
       // Ignore read errors, will rewrite
     }
   }
@@ -304,7 +304,7 @@ class HpcService {
         memory: memory || null,
         startTime: startTime === 'N/A' ? null : startTime,
       };
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -774,7 +774,7 @@ SLURM_SCRIPT`;
         `squeue -j ${jobId} --noheader 2>/dev/null`
       );
       return output.length > 0;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -843,7 +843,7 @@ SLURM_SCRIPT`;
       }
       log.debugFor('tunnel', `Read port from ${portFile}`, { ide, port, cluster: this.clusterName });
       return port;
-    } catch (e) {
+    } catch {
       log.debugFor('tunnel', `Port file not found, using default`, { ide, port: ideConfig.port, cluster: this.clusterName });
       return ideConfig.port;
     }
@@ -1106,3 +1106,6 @@ ${fairshareCmd}echo "done"
 }
 
 export default HpcService;
+
+// CommonJS compatibility for existing require() calls
+module.exports = HpcService;
