@@ -105,7 +105,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
-  // Check session validity
+  // Check session validity (also handles sliding token refresh)
   const checkSession = useCallback(async (): Promise<boolean> => {
     if (!token) return false;
 
@@ -115,6 +115,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (res.ok) {
+        // Handle sliding session token refresh
+        const newToken = res.headers.get('X-Refreshed-Token');
+        if (newToken && newToken !== token) {
+          setToken(newToken);
+          localStorage.setItem(TOKEN_KEY, newToken);
+        }
+
         const data = await res.json();
         setUser(data.user);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));

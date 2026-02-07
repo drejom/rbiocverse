@@ -5,20 +5,17 @@
 
 import { useTheme } from '../contexts/ThemeContext';
 import { SyntheticEvent } from 'react';
-
-interface ReleaseInfo {
-  clusters?: string[];
-  name?: string;
-}
+import type { ReleaseConfig } from '../types';
 
 interface ReleaseSelectorProps {
-  releases: Record<string, ReleaseInfo>;
+  releases: Record<string, ReleaseConfig>;
   selectedVersion: string | null;
   onSelect: (version: string) => void;
   cluster: string;
+  compact?: boolean;
 }
 
-export function ReleaseSelector({ releases, selectedVersion, onSelect, cluster }: ReleaseSelectorProps) {
+export function ReleaseSelector({ releases, selectedVersion, onSelect, cluster, compact = false }: ReleaseSelectorProps) {
   const { theme } = useTheme();
 
   // Filter releases available for this cluster
@@ -32,7 +29,7 @@ export function ReleaseSelector({ releases, selectedVersion, onSelect, cluster }
     : '/images/bioconductor-logo-dark.svg';
 
   return (
-    <div className="release-selector">
+    <div className={`release-selector ${compact ? 'compact' : ''}`}>
       <div className="release-brand">
         <img
           src={logoSrc}
@@ -40,7 +37,7 @@ export function ReleaseSelector({ releases, selectedVersion, onSelect, cluster }
           className="bioc-logo"
           onError={(e: SyntheticEvent<HTMLImageElement>) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-        <span className="release-label">Bioconductor</span>
+        {!compact && <span className="release-label">Bioconductor</span>}
       </div>
       <select
         className="release-dropdown"

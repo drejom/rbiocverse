@@ -109,6 +109,7 @@ checkAndMigrate();
 
 /**
  * Middleware to require authentication
+ * Also handles sliding session refresh - if token is >50% expired, issue a new one
  */
 function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void | Response {
   const authHeader = req.headers.authorization;
@@ -125,6 +126,27 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
 
   // Cast is safe because we always include username in token during login
   req.user = payload as TokenPayload & { username: string; fullName?: string };
+
+  // Sliding session: refresh token if >50% of lifetime has elapsed
+  // This means active users never have to re-login
+  // Note: Our tokens use milliseconds (not seconds like standard JWT), see lib/auth/token.ts
+  if (payload.iat && payload.exp) {
+    const lifetime = payload.exp - payload.iat;
+    const elapsed = Date.now() - payload.iat; // Both in milliseconds
+    const halfwayPoint = lifetime / 2;
+
+    if (elapsed > halfwayPoint) {
+      // Issue new token with fresh expiry
+      const expiresIn = config.sessionExpiryDays * 24 * 60 * 60;
+      const newToken = generateToken(
+        { username: req.user.username, fullName: req.user.fullName },
+        expiresIn
+      );
+      res.setHeader('X-Refreshed-Token', newToken);
+      log.debug('Token refreshed for sliding session', { username: req.user.username });
+    }
+  }
+
   next();
 }
 

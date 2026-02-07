@@ -108,11 +108,11 @@ export function HealthBars({ health, selectedGpu, history = [], showFairshare = 
   const bars: React.ReactElement[] = [];
 
   // Extract trend data from history (last 24 entries = 24 hours)
-  // Use optional chaining and filter nulls for safety
-  const cpuTrend = history.map(h => (h as { cpus?: number })?.cpus).filter((v): v is number => v != null).slice(-24);
-  const memoryTrend = history.map(h => (h as { memory?: number })?.memory).filter((v): v is number => v != null).slice(-24);
-  const nodesTrend = history.map(h => (h as { nodes?: number })?.nodes).filter((v): v is number => v != null).slice(-24);
-  const gpusTrend = history.map(h => (h as { gpus?: number })?.gpus).filter((v): v is number => v != null).slice(-24);
+  // API returns history with cpus, memory, nodes, gpus holding percentage values
+  const cpuTrend = history.map(h => h.cpus).filter((v): v is number => v != null).slice(-24);
+  const memoryTrend = history.map(h => h.memory).filter((v): v is number => v != null).slice(-24);
+  const nodesTrend = history.map(h => h.nodes).filter((v): v is number => v != null).slice(-24);
+  const gpusTrend = history.map(h => h.gpus).filter((v): v is number => v != null).slice(-24);
 
   // Determine which CPU stats to show based on GPU selection
   // When a GPU is selected, show that partition's CPU stats instead of cluster-wide

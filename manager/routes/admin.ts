@@ -366,6 +366,7 @@ router.post('/users/bulk',
  * Get all partition limits with full details
  */
 router.get('/partitions', asyncHandler(async (req: Request, res: Response) => {
+  log.debug('GET /api/admin/partitions called');
   const allPartitions = partitions.getAllPartitions();
   const lastUpdated = partitions.getLastUpdated();
 

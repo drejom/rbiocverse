@@ -7,7 +7,8 @@ import { useCountdown } from './hooks/useCountdown';
 import { useLaunch } from './hooks/useLaunch';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import ClusterCard from './components/ClusterCard';
+import Sidebar from './components/Sidebar';
+import MainPanel from './components/MainPanel';
 import LoadingOverlay from './components/LoadingOverlay';
 import Login from './pages/Login';
 import SetupWizard from './components/SetupWizard';
@@ -34,12 +35,34 @@ interface StoppingJobsState {
 
 /**
  * Main launcher UI - shown after authentication
+ * Now uses sidebar + main panel neumorphism layout
  */
+// Session check interval for sliding token refresh (1 hour)
+const SESSION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
 function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
   const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
-  const { user } = useAuth();
+  const { user, checkSession } = useAuth();
+
+  // Periodic session check for sliding token refresh
+  // Ensures active users get their token refreshed before expiry
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkSession();
+    }, SESSION_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [checkSession]);
+
+  // Sidebar state
+  const [selectedCluster, setSelectedCluster] = useState<ClusterName>(CLUSTER_NAMES[0]);
+  const [selectedGpu, setSelectedGpu] = useState<string>('');
+
+  // Reset GPU selection when switching clusters to avoid stale/invalid values
+  useEffect(() => {
+    setSelectedGpu('');
+  }, [selectedCluster]);
 
   const [stoppingJobs, setStoppingJobs] = useState<StoppingJobsState>({});
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +176,7 @@ function Launcher() {
   return (
     <>
       <div className="launcher">
+        {/* Header with actions */}
         <div className="launcher-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="login-logo-icon" style={{ width: 48, height: 48, borderRadius: 10 }}>
@@ -188,22 +212,31 @@ function Launcher() {
 
         {error && <div className="error">{error}</div>}
 
-        {CLUSTER_NAMES.map((hpc) => (
-          <ClusterCard
-            key={hpc}
-            hpc={hpc}
+        {/* Neumorphism sidebar + panel layout */}
+        <div className="app-layout">
+          <Sidebar
+            clusters={CLUSTER_NAMES}
+            selectedCluster={selectedCluster}
+            onSelectCluster={setSelectedCluster}
+            health={health}
+            history={history}
+            status={status}
+            selectedGpu={selectedGpu}
+          />
+          <MainPanel
+            cluster={selectedCluster}
             user={user}
-            ideStatuses={status[hpc]}
-            health={health[hpc]}
-            history={history[hpc]}
+            ideStatuses={status[selectedCluster] || {}}
             config={config}
             countdown={getCountdown}
             stoppingJobs={stoppingJobs}
+            selectedGpu={selectedGpu}
+            onSelectGpu={setSelectedGpu}
             onLaunch={handleLaunch}
             onConnect={handleConnect}
             onStop={handleStop}
           />
-        ))}
+        </div>
       </div>
 
       <LoadingOverlay

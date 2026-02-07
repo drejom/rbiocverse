@@ -143,8 +143,8 @@ const config: AppConfig = {
   adminEmail: process.env.ADMIN_EMAIL || null,
   // JWT secret for session tokens (required in production)
   jwtSecret: process.env.JWT_SECRET,
-  // Session token expiry in days
-  sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '14', 10),
+  // Session token expiry in days (sliding - refreshes when >50% expired)
+  sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '7', 10),
 };
 
 // Fail fast: JWT_SECRET is required for authentication in production

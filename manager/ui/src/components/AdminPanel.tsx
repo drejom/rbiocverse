@@ -158,13 +158,18 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
   // Fetch partition data
   const fetchPartitions = useCallback(async () => {
     try {
-      const res = await fetch('/api/stats/partitions');
+      const res = await fetch('/api/admin/partitions', {
+        headers: getAuthHeader(),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch partitions: ${res.status}`);
+      }
       const data = await res.json();
       setPartitions(data.partitions || {});
     } catch (err) {
       console.error('Failed to fetch partitions:', err);
     }
-  }, []);
+  }, [getAuthHeader]);
 
   // Refresh partitions (admin action)
   const handleRefreshPartitions = useCallback(async () => {
@@ -190,12 +195,17 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
     }
   }, [isOpen, fetchPartitions]);
 
-  // Fetch menu structure on mount
+  // Fetch menu structure when panel opens
   useEffect(() => {
+    if (!isOpen) return;
+
     fetch('/api/admin/index', {
       headers: getAuthHeader(),
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Auth required');
+        return res.json();
+      })
       .then(data => {
         if (data.sections) {
           setMenuStructure(buildMenuStructure(data.sections));
@@ -204,7 +214,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
       .catch(err => {
         console.error('Failed to load admin index:', err);
       });
-  }, [getAuthHeader]);
+  }, [isOpen, getAuthHeader]);
 
   // Handle ESC key to close
   useEffect(() => {

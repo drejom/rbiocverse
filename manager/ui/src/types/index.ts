@@ -30,6 +30,12 @@ export interface SshTestResult {
 // Cluster types
 export type ClusterName = 'gemini' | 'apollo';
 
+export interface GpuHealthData {
+  total?: number;
+  idle?: number;
+  busy?: number;
+}
+
 export interface ClusterHealth {
   online?: boolean;
   cpus?: {
@@ -50,17 +56,21 @@ export interface ClusterHealth {
     down?: number | null;
     total?: number | null;
   };
-  gpus?: Record<string, unknown> | null;
+  gpus?: (Record<string, GpuHealthData> & { percent?: number }) | null;
+  fairshare?: number | null;
   runningJobs?: number;
   pendingJobs?: number;
-  lastChecked?: string | null;
+  lastChecked?: number | null;
 }
 
 export interface ClusterHistoryPoint {
-  timestamp: string;
-  cpuPercent?: number;
-  memoryPercent?: number;
-  nodePercent?: number;
+  timestamp: number;
+  cpus: number | null;
+  memory: number | null;
+  nodes: number | null;
+  gpus: number | null;
+  runningJobs?: number;
+  pendingJobs?: number;
 }
 
 export interface ClusterStatus {
@@ -111,6 +121,8 @@ export interface ReleaseConfig {
   bioconductor?: string;
   r?: string;
   default?: boolean;
+  clusters?: string[];
+  ides?: string[];
 }
 
 export interface GpuTypeConfig {
