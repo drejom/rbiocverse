@@ -4,6 +4,7 @@
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Play, Square } from 'lucide-react';
+import { useApi } from '../hooks/useApi';
 import { HealthBars } from './HealthBar';
 import ReleaseSelector from './ReleaseSelector';
 import IdeSelector from './IdeSelector';
@@ -68,6 +69,7 @@ export function ClusterCard({
   onStop,
 }: ClusterCardProps) {
   const { ides, releases, defaultReleaseVersion, gpuConfig, partitionLimits, defaultPartitions } = config;
+  const api = useApi();
 
   // Local state for launch form
   const [selectedIde, setSelectedIde] = useState('vscode');
@@ -191,12 +193,7 @@ export function ClusterCard({
     setStopAllError(null);
 
     try {
-      const res = await fetch(`/api/stop-all/${hpc}`, { method: 'POST' });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to stop jobs');
-      }
+      const data = await api.post<{ cancelled?: string[]; failed?: string[] }>(`/api/stop-all/${hpc}`);
 
       if (data.failed?.length > 0) {
         // Some jobs failed to cancel - show which ones

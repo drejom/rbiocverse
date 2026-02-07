@@ -36,35 +36,39 @@ function Login({ clusterHealth = {}, clusterHistory = {} }: LoginProps) {
 
   return (
     <div className="login-page">
-      {/* Left side - IDE icons and cluster health */}
+      {/* Left side - Cluster health and IDE icons */}
       <div className="login-left">
-        <div className="ide-icons">
-          <div className="ide-icon">
-            <i className="devicon-vscode-plain" />
-            <span>VS Code</span>
+        <div className="login-left-spacer" />
+        <div className="login-left-content">
+          <div className="login-clusters">
+            <ClusterHealthCard
+              name="Gemini"
+              health={clusterHealth.gemini || null}
+              history={clusterHistory.gemini}
+            />
+            <ClusterHealthCard
+              name="Apollo"
+              health={clusterHealth.apollo || null}
+              history={clusterHistory.apollo}
+            />
           </div>
-          <div className="ide-icon">
-            <i className="devicon-rstudio-plain" />
-            <span>RStudio</span>
-          </div>
-          <div className="ide-icon">
-            <i className="devicon-jupyter-plain" />
-            <span>JupyterLab</span>
-          </div>
-        </div>
 
-        <div className="login-clusters">
-          <ClusterHealthCard
-            name="Gemini"
-            health={clusterHealth.gemini || null}
-            history={clusterHistory.gemini}
-          />
-          <ClusterHealthCard
-            name="Apollo"
-            health={clusterHealth.apollo || null}
-            history={clusterHistory.apollo}
-          />
+          <div className="ide-icons">
+            <div className="ide-icon">
+              <i className="devicon-vscode-plain" />
+              <span>VS Code</span>
+            </div>
+            <div className="ide-icon">
+              <i className="devicon-rstudio-plain" />
+              <span>RStudio</span>
+            </div>
+            <div className="ide-icon">
+              <i className="devicon-jupyter-plain" />
+              <span>JupyterLab</span>
+            </div>
+          </div>
         </div>
+        <div className="login-left-spacer" />
       </div>
 
       {/* Right side - Login form */}
@@ -79,6 +83,30 @@ function Login({ clusterHealth = {}, clusterHistory = {} }: LoginProps) {
             <div style={{ marginLeft: 'auto' }}>
               <ThemeToggle />
             </div>
+          </div>
+
+          {/* Ecosystem logos - Bioconductor & scverse */}
+          <div className="ecosystem-logos">
+            <a
+              href="https://bioconductor.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ecosystem-logo"
+              title="Bioconductor - R packages for genomics"
+            >
+              <img src="/images/bioconductor-full-dark.svg" alt="Bioconductor" className="logo-dark" />
+              <img src="/images/bioconductor-full-light.svg" alt="Bioconductor" className="logo-light" />
+            </a>
+            <a
+              href="https://scverse.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ecosystem-logo"
+              title="scverse - Python tools for single-cell analysis"
+            >
+              <img src="/images/scverse-full-dark.svg" alt="scverse" className="logo-dark" />
+              <img src="/images/scverse-full-light.svg" alt="scverse" className="logo-light" />
+            </a>
           </div>
 
           {/* Form */}

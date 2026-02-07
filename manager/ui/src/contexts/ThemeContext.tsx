@@ -20,6 +20,17 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const PREFERENCE_KEY = 'rbiocverse-theme-preference';
+const VALID_PREFERENCES: ThemePreference[] = ['auto', 'light', 'dark'];
+
+/**
+ * Validate and return a valid theme preference
+ */
+function validatePreference(value: string | null): ThemePreference {
+  if (value && VALID_PREFERENCES.includes(value as ThemePreference)) {
+    return value as ThemePreference;
+  }
+  return 'auto';
+}
 
 /**
  * Get system color scheme preference
@@ -37,16 +48,16 @@ interface ThemeProviderProps {
  * ThemeProvider - Manages theme state and persistence
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  // Theme preference: 'dark', 'light', or 'auto'
+  // Theme preference: 'auto', 'light', or 'dark' (auto is default)
   const [preference, setPreferenceState] = useState<ThemePreference>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (localStorage.getItem(PREFERENCE_KEY) as ThemePreference) || 'dark';
+    if (typeof window === 'undefined') return 'auto';
+    return validatePreference(localStorage.getItem(PREFERENCE_KEY));
   });
 
   // Actual applied theme (always 'dark' or 'light')
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    const pref = (localStorage.getItem(PREFERENCE_KEY) as ThemePreference) || 'dark';
+    if (typeof window === 'undefined') return getSystemTheme();
+    const pref = validatePreference(localStorage.getItem(PREFERENCE_KEY));
     if (pref === 'auto') {
       return getSystemTheme();
     }
@@ -87,11 +98,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
-  // Legacy toggle (for backward compatibility)
+  // Cycle through: system → light → dark → system
   const toggleTheme = useCallback(() => {
-    const newTheme: Theme = theme === 'dark' ? 'light' : 'dark';
-    setPreference(newTheme);
-  }, [theme, setPreference]);
+    const cycle: ThemePreference[] = ['auto', 'light', 'dark'];
+    const currentIndex = cycle.indexOf(preference);
+    const nextIndex = (currentIndex + 1) % cycle.length;
+    setPreference(cycle[nextIndex]);
+  }, [preference, setPreference]);
 
   const value: ThemeContextValue = {
     theme,

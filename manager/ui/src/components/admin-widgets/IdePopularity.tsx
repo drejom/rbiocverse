@@ -142,7 +142,7 @@ export function IdePopularity({ getAuthHeader }: IdePopularityProps) {
                 />
                 <span className="legend-label">{IDE_LABELS[d.ide] || d.ide}</span>
                 <span className="legend-value">
-                  {d.sessions} ({Math.round((d.sessions / totalSessions) * 100)}%)
+                  {d.sessions} ({totalSessions > 0 ? Math.round((d.sessions / totalSessions) * 100) : 0}%)
                 </span>
               </div>
             ))}

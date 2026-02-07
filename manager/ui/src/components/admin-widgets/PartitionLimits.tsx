@@ -33,17 +33,36 @@ function parseTimeToSeconds(timeStr: string): number | null {
   // MM:SS format
   if (parts.length === 2) {
     const [m, s] = parts;
-    return parseInt(m) * 60 + parseInt(s);
+    const minutes = parseInt(m, 10);
+    const seconds = parseInt(s, 10);
+    if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+      return null;
+    }
+    return minutes * 60 + seconds;
   }
 
   // HH:MM:SS or D-HH:MM:SS format
   if (parts.length === 3) {
     const [h, m, s] = parts;
-    if (h.includes('-')) {
-      const [days, hours] = h.split('-');
-      return parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(m) * 60 + parseInt(s);
+    const minutes = parseInt(m, 10);
+    const seconds = parseInt(s, 10);
+    if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+      return null;
     }
-    return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s);
+    if (h.includes('-')) {
+      const [daysStr, hoursStr] = h.split('-');
+      const days = parseInt(daysStr, 10);
+      const hours = parseInt(hoursStr, 10);
+      if (!Number.isFinite(days) || !Number.isFinite(hours)) {
+        return null;
+      }
+      return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+    }
+    const hours = parseInt(h, 10);
+    if (!Number.isFinite(hours)) {
+      return null;
+    }
+    return hours * 3600 + minutes * 60 + seconds;
   }
   return null;
 }

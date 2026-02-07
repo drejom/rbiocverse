@@ -66,6 +66,11 @@ export function GrowthTrend({ getAuthHeader }: GrowthTrendProps) {
       date: parseMonth(d.month) as Date,
     })).filter(d => d.date);
 
+    // If no valid dates were parsed, skip rendering to avoid invalid scale domains
+    if (!parsedData.length) {
+      return;
+    }
+
     // Scales
     const x = d3.scaleTime()
       .domain(d3.extent(parsedData, d => d.date) as [Date, Date])

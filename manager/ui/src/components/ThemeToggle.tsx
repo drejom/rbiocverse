@@ -1,22 +1,31 @@
 /**
- * ThemeToggle - Sun/Moon button to switch between light and dark themes
+ * ThemeToggle - Cycles through system → light → dark themes
  */
 
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
+const labels = {
+  auto: 'System',
+  light: 'Light',
+  dark: 'Dark',
+};
+
 function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === 'dark';
+  const { preference, toggleTheme } = useTheme();
+
+  const icon = preference === 'auto' ? <Monitor size={18} /> :
+               preference === 'light' ? <Sun size={18} /> :
+               <Moon size={18} />;
 
   return (
     <button
       className="theme-toggle"
       onClick={toggleTheme}
-      title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      title={`Theme: ${labels[preference]} (click to change)`}
+      aria-label={`Change theme (currently ${labels[preference]})`}
     >
-      {isDark ? <Sun size={18} /> : <Moon size={18} />}
+      {icon}
     </button>
   );
 }

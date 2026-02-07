@@ -28,7 +28,7 @@ const queues = new Map<string, Promise<void>>();
  * @param fn - Async function to execute
  * @returns Result of the function
  */
-async function withClusterQueue<T>(cluster: string, fn: () => Promise<T>): Promise<T> {
+async function withClusterQueue<T>(cluster: string, fn: () => Promise<T> | T): Promise<T> {
   const current = queues.get(cluster) || Promise.resolve();
 
   const next = current.then(async () => {

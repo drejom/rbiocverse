@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, memo, forwardRef, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor, LucideIcon } from 'lucide-react';
+import { X, Search, Rocket, Box, Wrench, HelpCircle, Monitor, LucideIcon, List, ChevronRight } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders, ParsedWidget } from './help-widgets';
@@ -64,6 +64,128 @@ const MarkdownContent = memo(forwardRef<HTMLDivElement, MarkdownContentProps>(fu
     />
   );
 }), (prev, next) => prev.content === next.content);
+
+interface TocItem {
+  id: string;
+  text: string;
+}
+
+interface FloatingTocProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  contentKey: string;
+}
+
+/**
+ * Floating Table of Contents - extracts H2 headings from rendered markdown
+ */
+function FloatingToc({ containerRef, contentKey }: FloatingTocProps) {
+  const [items, setItems] = useState<TocItem[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const tocListId = `help-toc-list-${contentKey}`;
+
+  // Extract H2 headings when content changes
+  useEffect(() => {
+    const extractHeadings = () => {
+      if (!containerRef.current) return;
+      const headings = containerRef.current.querySelectorAll('h2');
+      const tocItems: TocItem[] = [];
+
+      headings.forEach((heading, index) => {
+        // Generate a scoped ID if not present (include contentKey to avoid collisions)
+        let id = heading.id;
+        if (!id) {
+          id = `toc-${contentKey}-heading-${index}`;
+          heading.id = id;
+        }
+        tocItems.push({
+          id,
+          text: heading.textContent || `Section ${index + 1}`,
+        });
+      });
+
+      setItems(tocItems);
+      setActiveId(tocItems[0]?.id || null);
+    };
+
+    // Delay to ensure content is rendered
+    const timeout = setTimeout(extractHeadings, 100);
+    return () => clearTimeout(timeout);
+  }, [containerRef, contentKey]);
+
+  // Track scroll position to highlight current section
+  useEffect(() => {
+    if (items.length === 0) return;
+
+    const handleScroll = () => {
+      const container = containerRef.current?.closest('.help-panel-content');
+      if (!container) return;
+
+      const scrollTop = container.scrollTop;
+      let currentId = items[0]?.id;
+
+      for (const item of items) {
+        // Use scoped lookup within containerRef
+        const element = containerRef.current?.querySelector(`#${CSS.escape(item.id)}`);
+        if (element) {
+          const offsetTop = (element as HTMLElement).offsetTop - 100;
+          if (scrollTop >= offsetTop) {
+            currentId = item.id;
+          }
+        }
+      }
+
+      setActiveId(currentId);
+    };
+
+    const container = containerRef.current?.closest('.help-panel-content');
+    container?.addEventListener('scroll', handleScroll);
+    return () => container?.removeEventListener('scroll', handleScroll);
+  }, [items, containerRef]);
+
+  // Scroll to heading
+  const scrollTo = (id: string) => {
+    const element = containerRef.current?.querySelector(`#${CSS.escape(id)}`);
+    const container = containerRef.current?.closest('.help-panel-content');
+    if (element && container) {
+      const offsetTop = (element as HTMLElement).offsetTop - 20;
+      container.scrollTo({ top: offsetTop, behavior: 'smooth' });
+    }
+  };
+
+  // Don't render if no headings
+  if (items.length === 0) return null;
+
+  return (
+    <div className={`help-toc ${isOpen ? 'open' : ''}`}>
+      <button
+        className="help-toc-toggle"
+        onClick={() => setIsOpen(!isOpen)}
+        title={isOpen ? 'Hide table of contents' : 'Show table of contents'}
+        aria-expanded={isOpen}
+        aria-controls={tocListId}
+      >
+        <List size={16} />
+        <span className="help-toc-label">TOC</span>
+        <ChevronRight size={14} className={`help-toc-chevron ${isOpen ? 'open' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <nav id={tocListId} className="help-toc-list" aria-label="Table of contents">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              className={`help-toc-item ${activeId === item.id ? 'active' : ''}`}
+              onClick={() => scrollTo(item.id)}
+            >
+              {item.text}
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
 
 interface MountPoint {
   widget: ParsedWidget;
@@ -396,7 +518,8 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }: HelpPanelProp
               <p>Loading...</p>
             </div>
           ) : (
-            <>
+            <div className="help-content-wrapper">
+              <FloatingToc containerRef={contentRef} contentKey={activeSection} />
               <MarkdownContent
                 ref={contentRef}
                 content={content}
@@ -428,7 +551,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }: HelpPanelProp
                 }}
               />
               <WidgetPortals widgets={widgets} containerRef={contentRef} contentKey={activeSection} health={health} history={history} />
-            </>
+            </div>
           )}
         </div>
       </div>

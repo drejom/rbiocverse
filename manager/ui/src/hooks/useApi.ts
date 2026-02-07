@@ -5,7 +5,7 @@
  * for all API calls across the application.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type Dispatch, type SetStateAction } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -125,7 +125,7 @@ interface UseFetchReturn<T> {
   loading: boolean;
   error: string | null;
   execute: (...args: unknown[]) => Promise<T>;
-  setData: React.Dispatch<React.SetStateAction<T | null>>;
+  setData: Dispatch<SetStateAction<T | null>>;
 }
 
 /**

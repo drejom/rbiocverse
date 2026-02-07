@@ -65,6 +65,9 @@ npm run test:coverage
 - **Types must match API schemas** - Frontend types should exactly mirror backend response shapes
 - **Avoid `as` casts** - If you need a cast, the type is probably wrong
 - **Use proper property names** - Don't rename fields between layers (e.g., API returns `cpus`, frontend uses `cpus`)
+- **Import types explicitly** - Use `import type { KeyboardEvent } from 'react'` not `React.KeyboardEvent`
+- **Validate external data** - Use `parseInt(x, 10)` with radix, check `Number.isFinite()` for parsed values
+- **Validate localStorage** - Check stored values against allowed options before casting to union types
 
 ### API/Frontend Alignment
 
@@ -77,6 +80,13 @@ npm run test:coverage
 1. **Rebuild frontend**: `cd manager/ui && npm run build` (catches type errors)
 2. **Restart server**: `./scripts/dev.sh restart`
 3. **Verify visually**: Use Playwright or manual browser testing
+
+### UI Patterns
+
+- **Theme-specific assets** - Use `-dark.svg`/`-light.svg` suffixes with `.logo-dark`/`.logo-light` CSS classes toggled by `:root.light-theme`
+- **Accessible toggles** - Use `aria-expanded`, `aria-controls`, and action-oriented `aria-label` (e.g., "Change theme (currently System)")
+- **Scoped DOM IDs** - When generating IDs dynamically, include a unique key (e.g., `toc-${contentKey}-heading-${index}`) to avoid collisions
+- **Draggable images** - Add `draggable="false"` to `<img>` in draggable containers to prevent browser drag ghost
 
 ## Deployment
 

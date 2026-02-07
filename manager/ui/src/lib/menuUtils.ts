@@ -56,7 +56,7 @@ export function findParentId(menuStructure: MenuItem[], sectionId: string): stri
   for (const item of menuStructure) {
     if (item.children) {
       if (item.children.some(child => child.id === sectionId)) {
-        return item.id as string;
+        return item.id;
       }
     }
   }

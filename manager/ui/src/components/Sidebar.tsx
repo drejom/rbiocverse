@@ -3,6 +3,7 @@
  * Shows cluster navigation with health bars and sparklines
  * When a GPU is selected, the CPU bar switches to show GPU stats
  */
+import type { KeyboardEvent } from 'react';
 import { Gauge, Cpu, MemoryStick, Server, Gpu, LucideIcon } from 'lucide-react';
 import { Sparkline } from './Sparkline';
 import type { ClusterName, ClusterHealth, ClusterHistoryPoint, IdeStatus } from '../types';
@@ -103,7 +104,7 @@ function ClusterNavItem({ cluster, health, history, isActive, hasRunning, select
   // Show GPU bar when GPU is selected (only for active cluster), otherwise show CPU
   const showGpu = isActive && !!selectedGpu && !!gpuData;
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onClick();
