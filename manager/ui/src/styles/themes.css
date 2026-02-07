@@ -1306,6 +1306,31 @@ body {
   color: var(--text-muted);
 }
 
+/* Admin Cluster Container - groups widgets visually */
+.admin-cluster-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.admin-cluster-container .admin-cluster-detail,
+.admin-cluster-container .cluster-heatmap,
+.admin-cluster-container .session-heatmap {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.admin-cluster-container .admin-cluster-detail {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 /* Admin Cluster Detail Widget */
 .admin-cluster-detail {
   margin: 16px 0;
@@ -1382,6 +1407,45 @@ body {
   gap: 12px;
 }
 
+/* Compact metrics row */
+.admin-cluster-metrics-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-metric-compact {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.admin-metric-compact-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-metric-compact .health-bar {
+  height: 4px;
+  margin-bottom: 6px;
+}
+
+.admin-metric-compact-value {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .admin-metric {
   padding: 12px;
   background: rgba(255, 255, 255, 0.03);
@@ -1417,6 +1481,124 @@ body {
 
 .admin-metric-sparkline {
   margin-top: 4px;
+}
+
+/* Admin Partition Limits Display */
+.admin-partitions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admin-partitions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.admin-partitions-header h5 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.admin-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-refresh-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.admin-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+.admin-partitions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.admin-partition {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.admin-partition:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-partition.restricted {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.admin-partition-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.admin-partition-default {
+  font-size: 0.65rem;
+  font-weight: 400;
+  padding: 1px 6px;
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--color-primary);
+  border-radius: 4px;
+}
+
+.admin-partition-restricted {
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+}
+
+.admin-partition-limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.admin-partition-limits span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: var(--bg-card);
+  border-radius: 4px;
+}
+
+.admin-partition-limits svg {
+  opacity: 0.6;
 }
 
 /* Admin Usage Report Widget */

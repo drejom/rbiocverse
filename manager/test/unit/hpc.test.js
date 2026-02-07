@@ -197,6 +197,57 @@ describe('HpcService', () => {
     });
   });
 
+  describe('cancelJobs (batch)', () => {
+    it('should return empty result for empty array', async () => {
+      const result = await hpcService.cancelJobs([]);
+
+      expect(result).to.deep.equal({ cancelled: [], failed: [] });
+      expect(sshExecStub).to.not.have.been.called;
+    });
+
+    it('should return empty result for non-array', async () => {
+      const result = await hpcService.cancelJobs(null);
+
+      expect(result).to.deep.equal({ cancelled: [], failed: [] });
+      expect(sshExecStub).to.not.have.been.called;
+    });
+
+    it('should use cancelJob for single job', async () => {
+      sshExecStub.resolves('');
+
+      const result = await hpcService.cancelJobs(['12345']);
+
+      expect(result).to.deep.equal({ cancelled: ['12345'], failed: [] });
+      expect(sshExecStub).to.have.been.calledWith('scancel 12345');
+    });
+
+    it('should batch multiple jobs into single scancel call', async () => {
+      sshExecStub.resolves('');
+
+      const result = await hpcService.cancelJobs(['12345', '12346', '12347']);
+
+      expect(result).to.deep.equal({ cancelled: ['12345', '12346', '12347'], failed: [] });
+      expect(sshExecStub).to.have.been.calledOnce;
+      expect(sshExecStub).to.have.been.calledWith('scancel 12345 12346 12347');
+    });
+
+    it('should return all as failed on batch error', async () => {
+      sshExecStub.rejects(new Error('SSH connection failed'));
+
+      const result = await hpcService.cancelJobs(['12345', '12346']);
+
+      expect(result).to.deep.equal({ cancelled: [], failed: ['12345', '12346'] });
+    });
+
+    it('should return single job as failed on single job error', async () => {
+      sshExecStub.rejects(new Error('Job not found'));
+
+      const result = await hpcService.cancelJobs(['12345']);
+
+      expect(result).to.deep.equal({ cancelled: [], failed: ['12345'] });
+    });
+  });
+
   describe('waitForNode', () => {
     it('should wait for node assignment', async function() {
       this.timeout(15000); // Increase timeout for polling test

@@ -144,6 +144,24 @@ h1 {
   margin-bottom: 12px;
 }
 
+/* Stop All Jobs section */
+.stop-all-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stop-all-btn {
+  width: auto;
+}
+
+.error-message.small {
+  font-size: 0.8rem;
+  color: var(--color-danger-text);
+}
+
 .cluster-card.pending {
   border-color: #fbbf24;
   background: rgba(251, 191, 36, 0.1);

@@ -1,5 +1,4 @@
 const { expect } = require('chai');
-const sinon = require('sinon');
 
 describe('Logger', () => {
   let logger, log;

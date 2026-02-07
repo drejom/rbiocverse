@@ -1,0 +1,33 @@
+/**
+ * Database Module Index
+ * Re-exports all database operations
+ */
+
+import * as db from '../db';
+import * as users from './users';
+import * as sessions from './sessions';
+import * as health from './health';
+import * as analytics from './analytics';
+
+export {
+  // Core database operations
+  db,
+
+  // Domain-specific modules
+  users,
+  sessions,
+  health,
+  analytics,
+};
+
+// CommonJS compatibility for existing require() calls
+module.exports = {
+  // Core database operations
+  ...db,
+
+  // Domain-specific modules
+  users,
+  sessions,
+  health,
+  analytics,
+};

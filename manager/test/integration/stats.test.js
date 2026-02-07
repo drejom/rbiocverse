@@ -47,7 +47,7 @@ describe('Stats API (integration)', () => {
     app.use('/api/stats', statsRouter);
 
     // Add error handler
-    app.use((err, req, res, next) => {
+    app.use((err, req, res, _next) => {
       res.status(500).json({ error: err.message });
     });
   });

@@ -24,8 +24,11 @@ describe('TunnelService', () => {
 
     // Stub spawn BEFORE requiring TunnelService
     spawnStub = sinon.stub(require('child_process'), 'spawn').returns(mockTunnelProcess);
+    // Stub find-process used by cleanupOrphanedTunnels() - return empty (no orphans)
+    const findProcess = require('find-process');
+    sinon.stub(findProcess, 'default').callsFake(() => Promise.resolve([]));
 
-    // Now require TunnelService - it will use the stubbed spawn
+    // Now require TunnelService - it will use the stubbed spawn/execSync
     TunnelService = require('../../services/tunnel');
     tunnelService = new TunnelService();
   });
@@ -121,7 +124,7 @@ describe('TunnelService', () => {
       expect(checkPortStub).to.have.been.calledTwice;
     });
 
-    it('should store tunnel process in map with hpc-ide key', async function() {
+    it('should store tunnel process in map with user-hpc-ide key', async function() {
       this.timeout(5000);
 
       sinon.stub(tunnelService, 'checkPort').resolves(true);
@@ -129,9 +132,9 @@ describe('TunnelService', () => {
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
-      // Map key should be 'hpc-ide' format
-      expect(tunnelService.tunnels.has('gemini-vscode')).to.be.true;
-      expect(tunnelService.tunnels.get('gemini-vscode')).to.equal(mockTunnelProcess);
+      // Map key should be 'user-hpc-ide' format (user defaults to config.hpcUser)
+      expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.true;
+      expect(tunnelService.tunnels.get('domeally-gemini-vscode')).to.equal(mockTunnelProcess);
     });
 
     it('should throw error if tunnel process exits early', async function() {
@@ -146,7 +149,8 @@ describe('TunnelService', () => {
         await tunnelService.start('gemini', 'node01', 'vscode');
         expect.fail('Should have thrown error');
       } catch (error) {
-        expect(error.message).to.include('Tunnel exited with code');
+        // Error message is now user-friendly
+        expect(error.message).to.include('Tunnel failed');
       }
     });
 
@@ -195,12 +199,12 @@ describe('TunnelService', () => {
       sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
 
       await tunnelService.start('gemini', 'node01', 'vscode');
-      expect(tunnelService.tunnels.has('gemini-vscode')).to.be.true;
+      expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.true;
 
       // Simulate tunnel exit
       mockTunnelProcess.emit('exit', 0);
 
-      expect(tunnelService.tunnels.has('gemini-vscode')).to.be.false;
+      expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.false;
     });
 
     it('should log SSH stderr output', async function() {
