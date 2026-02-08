@@ -47,9 +47,9 @@ interface AuthContextValue {
   checkSession: () => Promise<boolean>;
   getAuthHeader: () => Record<string, string>;
   completeSetup: () => Promise<boolean>;
-  generateKey: (password: string) => Promise<AuthResult>;
+  generateKey: () => Promise<AuthResult>;
   removeKey: () => Promise<AuthResult>;
-  regenerateKey: (password: string) => Promise<AuthResult>;
+  regenerateKey: () => Promise<AuthResult>;
   importKey: (privateKeyPem: string) => Promise<ImportKeyResult>;
   clearError: () => void;
 }
@@ -217,9 +217,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [token]);
 
   // Generate a managed SSH key (requires password for encryption)
-  const generateKey = useCallback(async (password: string): Promise<AuthResult> => {
+  // Generate a new SSH key (server-side encryption, no password needed)
+  const generateKey = useCallback(async (): Promise<AuthResult> => {
     if (!token) return { success: false, error: 'Not authenticated' };
-    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/generate-key', {
@@ -228,7 +228,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();
@@ -278,10 +278,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
-  // Regenerate the managed SSH key (requires password for encryption)
-  const regenerateKey = useCallback(async (password: string): Promise<AuthResult> => {
+  // Regenerate the managed SSH key (server-side encryption, no password needed)
+  const regenerateKey = useCallback(async (): Promise<AuthResult> => {
     if (!token) return { success: false, error: 'Not authenticated' };
-    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/regenerate-key', {
@@ -290,7 +289,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();

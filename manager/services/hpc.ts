@@ -230,8 +230,8 @@ class HpcService {
       }
     }
 
-    // No key available - use system default
-    return { keyOption: '', effectiveKeyUser: 'system' };
+    // No key available - throw error instead of falling back to system SSH
+    throw new Error('No SSH key configured. Please generate or import an SSH key in Key Management.');
   }
 
   /**

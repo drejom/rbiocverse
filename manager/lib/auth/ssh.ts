@@ -63,9 +63,11 @@ async function generateSshKeypair(username: string): Promise<SshKeypair> {
     },
   });
 
-  // Use sshpk to convert to OpenSSH format
+  // Use sshpk to convert to OpenSSH format with our comment
   const key = sshpk.parsePrivateKey(privateKey, 'pem');
-  const openSshKey = key.toPublic().toString('ssh') + ` rbiocverse-${username}`;
+  const pubKey = key.toPublic();
+  pubKey.comment = `rbiocverse-${username}`;
+  const openSshKey = pubKey.toString('ssh');
 
   return {
     publicKey: openSshKey,
@@ -266,8 +268,10 @@ function extractPublicKeyFromPrivate(privateKeyPem: string, username: string): s
     const parsed = parsePrivateKeyPem(privateKeyPem);
     if (!parsed) return null;
 
-    // sshpk handles all the format conversion
-    return parsed.key.toPublic().toString('ssh') + ` rbiocverse-${username}`;
+    // Get public key and set our comment (replaces any existing comment)
+    const pubKey = parsed.key.toPublic();
+    pubKey.comment = `rbiocverse-${username}`;
+    return pubKey.toString('ssh');
   } catch (err) {
     log.error('Failed to extract public key', { error: (err as Error).message });
     return null;

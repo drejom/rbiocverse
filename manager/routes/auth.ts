@@ -499,20 +499,9 @@ router.post('/test-connection-both', async (req: Request, res: Response) => {
 /**
  * POST /api/auth/generate-key
  * Generate a managed SSH key for the user
- * Requires password in request body for encryption
+ * Uses server-side encryption (v3) - no password needed
  */
 router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { password } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ error: 'Password required to encrypt key' });
-  }
-
-  // Verify password before using it for encryption
-  if (!verifyPassword(req.user!.username, password)) {
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-
   const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -522,7 +511,9 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
-  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
+  // All keys use server encryption (v3) - no password needed
+  // This prevents key loss when user's password changes (LDAP reset)
+  user.privateKey = await encryptWithServerKey(privateKeyPem);
   user.setupComplete = false; // Need to install the new key
   setUser(req.user!.username, user);
 
@@ -605,17 +596,6 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
  * Requires password in request body for encryption
  */
 router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { password } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ error: 'Password required to encrypt key' });
-  }
-
-  // Verify password before using it for encryption
-  if (!verifyPassword(req.user!.username, password)) {
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-
   const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -625,13 +605,9 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
-  // Admin keys use server encryption (v3) so they can be used for HPC fallback
-  // Regular user keys use password encryption (v2)
-  if (isAdmin(user.username)) {
-    user.privateKey = await encryptWithServerKey(privateKeyPem);
-  } else {
-    user.privateKey = await encryptPrivateKey(privateKeyPem, password);
-  }
+  // All keys use server encryption (v3) - no password needed
+  // This prevents key loss when user's password changes (LDAP reset)
+  user.privateKey = await encryptWithServerKey(privateKeyPem);
   user.setupComplete = false; // Need to install new key
   setUser(req.user!.username, user);
 
