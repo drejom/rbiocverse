@@ -622,7 +622,13 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
-  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
+  // Admin keys use server encryption (v3) so they can be used for HPC fallback
+  // Regular user keys use password encryption (v2)
+  if (isAdmin(user.username)) {
+    user.privateKey = await encryptWithServerKey(privateKeyPem);
+  } else {
+    user.privateKey = await encryptPrivateKey(privateKeyPem, password);
+  }
   user.setupComplete = false; // Need to install new key
   setUser(req.user!.username, user);
 

@@ -117,20 +117,14 @@ async function encryptWithServerKey(plaintext: string | null): Promise<string | 
 
 /**
  * Decrypt ciphertext encrypted with server-derived key (v3 format)
- * @param encrypted - Encrypted string in v3 format
+ * Caller must validate format before calling (decryptPrivateKey does this)
+ * @param encrypted - Encrypted string in v3 format "enc:v3:<iv>:<authTag>:<ciphertext>"
  * @returns Decrypted plaintext or null on failure
  */
 async function decryptWithServerKey(encrypted: string | null): Promise<string | null> {
   if (!encrypted) return null;
 
-  // Only handle v3 format
-  const parts = encrypted.split(':');
-  if (parts.length !== 5 || parts[0] !== 'enc' || parts[1] !== 'v3') {
-    log.error('Invalid v3 encrypted format');
-    return null;
-  }
-
-  const [, , ivHex, authTagHex, ciphertext] = parts;
+  const [, , ivHex, authTagHex, ciphertext] = encrypted.split(':');
 
   try {
     const key = await deriveServerKey();

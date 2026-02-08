@@ -204,6 +204,37 @@ class HpcService {
   }
 
   /**
+   * Get SSH key options for command execution
+   * Returns the key option flag and effective user for socket naming
+   */
+  private async _getSshKeyOptions(): Promise<{ keyOption: string; effectiveKeyUser: string }> {
+    loadAuthModule();
+
+    // Try per-user key first
+    if (this.username) {
+      const privateKey = getUserPrivateKey!(this.username);
+      if (privateKey) {
+        const keyPath = getKeyFilePath(this.username, privateKey);
+        log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
+        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: this.username };
+      }
+    }
+
+    // Fall back to admin key
+    if (getAdminPrivateKey) {
+      const adminKey = await getAdminPrivateKey();
+      if (adminKey) {
+        const keyPath = getKeyFilePath('_admin', adminKey);
+        log.debugFor('ssh', 'using admin key fallback', { cluster: this.clusterName });
+        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: '_admin' };
+      }
+    }
+
+    // No key available - use system default
+    return { keyOption: '', effectiveKeyUser: 'system' };
+  }
+
+  /**
    * Execute SSH command directly (bypasses queue)
    * Internal method - use sshExec() for all external calls
    */
@@ -216,31 +247,7 @@ class HpcService {
       fs.mkdirSync(SSH_SOCKET_DIR, { mode: 0o700, recursive: true });
     }
 
-    // Check for per-user SSH key, fall back to admin key
-    let keyOption = '';
-    let effectiveKeyUser = 'system'; // For socket path naming
-    loadAuthModule();
-
-    if (this.username) {
-      const privateKey = getUserPrivateKey!(this.username);
-      if (privateKey) {
-        const keyPath = getKeyFilePath(this.username, privateKey);
-        keyOption = `-i ${keyPath} `;
-        effectiveKeyUser = this.username;
-        log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
-      }
-    }
-
-    // Fall back to admin key if no user key
-    if (!keyOption && getAdminPrivateKey) {
-      const adminKey = await getAdminPrivateKey();
-      if (adminKey) {
-        const keyPath = getKeyFilePath('_admin', adminKey);
-        keyOption = `-i ${keyPath} `;
-        effectiveKeyUser = '_admin';
-        log.debugFor('ssh', 'using admin key fallback', { cluster: this.clusterName });
-      }
-    }
+    const { keyOption, effectiveKeyUser } = await this._getSshKeyOptions();
 
     // SSH ControlMaster for connection multiplexing
     const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveKeyUser}-${this.clusterName}`);
