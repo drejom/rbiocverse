@@ -13,10 +13,12 @@ import { withClusterQueue } from '../lib/ssh-queue';
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
 let getUserPrivateKey: ((username: string) => string | null) | null = null;
+let getAdminPrivateKey: (() => Promise<string | null>) | null = null;
 function loadAuthModule(): void {
   if (!getUserPrivateKey) {
     const auth = require('../routes/auth');
     getUserPrivateKey = auth.getUserPrivateKey;
+    getAdminPrivateKey = auth.getAdminPrivateKey;
   }
 }
 
@@ -202,38 +204,58 @@ class HpcService {
   }
 
   /**
+   * Get SSH key options for command execution
+   * Returns the key option flag and effective user for socket naming
+   */
+  private async _getSshKeyOptions(): Promise<{ keyOption: string; effectiveKeyUser: string }> {
+    loadAuthModule();
+
+    // Try per-user key first
+    if (this.username) {
+      const privateKey = getUserPrivateKey!(this.username);
+      if (privateKey) {
+        const keyPath = getKeyFilePath(this.username, privateKey);
+        log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
+        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: this.username };
+      }
+    }
+
+    // Fall back to admin key
+    if (getAdminPrivateKey) {
+      const adminKey = await getAdminPrivateKey();
+      if (adminKey) {
+        const keyPath = getKeyFilePath('_admin', adminKey);
+        log.debugFor('ssh', 'using admin key fallback', { cluster: this.clusterName });
+        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: '_admin' };
+      }
+    }
+
+    // No key available - throw error instead of falling back to system SSH
+    throw new Error('No SSH key configured. Please generate or import an SSH key in Key Management.');
+  }
+
+  /**
    * Execute SSH command directly (bypasses queue)
    * Internal method - use sshExec() for all external calls
    */
-  private _sshExecDirect(command: string): Promise<string> {
+  private async _sshExecDirect(command: string): Promise<string> {
+    log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
+    log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
+
+    // Ensure socket directory exists
+    if (!fs.existsSync(SSH_SOCKET_DIR)) {
+      fs.mkdirSync(SSH_SOCKET_DIR, { mode: 0o700, recursive: true });
+    }
+
+    const { keyOption, effectiveKeyUser } = await this._getSshKeyOptions();
+
+    // SSH ControlMaster for connection multiplexing
+    const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveKeyUser}-${this.clusterName}`);
+    const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
+
+    const sshCmd = `ssh ${keyOption}${controlOptions} -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
+
     return new Promise((resolve, reject) => {
-      log.ssh(`Executing on ${this.clusterName}`, { command: command.substring(0, 100) });
-      log.debugFor('ssh', 'full command', { cluster: this.clusterName, command });
-
-      // Ensure socket directory exists
-      if (!fs.existsSync(SSH_SOCKET_DIR)) {
-        fs.mkdirSync(SSH_SOCKET_DIR, { mode: 0o700, recursive: true });
-      }
-
-      // Check for per-user SSH key
-      let keyOption = '';
-      if (this.username) {
-        loadAuthModule();
-        const privateKey = getUserPrivateKey!(this.username);
-        if (privateKey) {
-          const keyPath = getKeyFilePath(this.username, privateKey);
-          keyOption = `-i ${keyPath} `;
-          log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
-        }
-      }
-
-      // SSH ControlMaster for connection multiplexing
-      const effectiveUser = this.username || config.hpcUser;
-      const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveUser}-${this.clusterName}`);
-      const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
-
-      const sshCmd = `ssh ${keyOption}${controlOptions} -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
-
       const child = exec(
         sshCmd,
         { timeout: 60000 },

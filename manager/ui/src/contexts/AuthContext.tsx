@@ -30,6 +30,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User, AuthResult, SshTestResult } from '../types';
 
+interface ImportKeyResult extends AuthResult {
+  keyType?: string;
+  sshTestResult?: SshTestResult;
+}
+
 interface AuthContextValue {
   user: User | null;
   token: string | null;
@@ -42,9 +47,10 @@ interface AuthContextValue {
   checkSession: () => Promise<boolean>;
   getAuthHeader: () => Record<string, string>;
   completeSetup: () => Promise<boolean>;
-  generateKey: (password: string) => Promise<AuthResult>;
+  generateKey: () => Promise<AuthResult>;
   removeKey: () => Promise<AuthResult>;
-  regenerateKey: (password: string) => Promise<AuthResult>;
+  regenerateKey: () => Promise<AuthResult>;
+  importKey: (privateKeyPem: string) => Promise<ImportKeyResult>;
   clearError: () => void;
 }
 
@@ -210,10 +216,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
-  // Generate a managed SSH key (requires password for encryption)
-  const generateKey = useCallback(async (password: string): Promise<AuthResult> => {
+  // Generate a new SSH key (server-side encryption, no password needed)
+  const generateKey = useCallback(async (): Promise<AuthResult> => {
     if (!token) return { success: false, error: 'Not authenticated' };
-    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/generate-key', {
@@ -222,7 +227,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();
@@ -272,10 +277,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
-  // Regenerate the managed SSH key (requires password for encryption)
-  const regenerateKey = useCallback(async (password: string): Promise<AuthResult> => {
+  // Regenerate the managed SSH key (server-side encryption, no password needed)
+  const regenerateKey = useCallback(async (): Promise<AuthResult> => {
     if (!token) return { success: false, error: 'Not authenticated' };
-    if (!password) return { success: false, error: 'Password required' };
 
     try {
       const res = await fetch('/api/auth/regenerate-key', {
@@ -284,7 +288,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();
@@ -298,6 +302,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return { success: false, error: data.error || 'Failed to regenerate key' };
     } catch (err) {
       console.error('Regenerate key failed:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, [token]);
+
+  // Import an existing SSH private key (encrypted with server key)
+  const importKey = useCallback(async (privateKeyPem: string): Promise<ImportKeyResult> => {
+    if (!token) return { success: false, error: 'Not authenticated' };
+    if (!privateKeyPem) return { success: false, error: 'Private key required' };
+
+    try {
+      const res = await fetch('/api/auth/import-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ privateKeyPem }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return { success: true, keyType: data.keyType };
+      }
+
+      return {
+        success: false,
+        error: data.error || 'Failed to import key',
+        sshTestResult: data.sshTestResult as SshTestResult,
+      };
+    } catch (err) {
+      console.error('Import key failed:', err);
       return { success: false, error: 'Network error' };
     }
   }, [token]);
@@ -317,6 +355,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     generateKey,
     removeKey,
     regenerateKey,
+    importKey,
     clearError: () => setError(null),
   };
 

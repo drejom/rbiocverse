@@ -3,10 +3,14 @@
  * Handles user authentication, session management, and SSH key operations
  *
  * Security model:
- * - Private keys encrypted with password-derived keys (scrypt + AES-256-GCM)
+ * - Private keys encrypted with AES-256-GCM
+ * - All keys use v3 (server-derived) encryption using JWT_SECRET
+ *   - This prevents key loss when user's password changes (LDAP reset)
+ *   - No password prompts needed for key operations
+ * - Legacy v2 (password-derived) keys are still supported for decryption
  * - Keys only decrypted during active sessions (held in memory)
  * - On logout/expiry, decrypted keys are cleared
- * - No master key - only the user's password can decrypt their key
+ * - Admin keys can be used for HPC fallback when user has no key
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -23,12 +27,20 @@ import { errorLogger } from '../services/ErrorLogger';
 
 // Import auth modules
 import { generateToken, verifyToken, TokenPayload } from '../lib/auth/token';
-import { generateSshKeypair, encryptPrivateKey, decryptPrivateKey } from '../lib/auth/ssh';
+import {
+  generateSshKeypair,
+  encryptPrivateKey,
+  decryptPrivateKey,
+  encryptWithServerKey,
+  parsePrivateKeyPem,
+  extractPublicKeyFromPrivate,
+  normalizePrivateKeyPem,
+} from '../lib/auth/ssh';
 import * as dbUsers from '../lib/db/users';
 import { initializeDb } from '../lib/db';
 import { checkAndMigrate } from '../lib/db/migrate';
 import { setSessionKey, getSessionKey, clearSessionKey } from '../lib/auth/session-keys';
-import { isAdmin } from '../lib/auth/admin';
+import { isAdmin, getPrimaryAdmin } from '../lib/auth/admin';
 
 // Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
 const param = (req: Request, name: string): string => req.params[name] as string;
@@ -101,6 +113,55 @@ function verifyPassword(username: string, password: string): boolean {
  */
 function getUserPrivateKey(username: string): string | null {
   return getSessionKey(username);
+}
+
+// Cached admin key (loaded once from DB and decrypted)
+let cachedAdminKey: { username: string; key: string } | null = null;
+
+/**
+ * Get the primary admin's private key for HPC operations
+ * Used when a user doesn't have their own key configured
+ * The admin key is encrypted with server key (v3 format)
+ * @returns PEM-encoded private key or null if no admin key configured
+ */
+async function getAdminPrivateKey(): Promise<string | null> {
+  // Return cached key if available
+  if (cachedAdminKey) {
+    return cachedAdminKey.key;
+  }
+
+  const adminUsername = getPrimaryAdmin();
+  if (!adminUsername) {
+    log.debug('No primary admin configured');
+    return null;
+  }
+
+  const adminUser = getUser(adminUsername);
+  if (!adminUser || !adminUser.privateKey) {
+    log.debug('Primary admin has no enrolled key', { adminUsername });
+    return null;
+  }
+
+  // Decrypt the admin's key (v3 format uses server key, no password needed)
+  const decryptedKey = await decryptPrivateKey(adminUser.privateKey, null);
+  if (!decryptedKey) {
+    log.error('Failed to decrypt admin key', { adminUsername });
+    return null;
+  }
+
+  // Cache the decrypted key
+  cachedAdminKey = { username: adminUsername, key: decryptedKey };
+  log.info('Admin key loaded for HPC operations', { adminUsername });
+
+  return decryptedKey;
+}
+
+/**
+ * Clear the cached admin key
+ * Called when admin re-imports or regenerates their key
+ */
+function clearAdminKeyCache(): void {
+  cachedAdminKey = null;
 }
 
 // Initialize database on startup
@@ -243,13 +304,14 @@ router.post('/login', async (req: Request, res: Response) => {
         };
         log.info('New user with working SSH', { username });
       } else {
-        // SSH failed - generate managed key with password-derived encryption
+        // SSH failed - generate managed key with server-side encryption (v3)
+        // Using server key (not password) prevents key loss when user's password changes (LDAP reset)
         const { publicKey, privateKeyPem } = await generateSshKeypair(username);
         user = {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey,
-          privateKey: await encryptPrivateKey(privateKeyPem, password),
+          privateKey: await encryptWithServerKey(privateKeyPem),
           setupComplete: false,
           createdAt: new Date().toISOString(),
         };
@@ -439,20 +501,9 @@ router.post('/test-connection-both', async (req: Request, res: Response) => {
 /**
  * POST /api/auth/generate-key
  * Generate a managed SSH key for the user
- * Requires password in request body for encryption
+ * Uses server-side encryption (v3) - no password needed
  */
 router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { password } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ error: 'Password required to encrypt key' });
-  }
-
-  // Verify password before using it for encryption
-  if (!verifyPassword(req.user!.username, password)) {
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-
   const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -462,13 +513,21 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
-  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
+  // All keys use server encryption (v3) - no password needed
+  // This prevents key loss when user's password changes (LDAP reset)
+  user.privateKey = await encryptWithServerKey(privateKeyPem);
   user.setupComplete = false; // Need to install the new key
-  // setUser saves immediately to SQLite
+  setUser(req.user!.username, user);
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
+
+  // If the user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key generation', { username: user.username });
+  }
 
   log.audit('SSH key generated', { username: user.username });
 
@@ -479,6 +538,7 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -503,6 +563,7 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
         fullName: user.fullName,
         publicKey: user.publicKey,
         setupComplete: user.setupComplete,
+        isAdmin: isAdmin(user.username),
       },
     });
   }
@@ -526,6 +587,12 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
   // Clear from session
   clearSessionKey(req.user!.username);
 
+  // If the user is an admin, clear the cached admin key to prevent stale fallback
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key removal', { username: user.username });
+  }
+
   log.audit('SSH key removed', { username: user.username });
 
   res.json({
@@ -535,6 +602,7 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -542,20 +610,9 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
 /**
  * POST /api/auth/regenerate-key
  * Regenerate the managed SSH key
- * Requires password in request body for encryption
+ * Uses server-side (v3) encryption; no password required in request body
  */
 router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { password } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ error: 'Password required to encrypt key' });
-  }
-
-  // Verify password before using it for encryption
-  if (!verifyPassword(req.user!.username, password)) {
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-
   const user = getUser(req.user!.username);
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
@@ -565,13 +622,21 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
   const { publicKey, privateKeyPem } = await generateSshKeypair(req.user!.username);
 
   user.publicKey = publicKey;
-  user.privateKey = await encryptPrivateKey(privateKeyPem, password);
+  // All keys use server encryption (v3) - no password needed
+  // This prevents key loss when user's password changes (LDAP reset)
+  user.privateKey = await encryptWithServerKey(privateKeyPem);
   user.setupComplete = false; // Need to install new key
-  // setUser saves immediately to SQLite
+  setUser(req.user!.username, user);
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
+
+  // If the updated user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key regeneration', { username: user.username });
+  }
 
   log.audit('SSH key regenerated', { username: user.username });
 
@@ -582,6 +647,7 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -599,11 +665,110 @@ router.get('/public-key', requireAuth, (req: AuthenticatedRequest, res: Response
   res.json({ publicKey: user.publicKey });
 });
 
+/**
+ * POST /api/auth/import-key
+ * Import an existing SSH private key
+ * Encrypts with server key (JWT_SECRET derived) instead of password
+ * Requires SSH test to pass before accepting the key
+ */
+router.post('/import-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { privateKeyPem } = req.body;
+
+  if (!privateKeyPem) {
+    return res.status(400).json({ error: 'Private key PEM required' });
+  }
+
+  // Validate the key format
+  const parsed = parsePrivateKeyPem(privateKeyPem);
+  if (!parsed) {
+    return res.status(400).json({ error: 'Invalid private key format. Supported: Ed25519, RSA, ECDSA' });
+  }
+
+  // Extract public key from private key
+  const publicKey = extractPublicKeyFromPrivate(privateKeyPem, req.user!.username);
+  if (!publicKey) {
+    return res.status(400).json({ error: 'Failed to extract public key from private key' });
+  }
+
+  // Normalize the private key to PKCS8 format
+  const normalizedPem = normalizePrivateKeyPem(privateKeyPem);
+  if (!normalizedPem) {
+    return res.status(400).json({ error: 'Failed to normalize private key' });
+  }
+
+  // Temporarily store in session to test SSH
+  const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
+  setSessionKey(req.user!.username, normalizedPem, sessionTtl);
+
+  // Test SSH connection with the imported key
+  const sshTestResult = await testBothClusters(req.user!.username);
+
+  if (!sshTestResult.bothSucceeded) {
+    // Clear the temporary key
+    clearSessionKey(req.user!.username);
+    return res.status(400).json({
+      error: 'SSH test failed. Ensure this key is authorized on both HPC clusters.',
+      sshTestResult,
+    });
+  }
+
+  // Get or create user record
+  let user = getUser(req.user!.username);
+  if (!user) {
+    user = {
+      username: req.user!.username,
+      fullName: req.user!.fullName || req.user!.username,
+      publicKey: null,
+      privateKey: null,
+      setupComplete: false,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  // Encrypt with server key (v3 format)
+  let encryptedKey: string | null;
+  try {
+    encryptedKey = await encryptWithServerKey(normalizedPem);
+  } catch (err) {
+    // Clear the temporary session key on encryption failure
+    clearSessionKey(req.user!.username);
+    log.error('Failed to encrypt imported key', { error: err instanceof Error ? err.message : String(err) });
+    return res.status(500).json({ error: 'Failed to encrypt key for storage' });
+  }
+
+  user.publicKey = publicKey;
+  user.privateKey = encryptedKey;
+  user.setupComplete = true; // Key is already installed on HPC (passed SSH test)
+  setUser(req.user!.username, user);
+
+  // If the updated user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key import', { username: user.username });
+  }
+
+  log.audit('SSH key imported', { username: user.username, keyType: parsed.type });
+
+  res.json({
+    success: true,
+    keyType: parsed.type,
+    user: {
+      username: user.username,
+      fullName: user.fullName,
+      publicKey: user.publicKey,
+      setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
+    },
+  });
+});
+
 export default router;
-export { requireAuth, verifyToken, getUserPrivateKey };
+export { requireAuth, verifyToken, getUserPrivateKey, getAdminPrivateKey, clearAdminKeyCache };
 
 // CommonJS compatibility for existing require() calls
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 module.exports.verifyToken = verifyToken;
 module.exports.getUserPrivateKey = getUserPrivateKey;
+module.exports.getAdminPrivateKey = getAdminPrivateKey;
+module.exports.clearAdminKeyCache = clearAdminKeyCache;
