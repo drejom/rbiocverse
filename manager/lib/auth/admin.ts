@@ -1,24 +1,46 @@
 /**
  * Admin Authorization Helper
- * Determines admin status based on ADMIN_USER environment variable
+ * Determines admin status based on ADMIN_USERS environment variable
  *
  * Security model:
- * - Single admin user defined by ADMIN_USER env var
- * - The admin user is typically the one whose SSH keys are on the container
- * - This simplifies security: only one user has fallback SSH access
+ * - Admin users defined by ADMIN_USERS env var (comma-separated)
+ * - Primary admin (first in list) is used for HPC operations when user has no key
+ * - Supports backwards compatibility with ADMIN_USER (single user)
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { log } from '../logger';
 
-// Admin username from environment (single user)
-const ADMIN_USER: string | null = process.env.ADMIN_USER || null;
+// Parse admin users from environment
+// Supports both ADMIN_USERS (comma-separated) and legacy ADMIN_USER (single)
+function parseAdminUsers(): string[] {
+  const adminUsersEnv = process.env.ADMIN_USERS;
+  const legacyAdminUser = process.env.ADMIN_USER;
+
+  if (adminUsersEnv) {
+    return adminUsersEnv
+      .split(',')
+      .map(u => u.trim())
+      .filter(u => u.length > 0);
+  }
+
+  if (legacyAdminUser) {
+    return [legacyAdminUser.trim()];
+  }
+
+  return [];
+}
+
+const ADMIN_USERS = parseAdminUsers();
+
+// Legacy export for backwards compatibility
+const ADMIN_USER: string | null = ADMIN_USERS.length > 0 ? ADMIN_USERS[0] : null;
 
 if (process.env.NODE_ENV !== 'test') {
-  if (ADMIN_USER) {
-    log.info('Admin user configured', { user: ADMIN_USER });
+  if (ADMIN_USERS.length > 0) {
+    log.info('Admin users configured', { users: ADMIN_USERS, count: ADMIN_USERS.length });
   } else {
-    log.info('No admin user configured (ADMIN_USER not set)');
+    log.info('No admin users configured (ADMIN_USERS not set)');
   }
 }
 
@@ -28,8 +50,25 @@ if (process.env.NODE_ENV !== 'test') {
  * @returns True if user is admin
  */
 function isAdmin(username: string | undefined | null): boolean {
-  if (!ADMIN_USER || !username) return false;
-  return username === ADMIN_USER;
+  if (!username || ADMIN_USERS.length === 0) return false;
+  return ADMIN_USERS.includes(username);
+}
+
+/**
+ * Get list of all admin users
+ * @returns Array of admin usernames
+ */
+function getAdminUsers(): string[] {
+  return [...ADMIN_USERS];
+}
+
+/**
+ * Get the primary admin (first in the list)
+ * Used for HPC operations when user has no key
+ * @returns Primary admin username or null if none configured
+ */
+function getPrimaryAdmin(): string | null {
+  return ADMIN_USERS.length > 0 ? ADMIN_USERS[0] : null;
 }
 
 /**
@@ -56,12 +95,18 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 export {
   isAdmin,
   requireAdmin,
-  ADMIN_USER,
+  getAdminUsers,
+  getPrimaryAdmin,
+  ADMIN_USERS,
+  ADMIN_USER, // Legacy export for backwards compatibility
 };
 
 // CommonJS compatibility for existing require() calls
 module.exports = {
   isAdmin,
   requireAdmin,
+  getAdminUsers,
+  getPrimaryAdmin,
+  ADMIN_USERS,
   ADMIN_USER,
 };

@@ -30,6 +30,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User, AuthResult, SshTestResult } from '../types';
 
+interface ImportKeyResult extends AuthResult {
+  keyType?: string;
+  sshTestResult?: SshTestResult;
+}
+
 interface AuthContextValue {
   user: User | null;
   token: string | null;
@@ -45,6 +50,7 @@ interface AuthContextValue {
   generateKey: (password: string) => Promise<AuthResult>;
   removeKey: () => Promise<AuthResult>;
   regenerateKey: (password: string) => Promise<AuthResult>;
+  importKey: (privateKeyPem: string) => Promise<ImportKeyResult>;
   clearError: () => void;
 }
 
@@ -302,6 +308,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
+  // Import an existing SSH private key (encrypted with server key)
+  const importKey = useCallback(async (privateKeyPem: string): Promise<ImportKeyResult> => {
+    if (!token) return { success: false, error: 'Not authenticated' };
+    if (!privateKeyPem) return { success: false, error: 'Private key required' };
+
+    try {
+      const res = await fetch('/api/auth/import-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ privateKeyPem }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return { success: true, keyType: data.keyType };
+      }
+
+      return {
+        success: false,
+        error: data.error || 'Failed to import key',
+        sshTestResult: data.sshTestResult as SshTestResult,
+      };
+    } catch (err) {
+      console.error('Import key failed:', err);
+      return { success: false, error: 'Network error' };
+    }
+  }, [token]);
+
   const value: AuthContextValue = {
     user,
     token,
@@ -317,6 +357,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     generateKey,
     removeKey,
     regenerateKey,
+    importKey,
     clearError: () => setError(null),
   };
 
