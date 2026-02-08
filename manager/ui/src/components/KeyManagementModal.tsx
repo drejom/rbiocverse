@@ -6,7 +6,7 @@
  * - If no publicKey: Prompt to generate a key
  */
 
-import { useState, useCallback, useRef, KeyboardEvent, ChangeEvent, MouseEvent, DragEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, KeyboardEvent, ChangeEvent, MouseEvent, DragEvent } from 'react';
 import { Copy, Download, CheckCircle, RefreshCw, Key, XCircle, Plus, Terminal, ChevronDown, ChevronUp, Upload, FileKey } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -30,6 +30,17 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
   const [privateKeyPem, setPrivateKeyPem] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear sensitive data when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPrivateKeyPem('');
+      setError(null);
+      setIsDragging(false);
+      setPassword('');
+      setShowPasswordInput(null);
+    }
+  }, [isOpen]);
 
   // Generate one-liner for SSH key installation
   const oneLiner = user?.publicKey ? `echo "${user.publicKey}" >> ~/.ssh/authorized_keys` : '';
@@ -568,7 +579,7 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".pem,.key,id_*"
+                      accept=".pem,.key,application/x-pem-file,application/octet-stream"
                       onChange={handleFileInputChange}
                       style={{ display: 'none' }}
                     />

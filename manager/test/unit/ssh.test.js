@@ -139,8 +139,8 @@ describe('SSH Key Functions', () => {
 
       expect(parsed).to.not.be.null;
       expect(parsed.type).to.equal('ed25519');
-      expect(parsed.keyObject).to.exist;
-      expect(parsed.keyObject.asymmetricKeyType).to.equal('ed25519');
+      expect(parsed.key).to.exist;
+      expect(parsed.key.type).to.equal('ed25519');
     });
 
     it('should parse RSA key', () => {
@@ -165,7 +165,8 @@ describe('SSH Key Functions', () => {
 
       const parsed = parsePrivateKeyPem(privateKey);
       expect(parsed).to.not.be.null;
-      expect(parsed.type).to.equal('ec');
+      // sshpk reports ECDSA as 'ecdsa'
+      expect(parsed.type).to.equal('ecdsa');
     });
 
     it('should return null for invalid PEM', () => {

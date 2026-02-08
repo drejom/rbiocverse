@@ -624,11 +624,17 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install new key
-  // setUser saves immediately to SQLite
+  setUser(req.user!.username, user);
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
+
+  // If the updated user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key regeneration', { username: user.username });
+  }
 
   log.audit('SSH key regenerated', { username: user.username });
 
@@ -723,6 +729,12 @@ router.post('/import-key', requireAuth, async (req: AuthenticatedRequest, res: R
   user.privateKey = encryptedKey;
   user.setupComplete = true; // Key is already installed on HPC (passed SSH test)
   setUser(req.user!.username, user);
+
+  // If the updated user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key import', { username: user.username });
+  }
 
   log.audit('SSH key imported', { username: user.username, keyType: parsed.type });
 

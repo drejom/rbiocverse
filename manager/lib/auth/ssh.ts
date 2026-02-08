@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { promisify } from 'util';
+import sshpk from 'sshpk';
 import { log } from '../logger';
 
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
@@ -41,7 +42,7 @@ interface SshKeypair {
  */
 async function generateSshKeypair(username: string): Promise<SshKeypair> {
   // Use Ed25519 - modern, fast, secure, short keys
-  const { publicKey, privateKey } = await generateKeyPairAsync('ed25519', {
+  const { privateKey } = await generateKeyPairAsync('ed25519', {
     publicKeyEncoding: {
       type: 'spki',
       format: 'pem',
@@ -52,25 +53,9 @@ async function generateSshKeypair(username: string): Promise<SshKeypair> {
     },
   });
 
-  // Convert to OpenSSH format
-  // Ed25519 public key: extract the 32-byte key from SPKI structure
-  const spkiDer = Buffer.from(
-    publicKey.replace(/-----BEGIN PUBLIC KEY-----/, '')
-      .replace(/-----END PUBLIC KEY-----/, '')
-      .replace(/\n/g, ''),
-    'base64'
-  );
-  // SPKI for Ed25519: 12 bytes ASN.1 header + 32 bytes raw public key
-  const ED25519_KEY_SIZE = 32;
-  const ed25519PubKey = spkiDer.slice(-ED25519_KEY_SIZE);
-
-  // OpenSSH format: "ssh-ed25519" + key blob (length-prefixed "ssh-ed25519" + length-prefixed key)
-  const keyType = Buffer.from('ssh-ed25519');
-  const keyBlob = Buffer.concat([
-    Buffer.from([0, 0, 0, keyType.length]), keyType,
-    Buffer.from([0, 0, 0, ed25519PubKey.length]), ed25519PubKey,
-  ]);
-  const openSshKey = `ssh-ed25519 ${keyBlob.toString('base64')} rbiocverse-${username}`;
+  // Use sshpk to convert to OpenSSH format
+  const key = sshpk.parsePrivateKey(privateKey, 'pem');
+  const openSshKey = key.toPublic().toString('ssh') + ` rbiocverse-${username}`;
 
   return {
     publicKey: openSshKey,
@@ -242,28 +227,23 @@ async function decryptPrivateKey(encrypted: string | null, password: string | nu
  * @param privateKeyPem - PEM-encoded private key
  * @returns Object with key type and parsed key, or null if invalid
  */
-function parsePrivateKeyPem(privateKeyPem: string): { type: string; keyObject: crypto.KeyObject } | null {
+function parsePrivateKeyPem(privateKeyPem: string): { type: string; key: sshpk.PrivateKey } | null {
   try {
     // Normalize line endings and trim whitespace
     const normalized = privateKeyPem.trim().replace(/\r\n/g, '\n');
 
-    // Try to create a key object from the PEM
-    const keyObject = crypto.createPrivateKey(normalized);
-    const keyType = keyObject.asymmetricKeyType;
-
-    if (!keyType) {
-      log.error('Could not determine key type');
-      return null;
-    }
+    // Try to parse with sshpk (handles OpenSSH, PEM, PKCS8 formats)
+    const key = sshpk.parsePrivateKey(normalized, 'auto');
+    const keyType = key.type;
 
     // Supported key types
-    const supportedTypes = ['ed25519', 'rsa', 'ec'];
+    const supportedTypes = ['ed25519', 'rsa', 'ecdsa'];
     if (!supportedTypes.includes(keyType)) {
       log.error('Unsupported key type', { keyType });
       return null;
     }
 
-    return { type: keyType, keyObject };
+    return { type: keyType, key };
   } catch (err) {
     log.error('Failed to parse private key', { error: (err as Error).message });
     return null;
@@ -272,162 +252,18 @@ function parsePrivateKeyPem(privateKeyPem: string): { type: string; keyObject: c
 
 /**
  * Extract public key in OpenSSH format from a private key
+ * Uses sshpk library for robust key format handling
  * @param privateKeyPem - PEM-encoded private key
  * @param username - Username for key comment
  * @returns OpenSSH formatted public key or null if extraction fails
  */
 function extractPublicKeyFromPrivate(privateKeyPem: string, username: string): string | null {
-  const parsed = parsePrivateKeyPem(privateKeyPem);
-  if (!parsed) return null;
-
-  const { type, keyObject } = parsed;
-
   try {
-    // Get the public key from the private key
-    const publicKeyObject = crypto.createPublicKey(keyObject);
+    const parsed = parsePrivateKeyPem(privateKeyPem);
+    if (!parsed) return null;
 
-    if (type === 'ed25519') {
-      // Export as SPKI DER and convert to OpenSSH format
-      const spkiDer = publicKeyObject.export({ type: 'spki', format: 'der' });
-      const ED25519_KEY_SIZE = 32;
-      const ed25519PubKey = spkiDer.slice(-ED25519_KEY_SIZE);
-
-      const keyType = Buffer.from('ssh-ed25519');
-      const keyBlob = Buffer.concat([
-        Buffer.from([0, 0, 0, keyType.length]), keyType,
-        Buffer.from([0, 0, 0, ed25519PubKey.length]), ed25519PubKey,
-      ]);
-      return `ssh-ed25519 ${keyBlob.toString('base64')} rbiocverse-${username}`;
-    }
-
-    if (type === 'rsa') {
-      // For RSA, export as PKCS1 and convert to OpenSSH format
-      const pkcs1Der = publicKeyObject.export({ type: 'pkcs1', format: 'der' });
-
-      // Parse PKCS1 RSA public key: SEQUENCE { INTEGER (n), INTEGER (e) }
-      // Skip the SEQUENCE tag and length
-      let offset = 0;
-      if (pkcs1Der[offset++] !== 0x30) return null; // SEQUENCE
-
-      // Get SEQUENCE length (may be multi-byte)
-      let seqLen = pkcs1Der[offset++];
-      if (seqLen & 0x80) {
-        const lenBytes = seqLen & 0x7f;
-        seqLen = 0;
-        for (let i = 0; i < lenBytes; i++) {
-          seqLen = (seqLen << 8) | pkcs1Der[offset++];
-        }
-      }
-
-      // Parse INTEGER (n - modulus)
-      if (pkcs1Der[offset++] !== 0x02) return null; // INTEGER
-      let nLen = pkcs1Der[offset++];
-      if (nLen & 0x80) {
-        const lenBytes = nLen & 0x7f;
-        nLen = 0;
-        for (let i = 0; i < lenBytes; i++) {
-          nLen = (nLen << 8) | pkcs1Der[offset++];
-        }
-      }
-      const n = pkcs1Der.slice(offset, offset + nLen);
-      offset += nLen;
-
-      // Parse INTEGER (e - exponent)
-      if (pkcs1Der[offset++] !== 0x02) return null; // INTEGER
-      let eLen = pkcs1Der[offset++];
-      if (eLen & 0x80) {
-        const lenBytes = eLen & 0x7f;
-        eLen = 0;
-        for (let i = 0; i < lenBytes; i++) {
-          eLen = (eLen << 8) | pkcs1Der[offset++];
-        }
-      }
-      const e = pkcs1Der.slice(offset, offset + eLen);
-
-      // Build OpenSSH format: key_type || e || n (each length-prefixed)
-      const keyTypeStr = Buffer.from('ssh-rsa');
-      const keyBlob = Buffer.concat([
-        Buffer.alloc(4), // Length of key type
-        keyTypeStr,
-        Buffer.alloc(4), // Length of e
-        e,
-        Buffer.alloc(4), // Length of n
-        n,
-      ]);
-
-      // Write lengths
-      keyBlob.writeUInt32BE(keyTypeStr.length, 0);
-      keyBlob.writeUInt32BE(e.length, 4 + keyTypeStr.length);
-      keyBlob.writeUInt32BE(n.length, 8 + keyTypeStr.length + e.length);
-
-      return `ssh-rsa ${keyBlob.toString('base64')} rbiocverse-${username}`;
-    }
-
-    if (type === 'ec') {
-      // For ECDSA, determine the curve and build OpenSSH format
-      const details = keyObject.asymmetricKeyDetails;
-      const namedCurve = details?.namedCurve;
-
-      if (!namedCurve) return null;
-
-      // Map OpenSSL curve names to OpenSSH names
-      const curveMap: Record<string, string> = {
-        'prime256v1': 'nistp256',
-        'secp384r1': 'nistp384',
-        'secp521r1': 'nistp521',
-      };
-
-      const sshCurve = curveMap[namedCurve];
-      if (!sshCurve) {
-        log.error('Unsupported ECDSA curve', { namedCurve });
-        return null;
-      }
-
-      // Export public key in uncompressed point format
-      const spkiDer = publicKeyObject.export({ type: 'spki', format: 'der' });
-
-      // SPKI structure for EC: SEQUENCE { SEQUENCE { OID, OID }, BIT STRING }
-      // The BIT STRING contains the uncompressed point (0x04 || x || y)
-      // Find the BIT STRING (tag 0x03)
-      let offset = 0;
-      while (offset < spkiDer.length && spkiDer[offset] !== 0x03) {
-        offset++;
-      }
-      if (offset >= spkiDer.length) return null;
-
-      offset++; // Skip BIT STRING tag
-      let bitStringLen = spkiDer[offset++];
-      if (bitStringLen & 0x80) {
-        const lenBytes = bitStringLen & 0x7f;
-        bitStringLen = 0;
-        for (let i = 0; i < lenBytes; i++) {
-          bitStringLen = (bitStringLen << 8) | spkiDer[offset++];
-        }
-      }
-      offset++; // Skip unused bits byte (always 0 for EC keys)
-      const point = spkiDer.slice(offset);
-
-      // Build OpenSSH format: key_type || curve || point
-      const keyTypeStr = Buffer.from(`ecdsa-sha2-${sshCurve}`);
-      const curveStr = Buffer.from(sshCurve);
-
-      const keyBlob = Buffer.concat([
-        Buffer.alloc(4),
-        keyTypeStr,
-        Buffer.alloc(4),
-        curveStr,
-        Buffer.alloc(4),
-        point,
-      ]);
-
-      keyBlob.writeUInt32BE(keyTypeStr.length, 0);
-      keyBlob.writeUInt32BE(curveStr.length, 4 + keyTypeStr.length);
-      keyBlob.writeUInt32BE(point.length, 8 + keyTypeStr.length + curveStr.length);
-
-      return `ecdsa-sha2-${sshCurve} ${keyBlob.toString('base64')} rbiocverse-${username}`;
-    }
-
-    return null;
+    // sshpk handles all the format conversion
+    return parsed.key.toPublic().toString('ssh') + ` rbiocverse-${username}`;
   } catch (err) {
     log.error('Failed to extract public key', { error: (err as Error).message });
     return null;
@@ -441,12 +277,12 @@ function extractPublicKeyFromPrivate(privateKeyPem: string, username: string): s
  * @returns PKCS8 PEM format or null if invalid
  */
 function normalizePrivateKeyPem(privateKeyPem: string): string | null {
-  const parsed = parsePrivateKeyPem(privateKeyPem);
-  if (!parsed) return null;
-
   try {
+    const parsed = parsePrivateKeyPem(privateKeyPem);
+    if (!parsed) return null;
+
     // Export as PKCS8 PEM (standard format)
-    return parsed.keyObject.export({ type: 'pkcs8', format: 'pem' }) as string;
+    return parsed.key.toString('pkcs8');
   } catch (err) {
     log.error('Failed to normalize private key', { error: (err as Error).message });
     return null;

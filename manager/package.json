@@ -34,6 +34,7 @@
     "find-process": "^2.0.0",
     "http-proxy": "^1.18.1",
     "joi": "^17.13.3",
+    "sshpk": "^1.18.0",
     "winston": "^3.19.0"
   },
   "lint-staged": {
@@ -53,6 +54,7 @@
     "@types/node": "^25.0.10",
     "@types/sinon": "^21.0.0",
     "@types/sinon-chai": "^4.0.0",
+    "@types/sshpk": "^1.17.4",
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
