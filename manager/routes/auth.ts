@@ -3,10 +3,13 @@
  * Handles user authentication, session management, and SSH key operations
  *
  * Security model:
- * - Private keys encrypted with password-derived keys (scrypt + AES-256-GCM)
+ * - Private keys encrypted with AES-256-GCM using scrypt-derived keys
+ * - Two encryption formats:
+ *   - v2 (password-derived): Regular user keys, requires user password to decrypt
+ *   - v3 (server-derived): Imported keys and admin keys, uses JWT_SECRET
  * - Keys only decrypted during active sessions (held in memory)
  * - On logout/expiry, decrypted keys are cleared
- * - No master key - only the user's password can decrypt their key
+ * - Admin keys use v3 format so they can be used for HPC fallback without password
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -521,7 +524,7 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
   user.publicKey = publicKey;
   user.privateKey = await encryptPrivateKey(privateKeyPem, password);
   user.setupComplete = false; // Need to install the new key
-  // setUser saves immediately to SQLite
+  setUser(req.user!.username, user);
 
   // Store in session for immediate use
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
@@ -729,7 +732,15 @@ router.post('/import-key', requireAuth, async (req: AuthenticatedRequest, res: R
   }
 
   // Encrypt with server key (v3 format)
-  const encryptedKey = await encryptWithServerKey(normalizedPem);
+  let encryptedKey: string | null;
+  try {
+    encryptedKey = await encryptWithServerKey(normalizedPem);
+  } catch (err) {
+    // Clear the temporary session key on encryption failure
+    clearSessionKey(req.user!.username);
+    log.error('Failed to encrypt imported key', { error: err instanceof Error ? err.message : String(err) });
+    return res.status(500).json({ error: 'Failed to encrypt key for storage' });
+  }
 
   user.publicKey = publicKey;
   user.privateKey = encryptedKey;

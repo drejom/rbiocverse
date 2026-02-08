@@ -1,21 +1,54 @@
 const { expect } = require('chai');
 const crypto = require('crypto');
 
-// Set JWT_SECRET before requiring ssh module
-process.env.JWT_SECRET = 'test-jwt-secret-that-is-at-least-32-chars-long';
+// SSH module functions - loaded in before() hook
+let generateSshKeypair;
+let encryptPrivateKey;
+let decryptPrivateKey;
+let encryptWithServerKey;
+let decryptWithServerKey;
+let parsePrivateKeyPem;
+let extractPublicKeyFromPrivate;
+let normalizePrivateKeyPem;
 
-const {
-  generateSshKeypair,
-  encryptPrivateKey,
-  decryptPrivateKey,
-  encryptWithServerKey,
-  decryptWithServerKey,
-  parsePrivateKeyPem,
-  extractPublicKeyFromPrivate,
-  normalizePrivateKeyPem,
-} = require('../../lib/auth/ssh');
+// Store original JWT_SECRET to restore after tests
+let originalJwtSecret;
 
 describe('SSH Key Functions', () => {
+  before(() => {
+    // Save original JWT_SECRET and set test value
+    originalJwtSecret = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'test-jwt-secret-that-is-at-least-32-chars-long';
+
+    // Clear ssh module from require cache so it re-reads JWT_SECRET
+    const modulePath = require.resolve('../../lib/auth/ssh');
+    delete require.cache[modulePath];
+
+    // Load the module with test JWT_SECRET
+    ({
+      generateSshKeypair,
+      encryptPrivateKey,
+      decryptPrivateKey,
+      encryptWithServerKey,
+      decryptWithServerKey,
+      parsePrivateKeyPem,
+      extractPublicKeyFromPrivate,
+      normalizePrivateKeyPem,
+    } = require('../../lib/auth/ssh'));
+  });
+
+  after(() => {
+    // Restore original JWT_SECRET
+    if (originalJwtSecret === undefined) {
+      delete process.env.JWT_SECRET;
+    } else {
+      process.env.JWT_SECRET = originalJwtSecret;
+    }
+
+    // Clear ssh module from cache to avoid leaking state to other tests
+    const modulePath = require.resolve('../../lib/auth/ssh');
+    delete require.cache[modulePath];
+  });
   describe('generateSshKeypair', () => {
     it('should generate Ed25519 keypair', async () => {
       const { publicKey, privateKeyPem } = await generateSshKeypair('testuser');

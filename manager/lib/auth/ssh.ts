@@ -1,6 +1,14 @@
 /**
  * SSH Key Generation and Encryption
- * Ed25519 keypair generation with password-derived AES-256-GCM encryption at rest
+ * Ed25519 keypair generation with AES-256-GCM encryption at rest
+ *
+ * Two encryption modes are supported:
+ * - v2 (password-derived): User's password → scrypt → AES key
+ *   Used for regular user keys. Decryption requires the user's password.
+ * - v3 (server-derived): JWT_SECRET → scrypt → AES key
+ *   Used for imported keys and admin keys. Decryption uses server's JWT secret.
+ *
+ * The decryptPrivateKey function auto-detects the format and handles both.
  */
 
 import crypto from 'crypto';
@@ -18,6 +26,8 @@ const scryptAsync = promisify(crypto.scrypt) as (
 
 // Server key derivation (from JWT_SECRET)
 // Uses a fixed salt so the same key is derived each time
+// v3 format: enc:v3:<iv>:<authTag>:<ciphertext> (no password needed)
+// Used for imported keys and admin keys that need to be decrypted without user password
 const SERVER_KEY_SALT = 'rbiocverse-ssh-key-v3';
 let cachedServerKey: Buffer | null = null;
 

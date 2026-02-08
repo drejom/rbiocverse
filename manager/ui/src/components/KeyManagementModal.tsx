@@ -184,6 +184,8 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
     if (file) {
       handleFileSelect(file);
     }
+    // Clear the input value so selecting the same file again will trigger onChange
+    e.target.value = '';
   };
 
   // Handle drag and drop
@@ -417,7 +419,7 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <button
                 className={`key-btn ${keyMode === 'generate' ? 'active' : ''}`}
-                onClick={() => { setKeyMode('generate'); setError(null); }}
+                onClick={() => { setKeyMode('generate'); setError(null); setPrivateKeyPem(''); }}
                 style={{
                   flex: 1,
                   justifyContent: 'center',
