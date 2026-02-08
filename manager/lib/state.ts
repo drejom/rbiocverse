@@ -383,21 +383,14 @@ class StateManager {
           this.state.clusterHealth = loadedState.clusterHealth ?? {};
 
           for (const [key, session] of Object.entries(loadedState.sessions)) {
-            let sessionKey = key;
-            // TODO(#66): Remove this migration before v0.1.0 release
-            // Migrate legacy keys without user prefix (e.g., "gemini-vscode" -> "{user}-gemini-vscode")
             if (!parseSessionKey(key)) {
-              sessionKey = `${config.hpcUser}-${key}`;
-              log.warn('Migrating legacy session key', { old: key, new: sessionKey });
-              if (!parseSessionKey(sessionKey)) {
-                log.warn('Skipping invalid session key', { key });
-                continue;
-              }
+              log.warn('Skipping invalid session key', { key });
+              continue;
             }
             if (session) {
               (session as Session).tunnelProcess = null;
             }
-            this.state.sessions[sessionKey] = session as Session | null;
+            this.state.sessions[key] = session as Session | null;
           }
         }
       } catch (e) {

@@ -195,7 +195,7 @@ export function ClusterCard({
     try {
       const data = await api.post<{ cancelled?: string[]; failed?: string[] }>(`/api/stop-all/${hpc}`);
 
-      if (data.failed?.length > 0) {
+      if (data.failed && data.failed.length > 0) {
         // Some jobs failed to cancel - show which ones
         setStopAllError(`Failed to stop ${data.failed.length} job(s): ${data.failed.join(', ')}`);
       }

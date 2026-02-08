@@ -11,8 +11,12 @@ export interface MenuSection {
   [key: string]: unknown;
 }
 
-export interface MenuItem extends Omit<MenuSection, 'parent'> {
+export interface MenuItem {
+  id: string;
+  title?: string;
+  icon?: string;
   children?: MenuItem[];
+  [key: string]: unknown;
 }
 
 /**
