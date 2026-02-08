@@ -243,7 +243,6 @@ class HpcService {
     }
 
     // SSH ControlMaster for connection multiplexing
-    const effectiveUser = this.username || config.hpcUser;
     const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveKeyUser}-${this.clusterName}`);
     const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
 

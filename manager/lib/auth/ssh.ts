@@ -301,18 +301,7 @@ function extractPublicKeyFromPrivate(privateKeyPem: string, username: string): s
     }
 
     if (type === 'rsa') {
-      // For RSA, use the OpenSSH format
-      const spkiPem = publicKeyObject.export({ type: 'spki', format: 'pem' }) as string;
-      const spkiDer = Buffer.from(
-        spkiPem.replace(/-----BEGIN PUBLIC KEY-----/, '')
-          .replace(/-----END PUBLIC KEY-----/, '')
-          .replace(/\n/g, ''),
-        'base64'
-      );
-
-      // Parse SPKI to get modulus (n) and exponent (e) for OpenSSH format
-      // RSA SPKI structure: SEQUENCE { SEQUENCE { OID, NULL }, BIT STRING { SEQUENCE { n, e } } }
-      // This is complex, so we'll use a simpler approach - export as PKCS1 and convert
+      // For RSA, export as PKCS1 and convert to OpenSSH format
       const pkcs1Der = publicKeyObject.export({ type: 'pkcs1', format: 'der' });
 
       // Parse PKCS1 RSA public key: SEQUENCE { INTEGER (n), INTEGER (e) }
