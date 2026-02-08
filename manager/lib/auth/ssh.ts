@@ -47,8 +47,9 @@ interface SshKeypair {
  * 4. User marks setup complete
  * 5. HpcService uses stored PRIVATE key for SSH connections on behalf of user
  *
- * Private keys are encrypted (AES-256-GCM) with password-derived keys.
- * Only the user's password can decrypt their private key.
+ * Private keys are encrypted (AES-256-GCM) with server-derived keys (v3 format).
+ * This allows keys to be decrypted without user password, preventing key loss
+ * when user's password changes (e.g., LDAP reset).
  */
 async function generateSshKeypair(username: string): Promise<SshKeypair> {
   // Use Ed25519 - modern, fast, secure, short keys

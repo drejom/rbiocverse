@@ -216,7 +216,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [token]);
 
-  // Generate a managed SSH key (requires password for encryption)
   // Generate a new SSH key (server-side encryption, no password needed)
   const generateKey = useCallback(async (): Promise<AuthResult> => {
     if (!token) return { success: false, error: 'Not authenticated' };

@@ -3,13 +3,14 @@
  * Handles user authentication, session management, and SSH key operations
  *
  * Security model:
- * - Private keys encrypted with AES-256-GCM using scrypt-derived keys
- * - Two encryption formats:
- *   - v2 (password-derived): Regular user keys, requires user password to decrypt
- *   - v3 (server-derived): Imported keys and admin keys, uses JWT_SECRET
+ * - Private keys encrypted with AES-256-GCM
+ * - All keys use v3 (server-derived) encryption using JWT_SECRET
+ *   - This prevents key loss when user's password changes (LDAP reset)
+ *   - No password prompts needed for key operations
+ * - Legacy v2 (password-derived) keys are still supported for decryption
  * - Keys only decrypted during active sessions (held in memory)
  * - On logout/expiry, decrypted keys are cleared
- * - Admin keys use v3 format so they can be used for HPC fallback without password
+ * - Admin keys can be used for HPC fallback when user has no key
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -303,13 +304,14 @@ router.post('/login', async (req: Request, res: Response) => {
         };
         log.info('New user with working SSH', { username });
       } else {
-        // SSH failed - generate managed key with password-derived encryption
+        // SSH failed - generate managed key with server-side encryption (v3)
+        // Using server key (not password) prevents key loss when user's password changes (LDAP reset)
         const { publicKey, privateKeyPem } = await generateSshKeypair(username);
         user = {
           username,
           fullName: username, // Will be replaced by LDAP lookup
           publicKey,
-          privateKey: await encryptPrivateKey(privateKeyPem, password),
+          privateKey: await encryptWithServerKey(privateKeyPem),
           setupComplete: false,
           createdAt: new Date().toISOString(),
         };
@@ -521,6 +523,12 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
   const sessionTtl = config.sessionExpiryDays * 24 * 60 * 60 * 1000;
   setSessionKey(req.user!.username, privateKeyPem, sessionTtl);
 
+  // If the user is an admin, clear the cached admin key to force a reload
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key generation', { username: user.username });
+  }
+
   log.audit('SSH key generated', { username: user.username });
 
   res.json({
@@ -530,6 +538,7 @@ router.post('/generate-key', requireAuth, async (req: AuthenticatedRequest, res:
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -554,6 +563,7 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
         fullName: user.fullName,
         publicKey: user.publicKey,
         setupComplete: user.setupComplete,
+        isAdmin: isAdmin(user.username),
       },
     });
   }
@@ -577,6 +587,12 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
   // Clear from session
   clearSessionKey(req.user!.username);
 
+  // If the user is an admin, clear the cached admin key to prevent stale fallback
+  if (isAdmin(user.username)) {
+    clearAdminKeyCache();
+    log.info('Admin key cache cleared due to key removal', { username: user.username });
+  }
+
   log.audit('SSH key removed', { username: user.username });
 
   res.json({
@@ -586,6 +602,7 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
@@ -593,7 +610,7 @@ router.post('/remove-key', requireAuth, async (req: AuthenticatedRequest, res: R
 /**
  * POST /api/auth/regenerate-key
  * Regenerate the managed SSH key
- * Requires password in request body for encryption
+ * Uses server-side (v3) encryption; no password required in request body
  */
 router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = getUser(req.user!.username);
@@ -630,6 +647,7 @@ router.post('/regenerate-key', requireAuth, async (req: AuthenticatedRequest, re
       fullName: user.fullName,
       publicKey: user.publicKey,
       setupComplete: user.setupComplete,
+      isAdmin: isAdmin(user.username),
     },
   });
 });
