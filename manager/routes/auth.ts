@@ -72,7 +72,7 @@ const TEST_PASSWORD = process.env.TEST_PASSWORD;
 
 /**
  * Verify password against test credentials
- * TODO: Replace with LDAP password verification
+ * TODO(#65): Replace with LDAP password verification
  * @param username
  * @param password
  * @returns boolean
@@ -206,7 +206,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
   try {
     // Development: Verify against test credentials (env vars)
-    // TODO: Replace with LDAP/AD authentication
+    // TODO(#65): Replace with LDAP/AD authentication
     if (!TEST_USERNAME || !TEST_PASSWORD) {
       log.error('TEST_USERNAME and TEST_PASSWORD must be set in environment');
       return res.status(500).json({ error: 'Authentication not configured' });
@@ -295,7 +295,7 @@ router.post('/login', async (req: Request, res: Response) => {
     await errorLogger.logError({
       user: username,
       action: 'login',
-      error: err,
+      error: err instanceof Error ? err : String(err),
     });
     res.status(500).json({ error: 'Login failed' });
   }

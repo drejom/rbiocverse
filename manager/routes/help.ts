@@ -263,7 +263,7 @@ router.get('/', async (req: Request, res: Response) => {
     const index = await loadHelpIndex();
     res.json(index);
   } catch (err) {
-    log.error('Failed to load help index:', err);
+    log.error('Failed to load help index:', err instanceof Error ? { error: err.message, stack: err.stack } : { detail: String(err) });
     res.status(500).json({ error: 'Failed to load help index' });
   }
 });
@@ -284,7 +284,7 @@ router.get('/search', async (req: Request, res: Response) => {
     const results = await searchHelpContent(q as string);
     res.json({ query: q, results });
   } catch (err) {
-    log.error('Help search failed:', err);
+    log.error('Help search failed:', err instanceof Error ? { error: err.message, stack: err.stack } : { detail: String(err) });
     res.status(500).json({ error: 'Search failed' });
   }
 });
@@ -322,7 +322,7 @@ router.get('/:section', async (req: Request, res: Response) => {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return res.status(404).json({ error: `Help section '${section}' not found` });
     }
-    log.error(`Failed to load help section ${section}:`, err);
+    log.error(`Failed to load help section ${section}:`, err instanceof Error ? { error: err.message, stack: err.stack } : { detail: String(err) });
     res.status(500).json({ error: 'Failed to load help section' });
   }
 });

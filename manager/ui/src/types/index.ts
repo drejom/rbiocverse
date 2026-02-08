@@ -115,14 +115,11 @@ export interface IdeStatus {
 }
 
 // Release and partition types
+// Matches the API response from /api/cluster-status (see manager/routes/api.ts)
 export interface ReleaseConfig {
-  version: string;
-  label?: string;
-  bioconductor?: string;
-  r?: string;
-  default?: boolean;
-  clusters?: string[];
-  ides?: string[];
+  name: string;      // Release name (e.g., "Bioconductor 3.18")
+  ides: string[];    // Available IDEs for this release
+  clusters: string[]; // Clusters that support this release
 }
 
 export interface GpuTypeConfig {

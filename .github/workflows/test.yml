@@ -27,6 +27,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check (backend)
+        run: npm run typecheck
+
+      - name: Type check (frontend)
+        run: cd ui && npm run typecheck
+
+      - name: Lint (backend)
+        run: npm run lint
+
+      - name: Lint (frontend)
+        run: cd ui && npm run lint
+
+      - name: Build frontend
+        run: cd ui && npm run build
+
       - name: Run tests
         run: npm test
 

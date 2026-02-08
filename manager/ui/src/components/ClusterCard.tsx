@@ -287,7 +287,7 @@ export function ClusterCard({
             )}
 
             <ReleaseSelector
-              releases={releases as Record<string, { clusters?: string[] }>}
+              releases={releases}
               selectedVersion={selectedRelease}
               onSelect={setSelectedRelease}
               cluster={hpc}

@@ -11,6 +11,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import path from 'path';
 import httpProxy from 'http-proxy';
+import type * as HttpProxy from 'http-proxy';
 import { StateManager } from './lib/state';
 import { config, ides } from './config';
 import HpcService from './services/hpc';
@@ -132,9 +133,9 @@ const vscodeProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-vscodeProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse) => {
+vscodeProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   log.proxyError('VS Code proxy error', { error: err.message });
-  if (res && res.writeHead && !res.headersSent) {
+  if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>VS Code not available</h1><p><a href="/">Back to launcher</a></p>');
   }
@@ -263,18 +264,20 @@ const rstudioProxy = httpProxy.createProxyServer({
   agent: new http.Agent({ keepAlive: false }),
 });
 
-rstudioProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse) => {
-  log.proxyError('RStudio proxy error', { error: err.message, code: (err as NodeJS.ErrnoException).code, url: req?.url, stack: err.stack });
-  if (res && res.writeHead && !res.headersSent) {
+rstudioProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+  const code = 'code' in err ? (err as { code: string }).code : undefined;
+  log.proxyError('RStudio proxy error', { error: err.message, code, url: req?.url, stack: err.stack });
+  if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>RStudio not available</h1><p><a href="/">Back to launcher</a></p>');
   }
 });
 
 // Log all proxy events for debugging (enable with DEBUG_COMPONENTS=rstudio)
-rstudioProxy.on('start', (req: http.IncomingMessage, res: http.ServerResponse, target: URL) => {
-  log.debugFor('rstudio', 'proxy start', { url: req.url, target: target.href });
-});
+rstudioProxy.on('start', ((req: http.IncomingMessage, res: http.ServerResponse, target: HttpProxy.ProxyTargetUrl) => {
+  const targetString = typeof target === 'string' ? target : (target && 'href' in target ? (target as { href: string | null }).href : JSON.stringify(target));
+  log.debugFor('rstudio', 'proxy start', { url: req.url, target: targetString });
+}) as HttpProxy.StartCallback);
 
 rstudioProxy.on('end', (req: http.IncomingMessage, res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
   log.debugFor('rstudio', 'proxy end', { url: req.url, status: proxyRes?.statusCode });
@@ -410,10 +413,10 @@ const liveServerProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-liveServerProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse) => {
+liveServerProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   // Expected when Live Server isn't running - use liveserver component
   log.debugFor('liveserver', 'proxy error', { error: err.message });
-  if (res && res.writeHead && !res.headersSent) {
+  if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
   }
@@ -426,9 +429,9 @@ const shinyProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-shinyProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse) => {
+shinyProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   log.debugFor('shiny', 'proxy error', { error: err.message });
-  if (res && res.writeHead && !res.headersSent) {
+  if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>Shiny Server not available</h1><p>Make sure a Shiny app is running (port 3838)</p><p><a href="/code/">Back to VS Code</a></p>');
   }
@@ -441,9 +444,9 @@ const jupyterProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-jupyterProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse) => {
+jupyterProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   log.proxyError('JupyterLab proxy error', { error: err.message });
-  if (res && res.writeHead && !res.headersSent) {
+  if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
     res.end('<h1>JupyterLab not available</h1><p><a href="/">Back to launcher</a></p>');
   }

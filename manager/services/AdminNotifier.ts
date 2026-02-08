@@ -168,7 +168,7 @@ class AdminNotifier {
       return false;
     }
 
-    // TODO: Implement actual email sending with nodemailer
+    // TODO(#64): Implement actual email sending with nodemailer
     // This is a placeholder for when SMTP is configured
     try {
       // const transporter = nodemailer.createTransport({

@@ -384,7 +384,7 @@ class StateManager {
 
           for (const [key, session] of Object.entries(loadedState.sessions)) {
             let sessionKey = key;
-            // TODO: Remove this migration before v0.1.0 release
+            // TODO(#66): Remove this migration before v0.1.0 release
             // Migrate legacy keys without user prefix (e.g., "gemini-vscode" -> "{user}-gemini-vscode")
             if (!parseSessionKey(key)) {
               sessionKey = `${config.hpcUser}-${key}`;

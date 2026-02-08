@@ -62,9 +62,12 @@ npm run test:coverage
 
 ### TypeScript
 
+- **Strict mode enabled** - Backend uses `strict: true` in tsconfig.json
 - **Types must match API schemas** - Frontend types should exactly mirror backend response shapes
-- **Avoid `as` casts** - If you need a cast, the type is probably wrong
+- **Avoid `as` casts** - If you need a cast, the type is probably wrong. Use `instanceof` checks instead
 - **Use proper property names** - Don't rename fields between layers (e.g., API returns `cpus`, frontend uses `cpus`)
+- **Error handling** - Use `err instanceof Error ? { error: err.message, stack: err.stack } : { detail: String(err) }` pattern in catch blocks
+- **Proxy handlers** - Handle both `http.ServerResponse` and `net.Socket` for WebSocket proxy errors
 - **Import types explicitly** - Use `import type { KeyboardEvent } from 'react'` not `React.KeyboardEvent`
 - **Validate external data** - Use `parseInt(x, 10)` with radix, check `Number.isFinite()` for parsed values
 - **Validate localStorage** - Check stored values against allowed options before casting to union types
@@ -77,9 +80,10 @@ npm run test:coverage
 
 ### Testing Changes
 
-1. **Rebuild frontend**: `cd manager/ui && npm run build` (catches type errors)
-2. **Restart server**: `./scripts/dev.sh restart`
-3. **Verify visually**: Use Playwright or manual browser testing
+1. **Type check**: `npm run typecheck` (backend) and `cd manager/ui && npm run typecheck` (frontend)
+2. **Rebuild frontend**: `cd manager/ui && npm run build` (vite doesn't type-check, only transpiles)
+3. **Restart server**: `./scripts/dev.sh restart`
+4. **Verify visually**: Use Playwright or manual browser testing
 
 ### UI Patterns
 

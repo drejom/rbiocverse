@@ -43,7 +43,7 @@ export function IdeSelector({
         if (isRunning) {
           title = `${info.name} is already running`;
         } else if (!isAvailable) {
-          const releaseName = (releaseVersion && releases?.[releaseVersion]?.label) || releaseVersion;
+          const releaseName = (releaseVersion && releases?.[releaseVersion]?.name) || releaseVersion;
           title = `${info.name} not available on ${releaseName}`;
         }
 
