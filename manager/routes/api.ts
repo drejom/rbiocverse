@@ -329,44 +329,44 @@ function createApiRouter(stateManager: StateManager): Router {
     res.json({ status: 'ok', ready: true });
   });
 
-  // Check dev server ports (Live Server 5500, Shiny 3838) - single SSH call
+  // Check dev server ports - returns list of active ports
+  // Scans ports from config.additionalPorts (default: 5500, 3838)
   router.get('/dev-servers', async (req: Request, res: Response) => {
     const user = getRequestUser(req);
 
     // Only check if there's an active VS Code session
     const activeSession = stateManager.getActiveSession();
     if (!activeSession || activeSession.ide !== 'vscode') {
-      return res.json({ liveServer: false, shiny: false });
+      return res.json({ activePorts: [] });
     }
 
     const { hpc } = activeSession;
     const session = stateManager.getSession(user, hpc, 'vscode');
 
     if (!session || session.status !== 'running' || !session.node) {
-      return res.json({ liveServer: false, shiny: false });
+      return res.json({ activePorts: [] });
     }
 
     try {
       const hpcService = new HpcService(hpc, user);
-      // Check both ports in one SSH call: ss -tln | grep -E ':5500|:3838'
-      const result = await hpcService.checkPorts(session.node, [5500, 3838]) as Record<number, boolean>;
-      const liveServer = result[5500] || false;
-      const shiny = result[3838] || false;
+      // Check all configured dev server ports in one SSH call
+      const portsToCheck = config.additionalPorts;
+      const result = await hpcService.checkPorts(session.node, portsToCheck) as Record<number, boolean>;
+
+      // Return list of active ports
+      const activePorts = portsToCheck.filter(port => result[port]);
 
       // Track feature usage for analytics (only mark once per session)
-      if (liveServer && !session.usedLiveServer) {
+      // Reuse usedLiveServer field as general "used dev server" flag
+      if (activePorts.length > 0 && !session.usedLiveServer) {
         await stateManager.updateSession(user, hpc, 'vscode', { usedLiveServer: true });
-        log.info('Live Server usage detected', { user, hpc });
-      }
-      if (shiny && !session.usedShiny) {
-        await stateManager.updateSession(user, hpc, 'vscode', { usedShiny: true });
-        log.info('Shiny usage detected', { user, hpc });
+        log.info('Dev server usage detected', { user, hpc, ports: activePorts });
       }
 
-      res.json({ liveServer, shiny });
+      res.json({ activePorts });
     } catch (e) {
       log.debugFor('api', 'dev-servers check failed', { error: (e as Error).message });
-      res.json({ liveServer: false, shiny: false });
+      res.json({ activePorts: [] });
     }
   });
 

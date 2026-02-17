@@ -406,37 +406,6 @@ rstudioProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingM
   updateActivity();
 });
 
-// Proxy for Live Server (port 5500) - allows accessing dev server through manager
-const liveServerProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: 'http://127.0.0.1:5500',
-  changeOrigin: true,
-});
-
-liveServerProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  // Expected when Live Server isn't running - use liveserver component
-  log.debugFor('liveserver', 'proxy error', { error: err.message });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>Live Server not available</h1><p>Make sure Live Server is running in VS Code (port 5500)</p><p><a href="/code/">Back to VS Code</a></p>');
-  }
-});
-
-// Proxy for Shiny Server (port 3838) - R Shiny apps
-const shinyProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: 'http://127.0.0.1:3838',
-  changeOrigin: true,
-});
-
-shinyProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  log.debugFor('shiny', 'proxy error', { error: err.message });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>Shiny Server not available</h1><p>Make sure a Shiny app is running (port 3838)</p><p><a href="/code/">Back to VS Code</a></p>');
-  }
-});
-
 // Proxy for JupyterLab (port 8888)
 const jupyterProxy = httpProxy.createProxyServer({
   ws: true,
@@ -617,26 +586,6 @@ app.use('/rstudio-direct', (req: Request, res: Response) => {
   rstudioProxy.web(req, res);
 });
 
-// Proxy to Live Server (port 5500) - access at /live/
-app.use('/live', (req: Request, res: Response) => {
-  if (!hasRunningSession()) {
-    log.debugFor('liveserver', 'rejected - no running session');
-    return res.redirect('/');
-  }
-  log.debugFor('liveserver', `${req.method} ${req.path}`);
-  liveServerProxy.web(req, res);
-});
-
-// Proxy to Shiny Server (port 3838) - access at /shiny/
-app.use('/shiny', (req: Request, res: Response) => {
-  if (!hasRunningSession()) {
-    log.debugFor('shiny', 'rejected - no running session');
-    return res.redirect('/');
-  }
-  log.debugFor('shiny', `${req.method} ${req.path}`);
-  shinyProxy.web(req, res);
-});
-
 // JupyterLab proxy - serves at /jupyter/
 app.use('/jupyter', (req: Request, res: Response) => {
   if (!hasRunningSession()) {
@@ -719,15 +668,6 @@ stateManager.load().then(async () => {
       if (req.url?.startsWith('/port/')) {
         log.debugFor('port-proxy', `WebSocket upgrade: ${req.url}`);
         portProxy.ws(req, socket, head);
-      }
-      // Live Server WebSocket (for hot reload)
-      else if (req.url?.startsWith('/live')) {
-        liveServerProxy.ws(req, socket, head);
-      }
-      // Shiny WebSocket
-      else if (req.url?.startsWith('/shiny')) {
-        log.debugFor('shiny', `WebSocket upgrade: ${req.url}`);
-        shinyProxy.ws(req, socket, head);
       }
       // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
       else if (req.url?.startsWith('/jupyter')) {
