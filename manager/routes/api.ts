@@ -158,7 +158,17 @@ async function startTunnelWithPortDiscovery(
 ): Promise<unknown> {
   const hpcService = new HpcService(hpc, user);
   const remotePort = await hpcService.getIdePort(ide);
-  return tunnelService.start(hpc, node, ide, onExit, { remotePort, user });
+
+  // For VS Code, also get the hpc-proxy port for dev server routing
+  let proxyPort: number | undefined;
+  if (ide === 'vscode') {
+    const port = await hpcService.getProxyPort(user);
+    if (port) {
+      proxyPort = port;
+    }
+  }
+
+  return tunnelService.start(hpc, node, ide, onExit, { remotePort, user, proxyPort });
 }
 
 /**
