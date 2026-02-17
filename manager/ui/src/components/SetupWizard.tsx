@@ -174,7 +174,7 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {needsKeySetup && !existingKeysWork ? (
+      {needsKeySetup ? (
         <p className="setup-wizard-intro">
           {anyFailed
             ? "We couldn't connect to both HPC clusters. You'll need to set up SSH key access before you can launch IDE sessions. This is a one-time setup."
@@ -185,14 +185,13 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
       {/* Manage Keys button - always visible so users can import/generate keys */}
       <div className="setup-section">
         <button
-          className="key-btn"
+          className="key-btn key-btn--full-width"
           onClick={() => setShowKeyModal(true)}
-          style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
         >
           <Settings size={18} />
           Manage SSH Keys
         </button>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: 8 }}>
+        <p className="setup-wizard-hint">
           Generate a new key or import an existing one
         </p>
       </div>
