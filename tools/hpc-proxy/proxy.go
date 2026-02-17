@@ -42,7 +42,8 @@ func NewProxy(port int, baseRewrite, verbose bool) *Proxy {
 
 // Start begins listening and returns the actual port (useful when port=0)
 func (p *Proxy) Start() (int, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", p.port))
+	// Bind to localhost only for security on shared HPC nodes
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p.port))
 	if err != nil {
 		return 0, fmt.Errorf("listen: %w", err)
 	}
@@ -139,7 +140,16 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 		req.URL.RawQuery = r.URL.RawQuery
 		// Set X-Forwarded headers
 		req.Header.Set("X-Forwarded-Host", r.Host)
-		req.Header.Set("X-Forwarded-Proto", "https")
+		// Detect protocol from existing header or TLS state
+		proto := r.Header.Get("X-Forwarded-Proto")
+		if proto == "" {
+			if r.TLS != nil {
+				proto = "https"
+			} else {
+				proto = "http"
+			}
+		}
+		req.Header.Set("X-Forwarded-Proto", proto)
 		req.Header.Set("X-Original-Path", r.URL.Path)
 	}
 
@@ -206,6 +216,9 @@ func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
 	resp.Body = io.NopCloser(strings.NewReader(bodyStr))
 	resp.ContentLength = int64(len(bodyStr))
 	resp.Header.Set("Content-Length", strconv.Itoa(len(bodyStr)))
+	// Clear Transfer-Encoding since we now have a fixed Content-Length
+	resp.Header.Del("Transfer-Encoding")
+	resp.TransferEncoding = nil
 	if isGzipped {
 		resp.Header.Del("Content-Encoding")
 	}

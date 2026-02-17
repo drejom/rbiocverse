@@ -176,7 +176,7 @@ RUN bash /tmp/slurm-wrappers.sh && rm /tmp/slurm-wrappers.sh
 # =============================================================================
 # HPC Proxy (multi-user port routing for dev servers)
 # =============================================================================
-# Routes /port/:port/* requests to localhost::port, allowing multiple users
+# Routes /port/:port/* requests to localhost:port, allowing multiple users
 # on the same compute node to run dev servers without port conflicts.
 # Binary is built by GitHub Actions (build-container.yml) before Docker build.
 # Source: tools/hpc-proxy/

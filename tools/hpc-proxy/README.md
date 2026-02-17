@@ -1,6 +1,6 @@
 # HPC Proxy
 
-Per-user reverse proxy for multi-user HPC environments. Routes `/port/:port/*` requests to `localhost::port`, allowing multiple users to run development servers on the same compute node without port conflicts.
+Per-user reverse proxy for multi-user HPC environments. Routes `/port/:port/*` requests to `localhost:port`, allowing multiple users to run development servers on the same compute node without port conflicts.
 
 ## Problem Solved
 
@@ -33,7 +33,7 @@ hpc-proxy --port 0 --verbose
 
 ## Route Pattern
 
-All requests matching `/port/:port/*` are proxied to `localhost::port`:
+All requests matching `/port/:port/*` are proxied to `localhost:port`:
 
 | Request | Proxied To |
 |---------|------------|
@@ -80,10 +80,10 @@ The manager reads `~/.hpc-proxy/port` to discover the proxy port, then tunnels o
 ```
 Manager                          HPC Node (User A)
 ├── /port/5500/* ─────┐
-├── /port/3838/* ─────┼── tunnel ←── hpc-proxy :9001 ←── /port/:port/* → localhost::port
+├── /port/3838/* ─────┼── tunnel ←── hpc-proxy :9001 ←── /port/:port/* → localhost:port
 ├── /port/8080/* ─────┘
 
                                  HPC Node (User B)
-├── /port/5500/* ─────┬── tunnel ←── hpc-proxy :9002 ←── /port/:port/* → localhost::port
+├── /port/5500/* ─────┬── tunnel ←── hpc-proxy :9002 ←── /port/:port/* → localhost:port
 ├── /port/3838/* ─────┘
 ```

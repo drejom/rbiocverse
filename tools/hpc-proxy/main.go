@@ -1,6 +1,6 @@
 // HPC Proxy - Per-user reverse proxy for multi-user HPC environments
 //
-// Routes /port/:port/* requests to localhost::port, allowing multiple users
+// Routes /port/:port/* requests to localhost:port, allowing multiple users
 // to run development servers on the same compute node without port conflicts.
 //
 // Usage:
