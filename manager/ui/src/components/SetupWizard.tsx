@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { CheckCircle, XCircle, Settings } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, Terminal } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import KeyManagementModal from './KeyManagementModal';
 
