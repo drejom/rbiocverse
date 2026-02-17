@@ -3,21 +3,7 @@
  * Centralizes all environment variables and cluster-specific settings
  */
 
-// Type definitions for configuration objects
-
-interface AppConfig {
-  hpcUser: string;
-  defaultHpc: string;
-  defaultIde: string;
-  defaultCpus: string;
-  defaultMem: string;
-  defaultTime: string;
-  additionalPorts: number[];
-  sessionIdleTimeout: number;
-  adminEmail: string | null;
-  jwtSecret: string | undefined;
-  sessionExpiryDays: number;
-}
+import type { AppConfig } from '../types';
 
 interface VsCodeKeybinding {
   key: string;
@@ -145,6 +131,8 @@ const config: AppConfig = {
   jwtSecret: process.env.JWT_SECRET,
   // Session token expiry in days (sliding - refreshes when >50% expired)
   sessionExpiryDays: parseInt(process.env.SESSION_EXPIRY_DAYS || '7', 10),
+  // Local port for hpc-proxy tunnel (dev server routing for VS Code)
+  hpcProxyLocalPort: parseInt(process.env.HPC_PROXY_LOCAL_PORT || '9000', 10),
 };
 
 // Fail fast: JWT_SECRET is required for authentication in production

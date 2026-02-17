@@ -168,9 +168,8 @@ function generateSession(dayOffset) {
 
   const endedAt = new Date(startedAt.getTime() + (durationMinutes * minMs));
 
-  // Shiny and Live Server usage (only for VS Code, ~20% each)
-  const usedShiny = ide === 'vscode' && Math.random() < 0.20 ? 1 : 0;
-  const usedLiveServer = ide === 'vscode' && Math.random() < 0.15 ? 1 : 0;
+  // Dev server usage (only for VS Code, ~25%)
+  const usedDevServer = ide === 'vscode' && Math.random() < 0.25 ? 1 : 0;
 
   // Error message for failed sessions
   const errorMessage = endReason === 'error'
@@ -199,8 +198,7 @@ function generateSession(dayOffset) {
     duration_minutes: durationMinutes,
     end_reason: endReason,
     error_message: errorMessage,
-    used_shiny: usedShiny,
-    used_live_server: usedLiveServer,
+    used_dev_server: usedDevServer,
     job_id: `${randomInt(10000, 99999)}`,
     node: `node-${randomInt(1, 200).toString().padStart(3, '0')}`
   };
@@ -259,8 +257,8 @@ async function main() {
       user, hpc, ide, account, cpus, memory, walltime, gpu,
       release_version, submitted_at, started_at, ended_at,
       wait_seconds, duration_minutes, end_reason, error_message,
-      used_shiny, used_live_server, job_id, node
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      used_dev_server, job_id, node
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const sessionTransaction = db.transaction(() => {
@@ -285,8 +283,7 @@ async function main() {
         session.duration_minutes,
         session.end_reason,
         session.error_message,
-        session.used_shiny,
-        session.used_live_server,
+        session.used_dev_server,
         session.job_id,
         session.node
       );

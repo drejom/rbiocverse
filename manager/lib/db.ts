@@ -90,8 +90,7 @@ export function initializeDb(dbPath: string = DEFAULT_DB_PATH): DatabaseInstance
       error TEXT,
       time_left_seconds INTEGER,
       last_activity INTEGER,
-      used_shiny INTEGER DEFAULT 0,
-      used_live_server INTEGER DEFAULT 0
+      used_dev_server INTEGER DEFAULT 0
     );
 
     -- Session history (archives completed sessions for analytics)
@@ -113,8 +112,7 @@ export function initializeDb(dbPath: string = DEFAULT_DB_PATH): DatabaseInstance
       duration_minutes INTEGER,
       end_reason TEXT,
       error_message TEXT,
-      used_shiny INTEGER DEFAULT 0,
-      used_live_server INTEGER DEFAULT 0,
+      used_dev_server INTEGER DEFAULT 0,
       job_id TEXT,
       node TEXT
     );
@@ -213,15 +211,38 @@ interface TableColumn {
  */
 function runMigrations(database: DatabaseInstance): void {
   // Check if partition columns exist in cluster_health
-  const tableInfo = database.prepare('PRAGMA table_info(cluster_health)').all() as TableColumn[];
-  const columns = new Set(tableInfo.map(col => col.name));
+  const healthInfo = database.prepare('PRAGMA table_info(cluster_health)').all() as TableColumn[];
+  const healthColumns = new Set(healthInfo.map(col => col.name));
 
   // Migration: Add partition CPU columns
-  if (!columns.has('a100_cpus_percent')) {
+  if (!healthColumns.has('a100_cpus_percent')) {
     database.exec('ALTER TABLE cluster_health ADD COLUMN a100_cpus_percent INTEGER');
   }
-  if (!columns.has('v100_cpus_percent')) {
+  if (!healthColumns.has('v100_cpus_percent')) {
     database.exec('ALTER TABLE cluster_health ADD COLUMN v100_cpus_percent INTEGER');
+  }
+
+  // TODO: Remove this migration block before v0.1.0 release
+  // One-time migration: Rename used_live_server/used_shiny to used_dev_server
+  // For existing databases with old schema, add new column and migrate data
+  // This migration was added in PR #49 and can be removed once all deployments
+  // have been migrated (Dokploy production and any dev instances)
+  const activeSessionsInfo = database.prepare('PRAGMA table_info(active_sessions)').all() as TableColumn[];
+  const activeColumns = new Set(activeSessionsInfo.map(col => col.name));
+
+  if (!activeColumns.has('used_dev_server') && activeColumns.has('used_live_server')) {
+    database.exec('ALTER TABLE active_sessions ADD COLUMN used_dev_server INTEGER DEFAULT 0');
+    // Merge used_live_server OR used_shiny into used_dev_server
+    database.exec('UPDATE active_sessions SET used_dev_server = (used_live_server = 1 OR used_shiny = 1)');
+  }
+
+  const historyInfo = database.prepare('PRAGMA table_info(session_history)').all() as TableColumn[];
+  const historyColumns = new Set(historyInfo.map(col => col.name));
+
+  if (!historyColumns.has('used_dev_server') && historyColumns.has('used_live_server')) {
+    database.exec('ALTER TABLE session_history ADD COLUMN used_dev_server INTEGER DEFAULT 0');
+    // Merge used_live_server OR used_shiny into used_dev_server
+    database.exec('UPDATE session_history SET used_dev_server = (used_live_server = 1 OR used_shiny = 1)');
   }
 }
 

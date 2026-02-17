@@ -2,7 +2,7 @@
  * Login Page - Split design with IDE icons and cluster health
  */
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, KeyboardEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ClusterHealthCard from '../components/ClusterHealthCard';
@@ -32,6 +32,18 @@ function Login({ clusterHealth = {}, clusterHistory = {} }: LoginProps) {
     e.preventDefault();
     clearError();
     await login(username, password, rememberMe);
+  };
+
+  // TODO: Monitor if this workaround is still needed - can potentially remove in future
+  // Explicit Enter key handler to ensure form submission works in all Chrome versions.
+  // Some versions of Chrome don't trigger onSubmit reliably when pressing Enter in
+  // password fields. This handler provides a fallback. See PR #49 discussion.
+  const handleKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter' && !loading && username && password) {
+      e.preventDefault();
+      clearError();
+      login(username, password, rememberMe);
+    }
   };
 
   return (
@@ -110,7 +122,7 @@ function Login({ clusterHealth = {}, clusterHistory = {} }: LoginProps) {
           </div>
 
           {/* Form */}
-          <form className="login-form" onSubmit={handleSubmit}>
+          <form className="login-form" onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
             {error && <div className="login-error">{error}</div>}
 
             <div className="form-group">

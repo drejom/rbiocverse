@@ -455,6 +455,27 @@ echo ${bootstrapBase64} | base64 -d | sh
 # Find available port and export as IDE_PORT
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
+# Start hpc-proxy for dev server port routing (runs inside container)
+# Note: hpc-proxy runs in background; SLURM cleans it up when job ends
+mkdir -p $HOME/.hpc-proxy
+${this.cluster.singularityBin} exec ${releasePaths.singularityImage} \\
+  /usr/local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
+
+# Wait for proxy to write port file (up to 5 seconds)
+for ((i=0; i<10; i++)); do
+  [ -f $HOME/.hpc-proxy/port ] && break
+  sleep 0.5
+done
+
+# Log proxy port for debugging and create status marker
+if [ -f $HOME/.hpc-proxy/port ]; then
+  echo "hpc-proxy started on port $(cat $HOME/.hpc-proxy/port)" >> $HOME/.vscode-slurm/job.err
+  echo "ok" > $HOME/.hpc-proxy/status
+else
+  echo "WARNING: hpc-proxy failed to start - dev server routing unavailable" >> $HOME/.vscode-slurm/job.err
+  echo "failed" > $HOME/.hpc-proxy/status
+fi
+
 # Start VS Code server
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
@@ -868,6 +889,32 @@ SLURM_SCRIPT`;
     } catch {
       log.debugFor('tunnel', `Port file not found, using default`, { ide, port: ideConfig.port, cluster: this.clusterName });
       return ideConfig.port;
+    }
+  }
+
+  /**
+   * Get the hpc-proxy port for dev server routing (VS Code only)
+   * Returns null if proxy is not running.
+   *
+   * @param _user Currently unused; the proxy port is read from the SSH user's
+   *              home directory (~/.hpc-proxy/port). Parameter kept for API
+   *              consistency with other methods and potential future per-user support.
+   */
+  async getProxyPort(_user: string | null): Promise<number | null> {
+    const portFile = '~/.hpc-proxy/port';
+    try {
+      const output = await this.sshExec(`cat ${portFile} 2>/dev/null`);
+      const port = parseInt(output.trim(), 10);
+      if (port > 0 && port < 65536) {
+        log.debugFor('tunnel', `Read proxy port from ${portFile}`, { port, cluster: this.clusterName });
+        return port;
+      }
+      log.warn(`Invalid proxy port in ${portFile}: ${output}`);
+      return null;
+    } catch {
+      // No proxy running or file doesn't exist
+      log.debugFor('tunnel', `No proxy port file found`, { cluster: this.clusterName });
+      return null;
     }
   }
 

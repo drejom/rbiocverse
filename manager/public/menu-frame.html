@@ -179,22 +179,23 @@
       color: #fca5a5;
     }
     .actions button.danger:hover { background: rgba(239,68,68,0.2); }
-    .actions button.live-server {
-      border-color: rgba(74,222,128,0.5);
+    .actions button.dev-server {
+      border-color: rgba(168,85,247,0.5);
+      color: #c084fc;
+    }
+    .actions button.dev-server:hover { background: rgba(168,85,247,0.2); }
+    .actions button.dev-server.active {
+      border-color: rgba(74,222,128,0.7);
       color: #4ade80;
+      background: rgba(74,222,128,0.1);
     }
-    .actions button.live-server:hover { background: rgba(74,222,128,0.2); }
-    .actions button.shiny-server {
-      border-color: rgba(59,130,246,0.5);
-      color: #60a5fa;
-    }
-    .actions button.shiny-server:hover { background: rgba(59,130,246,0.2); }
+    .actions button.dev-server.active:hover { background: rgba(74,222,128,0.2); }
     .actions button:disabled {
       opacity: 0.4;
       cursor: not-allowed;
     }
 
-    /* Live Server Modal */
+    /* Dev Server Modal */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -266,6 +267,62 @@
       transition: opacity 0.2s;
     }
     .copy-feedback.show { opacity: 1; }
+
+    /* Dev modal content styles */
+    .dev-modal-hint {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+    .dev-manual-section {
+      margin-top: 12px;
+    }
+    .dev-manual-label {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+    }
+    .dev-manual-row {
+      display: flex;
+      gap: 8px;
+    }
+    .dev-manual-input {
+      width: 80px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: white;
+      font-size: 0.85rem;
+    }
+    .dev-port-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dev-port-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+    }
+    .dev-port-label {
+      font-weight: 600;
+    }
+    .dev-port-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .dev-port-btn {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+    }
+    .dev-port-btn .lucide {
+      width: 14px;
+      height: 14px;
+    }
   </style>
 </head>
 <body>
@@ -274,32 +331,20 @@
     <div id="content">Loading...</div>
   </div>
 
-  <!-- Live Server Modal -->
-  <div id="live-modal" class="modal-overlay">
+  <!-- Dev Server Modal -->
+  <div id="dev-modal" class="modal-overlay">
     <div class="modal">
-      <h3><i data-lucide="globe" style="width:18px;height:18px;"></i> Live Server</h3>
-      <div class="modal-actions">
-        <button onclick="copyLiveUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
-        <button class="primary" onclick="openLiveServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      <h3><i data-lucide="globe" style="width:18px;height:18px;"></i> <span id="dev-modal-title">Dev Server</span></h3>
+      <div id="dev-modal-content">
+        <!-- Dynamic content: single port or port list -->
       </div>
-      <div id="copy-feedback" class="copy-feedback">Copied!</div>
-      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
-        Start Live Server in VS Code (port 5500)
-      </div>
-    </div>
-  </div>
-
-  <!-- Shiny Server Modal -->
-  <div id="shiny-modal" class="modal-overlay">
-    <div class="modal">
-      <h3><i data-lucide="sparkles" style="width:18px;height:18px;"></i> Shiny App</h3>
-      <div class="modal-actions">
-        <button onclick="copyShinyUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
-        <button class="primary" onclick="openShinyServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
-      </div>
-      <div id="shiny-copy-feedback" class="copy-feedback">Copied!</div>
-      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
-        Run shiny::runApp(port=3838)
+      <div id="dev-copy-feedback" class="copy-feedback">Copied!</div>
+      <div id="dev-manual-input" class="dev-manual-section">
+        <div class="dev-manual-label">Or enter custom port:</div>
+        <div class="dev-manual-row">
+          <input type="number" id="manual-port" class="dev-manual-input" placeholder="Port" min="1" max="65535">
+          <button onclick="openManualPort()" class="dev-port-btn"><i data-lucide="external-link" class="lucide"></i> Open</button>
+        </div>
       </div>
     </div>
   </div>
@@ -312,8 +357,7 @@
     let walltime = null;
     let activeSession = null;  // { hpc, ide }
     let availableIdes = {};    // IDE info from server
-    let liveServerAvailable = false;
-    let shinyServerAvailable = false;
+    let activePorts = [];  // Array of active dev server ports
     let currentStatus = null;
     let isStopping = false;     // Prevent UI updates during stop
 
@@ -408,18 +452,18 @@
       else if (countdown < 1800) toggle.classList.add('warning');
       if (open) toggle.classList.add('open');
 
-      // Only show Live Server and Shiny for VS Code
+      // Only show Dev Server button for VS Code
       const showDevServers = ide === 'vscode';
-      const liveServerBtn = showDevServers
-        ? (liveServerAvailable
-            ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
-            : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>')
-        : '';
-      const shinyServerBtn = showDevServers
-        ? (shinyServerAvailable
-            ? '<button class="shiny-server" onclick="showShinyModal()"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>'
-            : '<button class="shiny-server" disabled title="Run shiny::runApp(port=3838)"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>')
-        : '';
+      let devServerBtn = '';
+      if (showDevServers) {
+        if (activePorts.length === 0) {
+          devServerBtn = '<button class="dev-server" onclick="showDevModal()"><i data-lucide="globe" class="lucide"></i> Dev Server</button>';
+        } else if (activePorts.length === 1) {
+          devServerBtn = '<button class="dev-server active" onclick="showDevModal()"><i data-lucide="globe" class="lucide"></i> Port ' + activePorts[0] + '</button>';
+        } else {
+          devServerBtn = '<button class="dev-server active" onclick="showDevModal()"><i data-lucide="globe" class="lucide"></i> ' + activePorts.length + ' Ports</button>';
+        }
+      }
 
       let resourcesHtml = '';
       let nodeText = '';
@@ -449,8 +493,7 @@
         sessionDetails +
         '<div class="node">' + nodeText + '</div>' +
         '<div class="actions">' +
-        liveServerBtn +
-        shinyServerBtn +
+        devServerBtn +
         '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
         '<button class="danger" onclick="stopJob()"><i data-lucide="square" class="lucide"></i> Stop</button>' +
         '</div>';
@@ -461,23 +504,19 @@
     async function checkDevServers() {
       // Only check if VS Code is active
       if (!activeSession || activeSession.ide !== 'vscode') {
-        liveServerAvailable = false;
-        shinyServerAvailable = false;
+        activePorts = [];
         return;
       }
       try {
         const res = await fetch('/api/dev-servers');
         if (res.ok) {
           const data = await res.json();
-          liveServerAvailable = data.liveServer || false;
-          shinyServerAvailable = data.shiny || false;
+          activePorts = data.activePorts || [];
         } else {
-          liveServerAvailable = false;
-          shinyServerAvailable = false;
+          activePorts = [];
         }
       } catch (e) {
-        liveServerAvailable = false;
-        shinyServerAvailable = false;
+        activePorts = [];
       }
       render();
     }
@@ -618,78 +657,86 @@
       };
     }
 
-    // Live Server Modal functions
-    function getLiveUrl() {
-      return window.location.origin + '/live/';
+    // Dev Server Modal functions
+    function getPortUrl(port) {
+      return window.location.origin + '/port/' + port + '/';
     }
 
-    function showLiveModal() {
-      console.log('[Menu] Live Server modal opened');
-      document.getElementById('live-modal').classList.add('show');
+    function showDevModal() {
+      console.log('[Menu] Dev Server modal opened, activePorts:', activePorts);
+      const modal = document.getElementById('dev-modal');
+      const content = document.getElementById('dev-modal-content');
+      const title = document.getElementById('dev-modal-title');
+
+      // Build modal content based on active ports
+      if (activePorts.length === 0) {
+        title.textContent = 'Dev Server';
+        content.innerHTML = '<div class="dev-modal-hint">No active dev servers detected.<br>Start a server on any port and it will appear here.</div>';
+      } else if (activePorts.length === 1) {
+        const port = activePorts[0];
+        title.textContent = `Dev Server (Port ${port})`;
+        content.innerHTML = `
+          <div class="modal-actions">
+            <button onclick="copyPortUrl(${port})"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+            <button class="primary" onclick="openPort(${port})"><i data-lucide="external-link" class="lucide"></i> Open</button>
+          </div>`;
+      } else {
+        title.textContent = `${activePorts.length} Dev Servers Active`;
+        const portsHtml = activePorts.map(port => `
+          <div class="dev-port-item">
+            <span class="dev-port-label">Port ${port}</span>
+            <div class="dev-port-actions">
+              <button onclick="copyPortUrl(${port})" class="dev-port-btn"><i data-lucide="copy" class="lucide"></i></button>
+              <button class="primary dev-port-btn" onclick="openPort(${port})"><i data-lucide="external-link" class="lucide"></i> Open</button>
+            </div>
+          </div>`).join('');
+        content.innerHTML = `<div class="dev-port-list">${portsHtml}</div>`;
+      }
+
+      modal.classList.add('show');
       lucide.createIcons();
     }
 
-    function hideLiveModal() {
-      document.getElementById('live-modal').classList.remove('show');
-      document.getElementById('copy-feedback').classList.remove('show');
+    function hideDevModal() {
+      document.getElementById('dev-modal').classList.remove('show');
+      document.getElementById('dev-copy-feedback').classList.remove('show');
     }
 
-    function copyLiveUrl() {
-      const url = getLiveUrl();
-      console.log('[Menu] Copying Live Server URL:', url);
+    function copyPortUrl(port) {
+      const url = getPortUrl(port);
+      console.log('[Menu] Copying port URL:', url);
       navigator.clipboard.writeText(url).then(() => {
-        document.getElementById('copy-feedback').classList.add('show');
+        document.getElementById('dev-copy-feedback').classList.add('show');
         setTimeout(() => {
-          document.getElementById('copy-feedback').classList.remove('show');
+          document.getElementById('dev-copy-feedback').classList.remove('show');
         }, 2000);
       });
     }
 
-    function openLiveServer() {
-      console.log('[Menu] Opening Live Server in new tab');
-      window.open('/live/', '_blank');
-      hideLiveModal();
+    function openPort(port) {
+      console.log('[Menu] Opening port in new tab:', port);
+      window.open('/port/' + port + '/', '_blank');
+      hideDevModal();
     }
 
-    document.getElementById('live-modal').addEventListener('click', function(e) {
-      if (e.target === this) hideLiveModal();
+    function openManualPort() {
+      const input = document.getElementById('manual-port');
+      const port = parseInt(input.value, 10);
+      if (port >= 1 && port <= 65535) {
+        openPort(port);
+      } else {
+        input.style.borderColor = '#ef4444';
+        setTimeout(() => { input.style.borderColor = 'rgba(255,255,255,0.2)'; }, 1000);
+      }
+    }
+
+    document.getElementById('dev-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideDevModal();
     });
 
-    // Shiny Server Modal functions
-    function getShinyUrl() {
-      return window.location.origin + '/shiny/';
-    }
-
-    function showShinyModal() {
-      console.log('[Menu] Shiny modal opened');
-      document.getElementById('shiny-modal').classList.add('show');
-      lucide.createIcons();
-    }
-
-    function hideShinyModal() {
-      document.getElementById('shiny-modal').classList.remove('show');
-      document.getElementById('shiny-copy-feedback').classList.remove('show');
-    }
-
-    function copyShinyUrl() {
-      const url = getShinyUrl();
-      console.log('[Menu] Copying Shiny URL:', url);
-      navigator.clipboard.writeText(url).then(() => {
-        document.getElementById('shiny-copy-feedback').classList.add('show');
-        setTimeout(() => {
-          document.getElementById('shiny-copy-feedback').classList.remove('show');
-        }, 2000);
-      });
-    }
-
-    function openShinyServer() {
-      console.log('[Menu] Opening Shiny in new tab');
-      window.open('/shiny/', '_blank');
-      hideShinyModal();
-    }
-
-    document.getElementById('shiny-modal').addEventListener('click', function(e) {
-      if (e.target === this) hideShinyModal();
+    // Handle Enter key in manual port input
+    document.getElementById('manual-port').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') openManualPort();
     });
 
     // Initialize

@@ -83,8 +83,7 @@ export interface RawSessionRow {
   durationMinutes: number | null;
   endReason: string | null;
   errorMessage: string | null;
-  usedShiny: number;
-  usedLiveServer: number;
+  usedDevServer: number;
   jobId: string | null;
   node: string | null;
 }
@@ -219,40 +218,30 @@ function getIdePopularity(days: number = 30): IdePopularityRow[] {
 }
 
 /**
- * Get feature usage (Shiny, Live Server)
+ * Get feature usage (Dev Server - includes Live Server, Shiny, etc.)
  */
 function getFeatureUsage(days: number = 30): Record<string, unknown> {
   const db = getDb();
   const cutoff = daysAgo(days);
 
-  // Only VS Code sessions can use Shiny and Live Server
+  // Only VS Code sessions can use dev servers
   const vscodeTotal = (db.prepare(`
     SELECT COUNT(*) as count
     FROM session_history
     WHERE started_at >= ? AND ide = 'vscode'
   `).get(cutoff) as { count: number }).count;
 
-  const shinyCount = (db.prepare(`
+  const devServerCount = (db.prepare(`
     SELECT COUNT(*) as count
     FROM session_history
-    WHERE started_at >= ? AND ide = 'vscode' AND used_shiny = 1
-  `).get(cutoff) as { count: number }).count;
-
-  const liveServerCount = (db.prepare(`
-    SELECT COUNT(*) as count
-    FROM session_history
-    WHERE started_at >= ? AND ide = 'vscode' AND used_live_server = 1
+    WHERE started_at >= ? AND ide = 'vscode' AND used_dev_server = 1
   `).get(cutoff) as { count: number }).count;
 
   return {
     vscodeTotal,
-    shiny: {
-      count: shinyCount,
-      percent: vscodeTotal > 0 ? Math.round((shinyCount / vscodeTotal) * 100) : 0,
-    },
-    liveServer: {
-      count: liveServerCount,
-      percent: vscodeTotal > 0 ? Math.round((liveServerCount / vscodeTotal) * 100) : 0,
+    devServer: {
+      count: devServerCount,
+      percent: vscodeTotal > 0 ? Math.round((devServerCount / vscodeTotal) * 100) : 0,
     },
   };
 }
@@ -629,8 +618,7 @@ function exportRawSessions(days: number = 30): RawSessionRow[] {
       duration_minutes as durationMinutes,
       end_reason as endReason,
       error_message as errorMessage,
-      used_shiny as usedShiny,
-      used_live_server as usedLiveServer,
+      used_dev_server as usedDevServer,
       job_id as jobId,
       node
     FROM session_history
@@ -658,8 +646,7 @@ function exportSummary(days: number = 30): SummaryRow[] {
       AVG(cpus) as avgCpus,
       AVG(wait_seconds) as avgWaitSeconds,
       SUM(CASE WHEN gpu IS NOT NULL THEN 1 ELSE 0 END) as gpuSessions,
-      SUM(used_shiny) as shinySessions,
-      SUM(used_live_server) as liveServerSessions
+      SUM(used_dev_server) as devServerSessions
     FROM session_history
     WHERE started_at >= ?
     GROUP BY user, account, ide, hpc
