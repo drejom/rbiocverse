@@ -67,10 +67,8 @@ make clean
 ### SLURM Job Script
 
 ```bash
-# Find free port and start proxy
-PROXY_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()')
-~/bin/hpc-proxy --port $PROXY_PORT &
-echo $PROXY_PORT > ~/.hpc-proxy/port
+# Start proxy (auto-assigns port and writes to ~/.hpc-proxy/port)
+~/bin/hpc-proxy --port 0 &
 ```
 
 ### Manager Tunnel

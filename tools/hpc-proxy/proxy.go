@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+// Pre-compiled regexes for performance
+var (
+	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
+	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
+)
+
 // Proxy handles HTTP/WebSocket reverse proxying with path-based routing
 type Proxy struct {
 	port        int
@@ -71,7 +77,7 @@ func (p *Proxy) Shutdown() {
 	}
 }
 
-// ServeHTTP handles all incoming requests
+// ServeHTTP handles all incoming requests (HTTP and WebSocket)
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse route: /port/:port/*
 	targetPort, remainingPath, ok := p.parseRoute(r.URL.Path)
@@ -90,21 +96,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s -> localhost:%d%s", r.Method, r.URL.Path, targetPort, remainingPath)
 	}
 
-	// Check for WebSocket upgrade
-	if isWebSocketRequest(r) {
-		p.handleWebSocket(w, r, targetPort, remainingPath)
-		return
-	}
-
-	// Regular HTTP proxy
+	// Proxy HTTP/WebSocket request (httputil.ReverseProxy handles both in Go 1.21+)
 	p.handleHTTP(w, r, targetPort, remainingPath)
 }
 
 // parseRoute extracts port and path from /port/:port/remaining/path
 func (p *Proxy) parseRoute(path string) (port int, remaining string, ok bool) {
-	// Match /port/1234 or /port/1234/anything
-	pattern := regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
-	matches := pattern.FindStringSubmatch(path)
+	matches := routePattern.FindStringSubmatch(path)
 	if matches == nil {
 		return 0, "", false
 	}
@@ -122,7 +120,7 @@ func (p *Proxy) parseRoute(path string) (port int, remaining string, ok bool) {
 	return port, remaining, true
 }
 
-// handleHTTP proxies regular HTTP requests
+// handleHTTP proxies HTTP and WebSocket requests using httputil.ReverseProxy
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort int, path string) {
 	target := &url.URL{
 		Scheme: "http",
@@ -145,7 +143,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 		req.Header.Set("X-Original-Path", r.URL.Path)
 	}
 
-	// Optionally modify response for base tag injection
+	// Optionally modify response for base tag injection (HTTP only, not WebSocket)
 	if p.baseRewrite {
 		proxy.ModifyResponse = func(resp *http.Response) error {
 			return p.injectBaseTag(resp, targetPort)
@@ -159,85 +157,6 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	}
 
 	proxy.ServeHTTP(w, r)
-}
-
-// handleWebSocket proxies WebSocket connections
-func (p *Proxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targetPort int, path string) {
-	// Preserve query string for WebSocket connections
-	if r.URL.RawQuery != "" {
-		path = path + "?" + r.URL.RawQuery
-	}
-	// Connect to backend
-	backendAddr := fmt.Sprintf("127.0.0.1:%d", targetPort)
-	backendConn, err := net.DialTimeout("tcp", backendAddr, 10*time.Second)
-	if err != nil {
-		log.Printf("WebSocket backend connect failed: %v", err)
-		http.Error(w, "Backend unavailable", http.StatusBadGateway)
-		return
-	}
-
-	// Hijack client connection
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		backendConn.Close()
-		http.Error(w, "WebSocket not supported", http.StatusInternalServerError)
-		return
-	}
-
-	clientConn, _, err := hijacker.Hijack()
-	if err != nil {
-		backendConn.Close()
-		log.Printf("Hijack failed: %v", err)
-		return
-	}
-
-	// Forward the upgrade request to backend
-	upgradeReq := p.buildUpgradeRequest(r, path)
-	if _, err := backendConn.Write([]byte(upgradeReq)); err != nil {
-		clientConn.Close()
-		backendConn.Close()
-		log.Printf("Failed to send upgrade request: %v", err)
-		return
-	}
-
-	// Bidirectional copy
-	go func() {
-		io.Copy(backendConn, clientConn)
-		backendConn.Close()
-	}()
-	go func() {
-		io.Copy(clientConn, backendConn)
-		clientConn.Close()
-	}()
-
-	if p.verbose {
-		log.Printf("WebSocket connection established to port %d", targetPort)
-	}
-}
-
-// buildUpgradeRequest constructs the WebSocket upgrade request
-func (p *Proxy) buildUpgradeRequest(r *http.Request, path string) string {
-	var sb strings.Builder
-
-	// Request line
-	sb.WriteString(fmt.Sprintf("GET %s HTTP/1.1\r\n", path))
-
-	// Copy relevant headers
-	for name, values := range r.Header {
-		// Skip hop-by-hop headers except for WebSocket-related ones
-		nameLower := strings.ToLower(name)
-		if nameLower == "connection" || nameLower == "upgrade" ||
-			nameLower == "sec-websocket-key" || nameLower == "sec-websocket-version" ||
-			nameLower == "sec-websocket-extensions" || nameLower == "sec-websocket-protocol" ||
-			nameLower == "host" || nameLower == "origin" {
-			for _, v := range values {
-				sb.WriteString(fmt.Sprintf("%s: %s\r\n", name, v))
-			}
-		}
-	}
-
-	sb.WriteString("\r\n")
-	return sb.String()
 }
 
 // injectBaseTag modifies HTML responses to inject a <base> tag
@@ -276,7 +195,6 @@ func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
 	bodyStr := string(body)
 
 	// Try to inject after <head> tag
-	headPattern := regexp.MustCompile(`(?i)(<head[^>]*>)`)
 	if headPattern.MatchString(bodyStr) {
 		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
 	} else {
@@ -293,10 +211,4 @@ func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
 	}
 
 	return nil
-}
-
-// isWebSocketRequest checks if this is a WebSocket upgrade request
-func isWebSocketRequest(r *http.Request) bool {
-	return strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
-		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
 }

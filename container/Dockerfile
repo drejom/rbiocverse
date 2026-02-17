@@ -178,7 +178,8 @@ RUN bash /tmp/slurm-wrappers.sh && rm /tmp/slurm-wrappers.sh
 # =============================================================================
 # Routes /port/:port/* requests to localhost::port, allowing multiple users
 # on the same compute node to run dev servers without port conflicts.
-# Built from: tools/hpc-proxy/ (run `make build-linux` before docker build)
+# Binary is built by GitHub Actions (build-container.yml) before Docker build.
+# Source: tools/hpc-proxy/
 COPY bin/hpc-proxy /usr/local/bin/hpc-proxy
 RUN chmod +x /usr/local/bin/hpc-proxy
 

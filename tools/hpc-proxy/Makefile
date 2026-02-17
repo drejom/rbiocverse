@@ -7,7 +7,7 @@ VERSION?=dev
 BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -s -w"
 
-.PHONY: all build build-linux test clean
+.PHONY: all build build-linux test clean install fmt vet
 
 # Default: build for current platform
 all: build
