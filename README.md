@@ -39,36 +39,25 @@ See [manager/docs/ARCHITECTURE.md](manager/docs/ARCHITECTURE.md) for details.
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────────────────────┐
-│  Browser        │     │  Manager        │     │  HPC Cluster                    │
-│                 │     │  (cgt.coh.org   │     │                                 │
-│  IDE in iframe  │◄───►│   or Dokploy)   │     │  ┌─────────────────────────┐   │
-│                 │     │                 │     │  │ SLURM Compute Node      │   │
-└─────────────────┘     │  Docker Compose │────►│  │                         │   │
-                        │  + SSH tunnel   │ SSH │  │ Singularity Container   │   │
-                        └─────────────────┘     │  │ + Mounted R/Python libs │   │
-                                                │  └─────────────────────────┘   │
-                                                └─────────────────────────────────┘
+Browser → Manager → SSH Tunnel → SLURM Job → Container
+   │         │           │            │           │
+   │         │           │            │           └─ Runs IDE (VS Code/RStudio/Jupyter)
+   │         │           │            └─ Requests compute resources
+   │         │           └─ Establishes port forwarding
+   │         └─ Manages sessions, auth, proxy routing
+   └─ Accesses IDE through web interface
 ```
-
-### How It Works
-
-1. **Manager** runs in Docker (on cgt.coh.org or Dokploy)
-2. User requests an IDE session via web UI
-3. Manager SSHs to HPC login node, submits SLURM job
-4. SLURM allocates compute node, runs Singularity container
-5. Container mounts shared R/Python libraries from cluster storage
-6. Manager establishes SSH tunnel to container's IDE port
-7. User accesses IDE through Manager's web proxy
 
 ### HPC Storage Layout
 
-The container is lean (~2-3GB). Packages are installed to shared storage during Bioconductor release cycles:
-
-| Cluster | Container | R Libraries | Python Libraries |
-|---------|-----------|-------------|------------------|
-| Gemini | `/packages/.../rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
-| Apollo | `/opt/.../rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
+```
+Container (lean, ~2-3GB)          Shared Libraries (HPC storage)
+┌─────────────────────────┐       ┌─────────────────────────────┐
+│ System deps, tools      │       │ rlibs/bioc-3.22/ (R)        │
+│ JupyterLab + extensions │──────▶│ python/bioc-3.22/ (Python)  │
+│ pixi, VS Code CLI       │       │ Shared by all users         │
+└─────────────────────────┘       └─────────────────────────────┘
+```
 
 ## Deployment
 
