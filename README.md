@@ -12,14 +12,14 @@ Unified R/Bioconductor development environment for HPC clusters. Provides browse
 ## Components
 
 ### Container (`container/`)
-Docker container extending [Bioconductor Docker](https://bioconductor.org/help/docker/) for HPC.
+Lean Docker container (~2-3GB) extending [Bioconductor Docker](https://bioconductor.org/help/docker/) for HPC. Contains system dependencies and tools; R/Python packages live on cluster shared storage.
 
 **Included:**
-- **R 4.5** with ~1500 Bioconductor/CRAN packages (Seurat, DESeq2, etc.)
-- **Python 3.12** with SCverse ecosystem (scanpy, scvi-tools, etc.)
+- System deps for R packages (Seurat, monocle3, velocyto.R, etc.)
 - **JupyterLab** with LSP, formatting, resource monitor, git integration
 - **pixi** for additional package management
 - **Genomics tools**: bcftools, samtools, bedtools, sra-tools
+- **VS Code CLI** for serve-web and tunnels
 
 See [container/USER_GUIDE.md](container/USER_GUIDE.md) for usage.
 
@@ -36,66 +36,90 @@ Web-based session manager for launching IDE sessions on HPC.
 
 See [manager/docs/ARCHITECTURE.md](manager/docs/ARCHITECTURE.md) for details.
 
+## Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────────────────────┐
+│  Browser        │     │  Manager        │     │  HPC Cluster                    │
+│                 │     │  (cgt.coh.org   │     │                                 │
+│  IDE in iframe  │◄───►│   or Dokploy)   │     │  ┌─────────────────────────┐   │
+│                 │     │                 │     │  │ SLURM Compute Node      │   │
+└─────────────────┘     │  Docker Compose │────►│  │                         │   │
+                        │  + SSH tunnel   │ SSH │  │ Singularity Container   │   │
+                        └─────────────────┘     │  │ + Mounted R/Python libs │   │
+                                                │  └─────────────────────────┘   │
+                                                └─────────────────────────────────┘
+```
+
+### How It Works
+
+1. **Manager** runs in Docker (on cgt.coh.org or Dokploy)
+2. User requests an IDE session via web UI
+3. Manager SSHs to HPC login node, submits SLURM job
+4. SLURM allocates compute node, runs Singularity container
+5. Container mounts shared R/Python libraries from cluster storage
+6. Manager establishes SSH tunnel to container's IDE port
+7. User accesses IDE through Manager's web proxy
+
+### HPC Storage Layout
+
+The container is lean (~2-3GB). Packages are installed to shared storage during Bioconductor release cycles:
+
+| Cluster | Container | R Libraries | Python Libraries |
+|---------|-----------|-------------|------------------|
+| Gemini | `/packages/.../rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
+| Apollo | `/opt/.../rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
+
 ## Deployment
 
-### Pre-built Images (Recommended)
+### Manager (Docker Compose)
+
+The manager runs on a host with SSH access to HPC clusters.
 
 ```bash
-# Copy environment template and configure
-cp .env.example .env
-# Edit .env with your settings
+# Clone and configure
+git clone https://github.com/drejom/rbiocverse.git
+cd rbiocverse
+cp .env.cgt.example .env   # or .env.dokploy.example
+# Edit .env with your settings (SSH paths, JWT secret, etc.)
 
-# Pull and start
-docker compose pull
+# Start manager
 docker compose up -d
 ```
 
-**Images:**
-- `ghcr.io/drejom/rbiocverse` - Bioconductor container for HPC
-- `ghcr.io/drejom/rbiocverse-manager` - Web session manager
+| Environment | SSH Config | Use `.env` template |
+|-------------|------------|---------------------|
+| cgt.coh.org | Direct access to HPC | `.env.cgt.example` |
+| Dokploy/TrueNAS | Double jump host | `.env.dokploy.example` |
 
-### Environment Configurations
+### HPC Container (Singularity)
 
-| File | Environment | Description |
-|------|-------------|-------------|
-| `.env.dokploy.example` | Dokploy/TrueNAS | Double jump host SSH, Traefik routing |
-| `.env.cgt.example` | cgt.coh.org | Direct HPC access from work VM |
+The Bioconductor container is built by GitHub Actions and pulled to clusters as a Singularity image.
+
+```bash
+# On HPC: Pull latest container (submits SLURM job)
+cd container
+./scripts/pull-container.sh --tag latest
+
+# Install/update R packages to shared storage
+./scripts/install-packages.sh --to 3.22 --submit
+
+# Install/update Python packages
+./scripts/install-python.sh --to 3.22 --submit
+```
 
 ## Development
 
 ```bash
-# Manager (Node.js)
+# Manager
 cd manager
 npm install
-npm test
-npm start
+./scripts/dev.sh start   # Start dev server at http://localhost:3000
+npm test                 # Run tests
 
-# Container (Docker)
+# Container
 cd container
 docker buildx build --platform linux/amd64 -t rbiocverse:test .
-```
-
-## Architecture
-
-```
-Browser → Manager → SSH Tunnel → SLURM Job → Container
-   │         │           │            │           │
-   │         │           │            │           └─ Runs IDE (VS Code/RStudio/Jupyter)
-   │         │           │            └─ Requests compute resources
-   │         │           └─ Establishes port forwarding
-   │         └─ Manages sessions, auth, proxy routing
-   └─ Accesses IDE through web interface
-```
-
-### HPC Storage Layout
-
-```
-Container (lean, ~2-3GB)          Shared Libraries (HPC storage)
-┌─────────────────────────┐       ┌─────────────────────────────┐
-│ System deps, tools      │       │ rlibs/bioc-3.22/ (R)        │
-│ JupyterLab + extensions │──────▶│ python/bioc-3.22/ (Python)  │
-│ pixi, VS Code CLI       │       │ Shared by all users         │
-└─────────────────────────┘       └─────────────────────────────┘
 ```
 
 ## Documentation
