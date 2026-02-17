@@ -5,6 +5,7 @@
 # rbiocverse
 
 [![Tests](https://github.com/drejom/rbiocverse/actions/workflows/test.yml/badge.svg)](https://github.com/drejom/rbiocverse/actions/workflows/test.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/drejom/5309bba1b50ac79e6b1744fd0ccfd20d/raw/coverage-main.json)](https://github.com/drejom/rbiocverse/actions/workflows/test.yml)
 
 Unified R/Bioconductor development environment for HPC clusters. Provides browser-based IDE access (VS Code, RStudio, JupyterLab) to SLURM compute nodes via SSH tunneling.
 
