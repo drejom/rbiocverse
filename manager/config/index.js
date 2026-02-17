@@ -333,7 +333,7 @@ function createReleasePaths(version, supportedClusters = ['gemini', 'apollo']) {
     const basePath = clusterBasePaths[cluster];
     if (basePath) {
       paths[cluster] = {
-        singularityImage: `${basePath}/vscode-rbioc_${version}.sif`,
+        singularityImage: `${basePath}/rbiocverse_${version}.sif`,
         rLibsSite: `${basePath}/rlibs/bioc-${version}`,
         pythonEnv: `${basePath}/python/bioc-${version}`,
       };

@@ -1,4 +1,10 @@
+# Environment files (keep examples)
 .env
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+
 *.log
 node_modules/
 

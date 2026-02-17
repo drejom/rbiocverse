@@ -1,4 +1,7 @@
-name: Release to Production
+name: Release
+
+# Coordinated release workflow for rbiocverse monorepo
+# Creates GitHub release, builds both container and manager images
 
 on:
   workflow_dispatch:
@@ -11,25 +14,28 @@ on:
         description: 'Release notes (optional, auto-generated if empty)'
         required: false
         type: string
+      build_container:
+        description: 'Build container image'
+        type: boolean
+        default: true
+      build_manager:
+        description: 'Build manager image'
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  release:
+  validate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
+    outputs:
+      version: ${{ inputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Validate version format
         run: |
@@ -45,124 +51,193 @@ jobs:
             exit 1
           fi
 
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      tag: v${{ inputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Check for changes
         id: check-changes
         run: |
-          # Check if dev has commits that main doesn't
-          COMMITS=$(git log origin/main..origin/dev --oneline | head -20)
+          COMMITS=$(git log origin/main..origin/dev --oneline 2>/dev/null | head -20 || echo "")
           if [ -z "$COMMITS" ]; then
-            echo "Error: No changes between main and dev. Nothing to release."
-            echo "If you just merged manually, dev and main are in sync."
-            exit 1
+            echo "No changes between main and dev - using main branch directly"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes to release:"
+            echo "$COMMITS"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
-          echo "Changes to release:"
-          echo "$COMMITS"
-          echo "commit_count=$(git rev-list --count origin/main..origin/dev)" >> $GITHUB_OUTPUT
 
-      - name: Create or find release PR
-        id: create-pr
+      - name: Create release PR (if changes exist)
+        if: steps.check-changes.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if PR already exists
-          EXISTING_PR=$(gh pr list --base main --head dev --json number,url -q '.[0]')
+          EXISTING_PR=$(gh pr list --base main --head dev --json number -q '.[0].number' || echo "")
 
-          if [ -n "$EXISTING_PR" ]; then
-            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
-            PR_URL=$(echo "$EXISTING_PR" | jq -r '.url')
-            echo "Using existing PR #$PR_NUMBER: $PR_URL"
-            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-            exit 0
+          if [ -z "$EXISTING_PR" ]; then
+            CHANGELOG=$(git log origin/main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
+
+            {
+              echo "## Release v${{ inputs.version }}"
+              echo ""
+              echo "### Changes"
+              echo "$CHANGELOG"
+              echo ""
+              echo "### Release Notes"
+              echo "${{ inputs.release_notes || 'See changes above.' }}"
+            } > /tmp/pr-body.md
+
+            gh pr create --base main --head dev --title "Release v${{ inputs.version }}" --body-file /tmp/pr-body.md
+            EXISTING_PR=$(gh pr list --base main --head dev --json number -q '.[0].number')
           fi
 
-          # Get commits between main and dev for changelog
-          CHANGELOG=$(git log origin/main..origin/dev --pretty=format:"- %s (%h)" --no-merges | head -50)
-          RELEASE_NOTES="${{ inputs.release_notes || 'See changes above.' }}"
-          VERSION="${{ inputs.version }}"
-
-          # Create PR body file to handle special characters properly
-          {
-            echo "## Release v${VERSION}"
-            echo ""
-            echo "### Changes"
-            echo "$CHANGELOG"
-            echo ""
-            echo "### Release Notes"
-            echo "$RELEASE_NOTES"
-            echo ""
-            echo "---"
-            echo "*This PR was automatically created by the release workflow.*"
-          } > /tmp/pr-body.md
-
-          echo "PR body:"
-          cat /tmp/pr-body.md
-
-          # Create PR from dev to main
-          echo "Creating PR from dev to main..."
-          gh pr create \
-            --base main \
-            --head dev \
-            --title "Release v${VERSION}" \
-            --body-file /tmp/pr-body.md
-
-          # Extract PR number
-          PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
-          echo "Created PR #$PR_NUMBER"
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-
-      - name: Merge PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
-
-          if [ -z "$PR_NUMBER" ]; then
-            # Fallback: try to find PR again
-            PR_NUMBER=$(gh pr list --base main --head dev --json number -q '.[0].number')
-          fi
-
-          if [ -z "$PR_NUMBER" ]; then
-            echo "Error: No PR found to merge"
-            echo "Debug: Listing all open PRs..."
-            gh pr list --state open
-            exit 1
-          fi
-
-          echo "Merging PR #$PR_NUMBER..."
-          gh pr merge "$PR_NUMBER" --merge --delete-branch=false
+          gh pr merge "$EXISTING_PR" --merge --delete-branch=false
 
       - name: Create tag and release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Checkout main after merge
           git fetch origin main
           git checkout main
           git pull origin main
 
-          # Create tag
           git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
           git push origin "v${{ inputs.version }}"
 
-          # Generate release notes
           if [ -n "${{ inputs.release_notes }}" ]; then
             NOTES="${{ inputs.release_notes }}"
           else
-            NOTES=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" --no-merges 2>/dev/null || git log --pretty=format:"- %s" --no-merges -20)
+            NOTES=$(git log $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "HEAD~20")..HEAD --pretty=format:"- %s" --no-merges | head -30)
           fi
 
-          # Create GitHub release
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --notes "${NOTES}" \
             --target main
 
-      - name: Summary
+  build-container:
+    needs: release
+    if: inputs.build_container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/drejom/rbiocverse
+          tags: |
+            type=semver,pattern={{version}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./container
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-manager:
+    needs: release
+    if: inputs.build_manager
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/drejom/rbiocverse-manager
+          tags: |
+            type=semver,pattern={{version}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./manager
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  summary:
+    needs: [release, build-container, build-manager]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release summary
         run: |
-          echo "## Release Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "## Release v${{ inputs.version }} Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** v${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tag:** [v${{ inputs.version }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ inputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "### Images Built" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.build_container }}" == "true" ]; then
+            echo "- \`ghcr.io/drejom/rbiocverse:${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.build_manager }}" == "true" ]; then
+            echo "- \`ghcr.io/drejom/rbiocverse-manager:${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Dokploy will auto-deploy from the \`main\` branch webhook." >> $GITHUB_STEP_SUMMARY
+          echo "Deploy with: \`docker compose pull && docker compose up -d\`" >> $GITHUB_STEP_SUMMARY

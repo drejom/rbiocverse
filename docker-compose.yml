@@ -1,7 +1,10 @@
+# rbiocverse unified monorepo
+# Single compose file with env-based configuration for different deployments
+
 services:
   manager:
-    build: ./manager
-    container_name: ${COMPOSE_PROJECT_NAME:-hpc}-app
+    image: ghcr.io/drejom/rbiocverse-manager:${MANAGER_VERSION:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-rbiocverse}-app
     pull_policy: always
     restart: unless-stopped
 
@@ -28,23 +31,22 @@ services:
       # Logging level and component debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # DEBUG_COMPONENTS: comma-separated list (vscode,ssh,cache,tunnel,state,ui,rstudio,liveserver) or 'all'
-      # Dev: vscode,ssh,cache,tunnel,state,ui (all except rstudio)
-      # Prod: empty (all off)
       - DEBUG_COMPONENTS=${DEBUG_COMPONENTS:-}
+      # Authentication
+      - JWT_SECRET=${JWT_SECRET}
 
     volumes:
-      # SSH keys copied from studio to TrueNAS (mount to apps user home)
-      - /mnt/ssd/docker/hpc-ssh:/home/apps/.ssh:ro
-      # Persistent state storage (Phase 1.4)
-      # Directory will be created via Dokploy setup scripts
-      - data:/data
+      # SSH keys mount - path varies by environment
+      - ${SSH_MOUNT_PATH:-/mnt/ssd/docker/hpc-ssh}:/home/apps/.ssh:ro
+      # Persistent state storage
+      - ${DATA_PATH:-data}:/data
 
-    expose:
-      - 3000   # Manager UI/API (Traefik routes here)
-      - 8000   # Internal code-server proxy
+    ports:
+      - "${MANAGER_PORT:-3000}:3000"
+      - "${IDE_PORT:-8000}:8000"
 
     networks:
-      - dokploy-network
+      - ${NETWORK_NAME:-default}
 
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
@@ -55,8 +57,9 @@ services:
 
 volumes:
   data:
-    # Named volume for persistent state - Dokploy manages lifecycle
+    # Named volume for persistent state
 
 networks:
   dokploy-network:
     external: true
+  default:
