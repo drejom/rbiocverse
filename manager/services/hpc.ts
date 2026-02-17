@@ -455,16 +455,11 @@ echo ${bootstrapBase64} | base64 -d | sh
 # Find available port and export as IDE_PORT
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
-# Start hpc-proxy for dev server port routing
+# Start hpc-proxy for dev server port routing (runs inside container)
 # Note: hpc-proxy runs in background; SLURM cleans it up when job ends
 mkdir -p $HOME/.hpc-proxy
-# Use local binary for testing if available, otherwise use container version
-if [ -x $HOME/.local/bin/hpc-proxy ]; then
-  $HOME/.local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
-else
-  ${this.cluster.singularityBin} exec ${releasePaths.singularityImage} \\
-    /usr/local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
-fi
+${this.cluster.singularityBin} exec ${releasePaths.singularityImage} \\
+  /usr/local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
 
 # Wait for proxy to write port file (up to 5 seconds)
 for ((i=0; i<10; i++)); do
