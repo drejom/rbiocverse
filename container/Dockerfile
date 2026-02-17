@@ -174,6 +174,15 @@ COPY scripts/slurm-wrappers.sh /tmp/
 RUN bash /tmp/slurm-wrappers.sh && rm /tmp/slurm-wrappers.sh
 
 # =============================================================================
+# HPC Proxy (multi-user port routing for dev servers)
+# =============================================================================
+# Routes /port/:port/* requests to localhost::port, allowing multiple users
+# on the same compute node to run dev servers without port conflicts.
+# Built from: tools/hpc-proxy/ (run `make build-linux` before docker build)
+COPY bin/hpc-proxy /usr/local/bin/hpc-proxy
+RUN chmod +x /usr/local/bin/hpc-proxy
+
+# =============================================================================
 # R Configuration
 # =============================================================================
 
