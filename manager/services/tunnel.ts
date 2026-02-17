@@ -13,6 +13,7 @@ import { log } from '../lib/logger';
 interface TunnelStartOptions {
   remotePort?: number;
   user?: string;
+  proxyPort?: number;  // hpc-proxy port for dev server routing (VS Code only)
 }
 
 interface ProcessInfo {
@@ -206,10 +207,16 @@ class TunnelService {
     const portForwards = [`-L`, `${localPort}:${node}:${remotePort}`];
 
     // Add additional ports (Live Server, React dev server, etc.) - only for VS Code
-    // These always use same port on both ends (no dynamic assignment for dev servers)
     if (ide === 'vscode') {
-      for (const extraPort of config.additionalPorts) {
-        portForwards.push('-L', `${extraPort}:${node}:${extraPort}`);
+      if (options.proxyPort) {
+        // Use hpc-proxy: forward single proxy port instead of individual dev server ports
+        portForwards.push('-L', `${config.hpcProxyLocalPort}:${node}:${options.proxyPort}`);
+        log.tunnel(`Using hpc-proxy on port ${options.proxyPort}`, { hpc: hpcName });
+      } else {
+        // Legacy: forward individual dev server ports directly
+        for (const extraPort of config.additionalPorts) {
+          portForwards.push('-L', `${extraPort}:${node}:${extraPort}`);
+        }
       }
     }
 

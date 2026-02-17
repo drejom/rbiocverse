@@ -499,6 +499,44 @@ jupyterProxy.on('close', () => {
   log.debugFor('jupyter', 'proxy connection closed');
 });
 
+// Proxy for hpc-proxy port routing (dev servers via /port/:port/*)
+// Routes /port/:port/* requests to hpc-proxy which forwards to localhost:port on HPC node
+const portProxy = httpProxy.createProxyServer({
+  ws: true,
+  target: `http://127.0.0.1:${config.hpcProxyLocalPort}`,
+  changeOrigin: true,
+});
+
+portProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+  log.debugFor('port-proxy', 'proxy error', { error: err.message, url: req.url });
+  if (res instanceof http.ServerResponse && !res.headersSent) {
+    res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('Dev server unavailable. Is it running?');
+  }
+});
+
+portProxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
+  log.debugFor('port-proxy', 'proxyReq', {
+    method: req.method,
+    url: req.url,
+    path: proxyReq.path,
+  });
+});
+
+portProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingMessage) => {
+  log.debugFor('port-proxy', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
+  updateActivity();
+});
+
+portProxy.on('open', () => {
+  updateActivity();
+  log.debugFor('port-proxy', 'proxy socket opened');
+});
+
+portProxy.on('close', () => {
+  log.debugFor('port-proxy', 'proxy connection closed');
+});
+
 // Check if any session is running
 function hasRunningSession(): boolean {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
@@ -623,6 +661,17 @@ app.use('/jupyter-direct', (req: Request, res: Response) => {
   jupyterProxy.web(req, res);
 });
 
+// Route /port/:port/* through hpc-proxy for dev server access
+// hpc-proxy handles the /port/:port/* -> localhost:port routing on HPC node
+app.use('/port', (req: Request, res: Response) => {
+  if (!hasRunningSession()) {
+    log.debugFor('port-proxy', 'rejected - no running session');
+    return res.redirect('/');
+  }
+  log.debugFor('port-proxy', `${req.method} ${req.path}`);
+  portProxy.web(req, res);
+});
+
 // Global error handler - catches HpcError and returns structured JSON
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HpcError) {
@@ -660,12 +709,17 @@ stateManager.load().then(async () => {
     log.info(`Default HPC: ${config.defaultHpc}`);
   });
 
-  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, Live Server, and Shiny
+  // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, Live Server, Shiny, and port proxy
   server.on('upgrade', (req: http.IncomingMessage, socket: import('stream').Duplex, head: Buffer) => {
     log.proxy(`WebSocket upgrade: ${req.url}`);
     if (hasRunningSession()) {
+      // Port proxy WebSocket (dev servers on custom ports)
+      if (req.url?.startsWith('/port/')) {
+        log.debugFor('port-proxy', `WebSocket upgrade: ${req.url}`);
+        portProxy.ws(req, socket, head);
+      }
       // Live Server WebSocket (for hot reload)
-      if (req.url?.startsWith('/live')) {
+      else if (req.url?.startsWith('/live')) {
         liveServerProxy.ws(req, socket, head);
       }
       // Shiny WebSocket
