@@ -69,7 +69,7 @@ get_container_path() {
     local version="$2"
     local base
     base=$(get_container_base "$cluster")
-    echo "${base}/vscode-rbioc_${version}.sif"
+    echo "${base}/rbiocverse_${version}.sif"
 }
 
 get_library_path() {
@@ -100,7 +100,7 @@ submit_pull_job() {
     library_path=$(get_library_path "$cluster" "$bioc_version")
     local singularity_module
     singularity_module=$(get_singularity_module "$cluster")
-    local image_url="docker://ghcr.io/drejom/vscode-rbioc:${tag}"
+    local image_url="docker://ghcr.io/drejom/rbiocverse:${tag}"
     local log_dir
     log_dir=$(dirname "$container_path")
     local log_file="${log_dir}/pull_${bioc_version}.log"
