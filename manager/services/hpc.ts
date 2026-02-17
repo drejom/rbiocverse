@@ -461,7 +461,7 @@ mkdir -p $HOME/.hpc-proxy
 HPC_PROXY_PID=$!
 
 # Wait for proxy to write port file (up to 5 seconds)
-for i in 1 2 3 4 5 6 7 8 9 10; do
+for ((i=0; i<10; i++)); do
   [ -f $HOME/.hpc-proxy/port ] && break
   sleep 0.5
 done

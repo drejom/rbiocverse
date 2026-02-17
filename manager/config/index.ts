@@ -3,22 +3,7 @@
  * Centralizes all environment variables and cluster-specific settings
  */
 
-// Type definitions for configuration objects
-
-interface AppConfig {
-  hpcUser: string;
-  defaultHpc: string;
-  defaultIde: string;
-  defaultCpus: string;
-  defaultMem: string;
-  defaultTime: string;
-  additionalPorts: number[];
-  sessionIdleTimeout: number;
-  adminEmail: string | null;
-  jwtSecret: string | undefined;
-  sessionExpiryDays: number;
-  hpcProxyLocalPort: number;
-}
+import type { AppConfig } from '../types';
 
 interface VsCodeKeybinding {
   key: string;

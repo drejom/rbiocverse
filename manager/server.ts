@@ -668,7 +668,9 @@ app.use('/port', (req: Request, res: Response) => {
     log.debugFor('port-proxy', 'rejected - no running session');
     return res.redirect('/');
   }
-  log.debugFor('port-proxy', `${req.method} ${req.path}`);
+  // Preserve full path - Express strips /port prefix, but hpc-proxy needs it
+  req.url = req.originalUrl;
+  log.debugFor('port-proxy', `${req.method} ${req.originalUrl}`);
   portProxy.web(req, res);
 });
 
