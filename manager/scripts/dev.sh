@@ -63,7 +63,7 @@ start_server() {
         rm -f "$PID_FILE"
     fi
 
-    echo "Starting development server..."
+    echo "Starting development server (transpile-only mode)..."
     echo "  TEST_USERNAME: $TEST_USERNAME"
     echo "  ADMIN_USER: $ADMIN_USER"
     echo "  DB_PATH: $DB_PATH"
@@ -71,7 +71,7 @@ start_server() {
     echo ""
 
     cd "$MANAGER_DIR"
-    node server.js > "$LOG_FILE" 2>&1 &
+    npx ts-node --transpile-only server.ts > "$LOG_FILE" 2>&1 &
     PID=$!
     echo $PID > "$PID_FILE"
 

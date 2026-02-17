@@ -13,6 +13,9 @@ RUN cd ui && npm ci
 # Copy source code
 COPY . .
 
+# Build TypeScript backend
+RUN npm run build:ts
+
 # Build React UI
 RUN cd ui && npm run build
 
@@ -37,17 +40,15 @@ RUN npm ci --omit=dev --ignore-scripts && npm rebuild better-sqlite3
 # Remove build tools after native modules are compiled (reduce image size)
 RUN apk del python3 make g++
 
-# Copy backend source (explicit list, not wildcard)
-COPY --from=builder /app/server.js ./
-COPY --from=builder /app/config ./config
-COPY --from=builder /app/content ./content
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/routes ./routes
-COPY --from=builder /app/services ./services
-COPY --from=builder /app/public ./public
+# Copy compiled TypeScript output
+COPY --from=builder /app/dist ./dist
 
-# Copy built React UI
-COPY --from=builder /app/ui/dist ./ui/dist
+# Copy static content into dist/ (paths resolve relative to compiled server.js)
+COPY --from=builder /app/content ./dist/content
+COPY --from=builder /app/public ./dist/public
+
+# Copy built React UI into dist/
+COPY --from=builder /app/ui/dist ./dist/ui/dist
 
 # Change ownership to apps user
 RUN chown -R apps:apps /app
@@ -59,4 +60,4 @@ USER apps
 
 EXPOSE 3000 8000
 
-CMD ["node", "server.js"]
+CMD ["node", "dist/server.js"]
