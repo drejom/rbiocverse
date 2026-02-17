@@ -212,22 +212,20 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
         </p>
       ) : null}
 
-      {/* Manage Keys button - opens modal with Generate/Import options */}
-      {needsKeySetup && (
-        <div className="setup-section">
-          <button
-            className="key-btn"
-            onClick={() => setShowKeyModal(true)}
-            style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
-          >
-            <Settings size={18} />
-            {publicKey ? 'Manage SSH Keys' : 'Set Up SSH Key'}
-          </button>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: 8 }}>
-            Generate a new key or import an existing one
-          </p>
-        </div>
-      )}
+      {/* Manage Keys button - always visible so users can import/generate keys */}
+      <div className="setup-section">
+        <button
+          className="key-btn"
+          onClick={() => setShowKeyModal(true)}
+          style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
+        >
+          <Settings size={18} />
+          Manage SSH Keys
+        </button>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: 8 }}>
+          Generate a new key or import an existing one
+        </p>
+      </div>
 
       {/* SSH Key Section - show if we have a managed key to display */}
       {publicKey && (
