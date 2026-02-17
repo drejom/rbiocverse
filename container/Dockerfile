@@ -77,6 +77,8 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
     # Genomics tools (bedr deps + general)
     bedtools bedops \
     bcftools vcftools samtools tabix picard-tools \
+    # Octave (for Jupyter octave_kernel, #3)
+    octave \
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
