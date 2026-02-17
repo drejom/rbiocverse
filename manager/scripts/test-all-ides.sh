@@ -35,8 +35,8 @@ get_singularity() {
 
 get_image() {
   case $1 in
-    gemini) echo "/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif" ;;
-    apollo) echo "/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif" ;;
+    gemini) echo "/packages/singularity/shared_cache/rbioc/rbiocverse_3.22.sif" ;;
+    apollo) echo "/opt/singularity-images/rbioc/rbiocverse_3.22.sif" ;;
   esac
 }
 
