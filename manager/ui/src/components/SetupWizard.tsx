@@ -30,12 +30,11 @@ interface TestsState {
 }
 
 interface SetupWizardProps {
-  publicKey: string;
   onComplete?: () => void;
 }
 
-function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
-  const { completeSetup } = useAuth();
+function SetupWizard({ onComplete }: SetupWizardProps) {
+  const { completeSetup, user } = useAuth();
   const [tests, setTests] = useState<TestsState>({
     gemini: { status: 'idle', error: null },
     apollo: { status: 'idle', error: null },
@@ -166,7 +165,7 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
               Your SSH keys are working
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-              {publicKey
+              {user?.publicKey
                 ? 'You can continue with your current setup, or install the managed key below if you want rbiocverse to manage your SSH access.'
                 : 'You can continue with your current setup. You can also generate a managed key later from the user menu if needed.'}
             </p>
@@ -189,7 +188,7 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
           onClick={() => setShowKeyModal(true)}
         >
           <Settings size={18} />
-          Manage SSH Keys
+          {user?.publicKey ? 'Manage SSH Keys' : 'Set Up SSH Key'}
         </button>
         <p className="setup-wizard-hint">
           Generate a new key or import an existing one
