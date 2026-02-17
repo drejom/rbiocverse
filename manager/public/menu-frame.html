@@ -618,24 +618,23 @@
         content.innerHTML = '<div style="color:rgba(255,255,255,0.6);font-size:0.85rem;margin-bottom:12px;">No active dev servers detected.<br>Start a server on any port and it will appear here.</div>';
       } else if (activePorts.length === 1) {
         const port = activePorts[0];
-        title.textContent = 'Dev Server (Port ' + port + ')';
-        content.innerHTML = '<div class="modal-actions">' +
-          '<button onclick="copyPortUrl(' + port + ')"><i data-lucide="copy" class="lucide"></i> Copy URL</button>' +
-          '<button class="primary" onclick="openPort(' + port + ')"><i data-lucide="external-link" class="lucide"></i> Open</button>' +
-          '</div>';
+        title.textContent = `Dev Server (Port ${port})`;
+        content.innerHTML = `
+          <div class="modal-actions">
+            <button onclick="copyPortUrl(${port})"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+            <button class="primary" onclick="openPort(${port})"><i data-lucide="external-link" class="lucide"></i> Open</button>
+          </div>`;
       } else {
-        title.textContent = activePorts.length + ' Dev Servers Active';
-        let portsHtml = '<div style="display:flex;flex-direction:column;gap:8px;">';
-        activePorts.forEach(function(port) {
-          portsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.3);border-radius:6px;">' +
-            '<span style="font-weight:600;">Port ' + port + '</span>' +
-            '<div style="display:flex;gap:6px;">' +
-            '<button onclick="copyPortUrl(' + port + ')" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="copy" class="lucide" style="width:14px;height:14px;"></i></button>' +
-            '<button class="primary" onclick="openPort(' + port + ')" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="external-link" class="lucide" style="width:14px;height:14px;"></i> Open</button>' +
-            '</div></div>';
-        });
-        portsHtml += '</div>';
-        content.innerHTML = portsHtml;
+        title.textContent = `${activePorts.length} Dev Servers Active`;
+        const portsHtml = activePorts.map(port => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.3);border-radius:6px;">
+            <span style="font-weight:600;">Port ${port}</span>
+            <div style="display:flex;gap:6px;">
+              <button onclick="copyPortUrl(${port})" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="copy" class="lucide" style="width:14px;height:14px;"></i></button>
+              <button class="primary" onclick="openPort(${port})" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="external-link" class="lucide" style="width:14px;height:14px;"></i> Open</button>
+            </div>
+          </div>`).join('');
+        content.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${portsHtml}</div>`;
       }
 
       modal.classList.add('show');
