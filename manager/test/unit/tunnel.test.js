@@ -210,20 +210,13 @@ describe('TunnelService', () => {
     it('should log SSH stderr output', async function() {
       this.timeout(5000);
 
-      // First call returns false (port not in use), subsequent calls return true (tunnel established)
-      const checkPortStub = sinon.stub(tunnelService, 'checkPort');
-      checkPortStub.onFirstCall().resolves(false);  // Pre-check: port not in use
-      checkPortStub.resolves(true);  // Tunnel established
+      sinon.stub(tunnelService, 'checkPort').resolves(true);
       sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
-      sinon.stub(tunnelService, 'forceReleasePort').resolves(true);
       // Stub the logger's ssh method to verify it gets called
       const { log } = require('../../lib/logger');
       const sshStub = sinon.stub(log, 'ssh');
 
       const promise = tunnelService.start('gemini', 'node01', 'vscode');
-
-      // Small delay to ensure stderr listener is attached
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Simulate SSH stderr
       mockTunnelProcess.stderr.emit('data', Buffer.from('SSH warning'));

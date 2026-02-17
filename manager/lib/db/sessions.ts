@@ -28,8 +28,7 @@ export interface Session {
   error: string | null;
   timeLeftSeconds: number | null;
   lastActivity: string | null;
-  usedShiny: boolean;
-  usedLiveServer: boolean;
+  usedDevServer: boolean;
   tunnelProcess: unknown | null;
 }
 
@@ -53,8 +52,7 @@ interface SessionRow {
   error: string | null;
   time_left_seconds: number | null;
   last_activity: string | null;
-  used_shiny: number;
-  used_live_server: number;
+  used_dev_server: number;
 }
 
 interface ParsedSessionKey {
@@ -126,8 +124,7 @@ function rowToSession(row: SessionRow | undefined): Session | null {
     error: row.error,
     timeLeftSeconds: row.time_left_seconds,
     lastActivity: row.last_activity,
-    usedShiny: !!row.used_shiny,
-    usedLiveServer: !!row.used_live_server,
+    usedDevServer: !!row.used_dev_server,
     tunnelProcess: null, // Not stored in DB
   };
 }
@@ -163,8 +160,8 @@ function saveActiveSession(sessionKey: string, session: Partial<Session>): void 
       session_key, user, hpc, ide, status, job_id, node,
       cpus, memory, walltime, gpu, release_version, account,
       token, submitted_at, started_at, error, time_left_seconds,
-      last_activity, used_shiny, used_live_server
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      last_activity, used_dev_server
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -187,8 +184,7 @@ function saveActiveSession(sessionKey: string, session: Partial<Session>): void 
     session.error || null,
     session.timeLeftSeconds || null,
     session.lastActivity || null,
-    session.usedShiny ? 1 : 0,
-    session.usedLiveServer ? 1 : 0
+    session.usedDevServer ? 1 : 0
   );
 }
 
@@ -267,19 +263,11 @@ function updateActiveSession(sessionKey: string, updates: Partial<Session>): voi
 }
 
 /**
- * Mark session as using Shiny
+ * Mark session as using a dev server (Live Server, Shiny, etc.)
  */
-function markShinyUsed(sessionKey: string): void {
+function markDevServerUsed(sessionKey: string): void {
   const db = getDb();
-  db.prepare('UPDATE active_sessions SET used_shiny = 1 WHERE session_key = ?').run(sessionKey);
-}
-
-/**
- * Mark session as using Live Server
- */
-function markLiveServerUsed(sessionKey: string): void {
-  const db = getDb();
-  db.prepare('UPDATE active_sessions SET used_live_server = 1 WHERE session_key = ?').run(sessionKey);
+  db.prepare('UPDATE active_sessions SET used_dev_server = 1 WHERE session_key = ?').run(sessionKey);
 }
 
 // ============================================
@@ -326,8 +314,8 @@ function archiveSession(
       user, hpc, ide, account, cpus, memory, walltime, gpu,
       release_version, submitted_at, started_at, ended_at,
       wait_seconds, duration_minutes, end_reason, error_message,
-      used_shiny, used_live_server, job_id, node
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      used_dev_server, job_id, node
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -347,8 +335,7 @@ function archiveSession(
     durationMinutes,
     endReason,
     errorMessage,
-    session.usedShiny ? 1 : 0,
-    session.usedLiveServer ? 1 : 0,
+    session.usedDevServer ? 1 : 0,
     session.jobId || null,
     session.node || null
   );
@@ -473,8 +460,7 @@ export {
   getAllActiveSessions,
   getActiveSessionsForUser,
   updateActiveSession,
-  markShinyUsed,
-  markLiveServerUsed,
+  markDevServerUsed,
 
   // Session history
   archiveSession,
@@ -499,8 +485,7 @@ module.exports = {
   getAllActiveSessions,
   getActiveSessionsForUser,
   updateActiveSession,
-  markShinyUsed,
-  markLiveServerUsed,
+  markDevServerUsed,
 
   // Session history
   archiveSession,

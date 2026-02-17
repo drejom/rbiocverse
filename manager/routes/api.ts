@@ -68,8 +68,7 @@ interface Session {
   gpu?: string | null;
   account?: string | null;
   tunnelProcess?: unknown;
-  usedLiveServer?: boolean;
-  usedShiny?: boolean;
+  usedDevServer?: boolean;
 }
 
 interface JobInfo {
@@ -357,9 +356,8 @@ function createApiRouter(stateManager: StateManager): Router {
       const activePorts = portsToCheck.filter(port => result[port]);
 
       // Track feature usage for analytics (only mark once per session)
-      // Reuse usedLiveServer field as general "used dev server" flag
-      if (activePorts.length > 0 && !session.usedLiveServer) {
-        await stateManager.updateSession(user, hpc, 'vscode', { usedLiveServer: true });
+      if (activePorts.length > 0 && !session.usedDevServer) {
+        await stateManager.updateSession(user, hpc, 'vscode', { usedDevServer: true });
         log.info('Dev server usage detected', { user, hpc, ports: activePorts });
       }
 

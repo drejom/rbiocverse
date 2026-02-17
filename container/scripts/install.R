@@ -45,7 +45,7 @@ get_cluster_config <- function(cluster = detect_cluster(), bioc_version = "3.22"
   configs <- list(
     gemini = list(
       name = "Gemini",
-      sif = sprintf("/packages/singularity/shared_cache/rbioc/rbiocverse_%s.sif", bioc_version),
+      sif = sprintf("/packages/singularity/shared_cache/rbioc/vscode-rbioc_%s.sif", bioc_version),
       lib = sprintf("/packages/singularity/shared_cache/rbioc/rlibs/bioc-%s", bioc_version),
       bind = "/packages,/scratch",
       # Phase 1: core deps - high CPU for parallel compilation
@@ -59,7 +59,7 @@ get_cluster_config <- function(cluster = detect_cluster(), bioc_version = "3.22"
     ),
     apollo = list(
       name = "Apollo",
-      sif = sprintf("/opt/singularity-images/rbioc/rbiocverse_%s.sif", bioc_version),
+      sif = sprintf("/opt/singularity-images/rbioc/vscode-rbioc_%s.sif", bioc_version),
       lib = sprintf("/opt/singularity-images/rbioc/rlibs/bioc-%s", bioc_version),
       bind = "/opt,/labs,/run,/ref_genome",
       phase1_cpus = 24,

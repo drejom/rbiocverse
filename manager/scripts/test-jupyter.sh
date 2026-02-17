@@ -17,7 +17,7 @@ case $CLUSTER in
   gemini)
     HOST="gemini-login2.coh.org"
     SINGULARITY="/packages/easy-build/software/singularity/3.7.0/bin/singularity"
-    IMAGE="/packages/singularity/shared_cache/rbioc/rbiocverse_3.22.sif"
+    IMAGE="/packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif"
     R_LIBS_SITE="/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22"
     PYTHON_PATH="/packages/singularity/shared_cache/rbioc/python/bioc-3.22"
     BIND_PATHS="/packages,/scratch,/ref_genomes"
@@ -26,7 +26,7 @@ case $CLUSTER in
   apollo)
     HOST="ppxhpcacc01.coh.org"
     SINGULARITY="/opt/singularity/3.7.0/bin/singularity"
-    IMAGE="/opt/singularity-images/rbioc/rbiocverse_3.22.sif"
+    IMAGE="/opt/singularity-images/rbioc/vscode-rbioc_3.22.sif"
     R_LIBS_SITE="/opt/singularity-images/rbioc/rlibs/bioc-3.22"
     PYTHON_PATH="/opt/singularity-images/rbioc/python/bioc-3.22"
     BIND_PATHS="/opt,/labs"

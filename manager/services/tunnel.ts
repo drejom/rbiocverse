@@ -61,7 +61,7 @@ class TunnelService {
         // Find processes listening on this port
         const processes = await findProcess('port', port) as ProcessInfo[];
 
-        // Filter to SSH processes only (startup cleanup is conservative)
+        // Filter to SSH processes only
         const sshProcesses = processes.filter(p =>
           p.name && p.name.toLowerCase().includes('ssh')
         );
@@ -87,64 +87,6 @@ class TunnelService {
       log.tunnel(`Orphan cleanup complete`, { killed, failed, ports: allPorts });
     } else {
       log.tunnel(`Orphan cleanup: no orphaned tunnels found`, { ports: allPorts });
-    }
-  }
-
-  /**
-   * Force-release a port by killing any process using it
-   * More aggressive than cleanupOrphanedTunnels - kills ANY process on the port
-   * Safe to use before tunnel start because:
-   * - The Slurm job on HPC continues running regardless of local tunnel
-   * - User can reconnect via the UI to re-establish tunnel
-   * - Only called when we're about to start a new tunnel anyway
-   *
-   * Uses lsof directly instead of find-process because find-process
-   * doesn't reliably detect all processes on macOS
-   */
-  async forceReleasePort(port: number): Promise<boolean> {
-    try {
-      // Use lsof -t to get PIDs (more reliable than find-process on macOS)
-      const { execSync } = await import('child_process');
-      let pids: number[] = [];
-
-      try {
-        const output = execSync(`lsof -i :${port} -t 2>/dev/null`, { encoding: 'utf8' });
-        pids = output.trim().split('\n').filter(Boolean).map(p => parseInt(p, 10)).filter(Number.isFinite);
-      } catch {
-        // lsof returns non-zero if no processes found - that's fine
-        return true;
-      }
-
-      if (pids.length === 0) {
-        return true; // Port already free
-      }
-
-      let released = false;
-      for (const pid of pids) {
-        // Skip our own process
-        if (pid === process.pid) continue;
-
-        try {
-          log.tunnel(`Force-releasing port ${port}`, { pid });
-          process.kill(pid, 'SIGTERM');
-          released = true;
-        } catch (e) {
-          // ESRCH = process already gone, which is fine
-          if ((e as NodeJS.ErrnoException).code !== 'ESRCH') {
-            log.warn(`Failed to release port`, { port, pid, error: (e as Error).message });
-          }
-        }
-      }
-
-      // Give OS time to release the port after process termination
-      if (released) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      return true;
-    } catch (e) {
-      log.warn(`Failed to check port for release`, { port, error: (e as Error).message });
-      return false;
     }
   }
 
@@ -260,21 +202,6 @@ class TunnelService {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Force-release ports if still in use (handles orphaned processes from crashes)
-    // Safe: HPC job keeps running, user can reconnect via UI
-    const portsToCheck = [localPort];
-    if (ide === 'vscode' && options.proxyPort) {
-      portsToCheck.push(config.hpcProxyLocalPort);
-    }
-
-    for (const port of portsToCheck) {
-      const portInUse = await this.checkPort(port);
-      if (portInUse) {
-        log.tunnel(`Port ${port} in use, attempting force release`, { ide, hpc: hpcName });
-        await this.forceReleasePort(port);
-      }
-    }
-
     // Build port forwarding arguments
     // Maps local default port to remote dynamic port: localhost:8000 -> node:8001
     const portForwards = [`-L`, `${localPort}:${node}:${remotePort}`];
@@ -283,8 +210,6 @@ class TunnelService {
     if (ide === 'vscode') {
       if (options.proxyPort) {
         // Use hpc-proxy: forward single proxy port instead of individual dev server ports
-        // hpc-proxy runs inside Singularity container which shares network with host node
-        // SSH tunnel connects through login node, so we use compute node hostname
         portForwards.push('-L', `${config.hpcProxyLocalPort}:${node}:${options.proxyPort}`);
         log.tunnel(`Using hpc-proxy on port ${options.proxyPort}`, { hpc: hpcName });
       } else {

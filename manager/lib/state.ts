@@ -182,8 +182,7 @@ function createIdleSession(ide: string): Session {
     account: null,
     submittedAt: null,
     timeLeftSeconds: null,
-    usedShiny: false,
-    usedLiveServer: false,
+    usedDevServer: false,
   };
 }
 

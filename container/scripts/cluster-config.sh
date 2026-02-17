@@ -59,10 +59,10 @@ get_container_path() {
 
     case "$cluster" in
         gemini)
-            echo "/packages/singularity/shared_cache/rbioc/rbiocverse_${version}.sif"
+            echo "/packages/singularity/shared_cache/rbioc/vscode-rbioc_${version}.sif"
             ;;
         apollo)
-            echo "/opt/singularity-images/rbioc/rbiocverse_${version}.sif"
+            echo "/opt/singularity-images/rbioc/vscode-rbioc_${version}.sif"
             ;;
         *)
             echo ""

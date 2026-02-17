@@ -267,6 +267,62 @@
       transition: opacity 0.2s;
     }
     .copy-feedback.show { opacity: 1; }
+
+    /* Dev modal content styles */
+    .dev-modal-hint {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+    .dev-manual-section {
+      margin-top: 12px;
+    }
+    .dev-manual-label {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+    }
+    .dev-manual-row {
+      display: flex;
+      gap: 8px;
+    }
+    .dev-manual-input {
+      width: 80px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: white;
+      font-size: 0.85rem;
+    }
+    .dev-port-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dev-port-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+    }
+    .dev-port-label {
+      font-weight: 600;
+    }
+    .dev-port-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .dev-port-btn {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+    }
+    .dev-port-btn .lucide {
+      width: 14px;
+      height: 14px;
+    }
   </style>
 </head>
 <body>
@@ -283,11 +339,11 @@
         <!-- Dynamic content: single port or port list -->
       </div>
       <div id="dev-copy-feedback" class="copy-feedback">Copied!</div>
-      <div id="dev-manual-input" style="margin-top:12px;">
-        <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:6px;">Or enter custom port:</div>
-        <div style="display:flex;gap:8px;">
-          <input type="number" id="manual-port" placeholder="Port" min="1" max="65535" style="width:80px;padding:6px 10px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;background:rgba(0,0,0,0.3);color:white;font-size:0.85rem;">
-          <button onclick="openManualPort()" style="padding:6px 12px;"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      <div id="dev-manual-input" class="dev-manual-section">
+        <div class="dev-manual-label">Or enter custom port:</div>
+        <div class="dev-manual-row">
+          <input type="number" id="manual-port" class="dev-manual-input" placeholder="Port" min="1" max="65535">
+          <button onclick="openManualPort()" class="dev-port-btn"><i data-lucide="external-link" class="lucide"></i> Open</button>
         </div>
       </div>
     </div>
@@ -615,7 +671,7 @@
       // Build modal content based on active ports
       if (activePorts.length === 0) {
         title.textContent = 'Dev Server';
-        content.innerHTML = '<div style="color:rgba(255,255,255,0.6);font-size:0.85rem;margin-bottom:12px;">No active dev servers detected.<br>Start a server on any port and it will appear here.</div>';
+        content.innerHTML = '<div class="dev-modal-hint">No active dev servers detected.<br>Start a server on any port and it will appear here.</div>';
       } else if (activePorts.length === 1) {
         const port = activePorts[0];
         title.textContent = `Dev Server (Port ${port})`;
@@ -627,14 +683,14 @@
       } else {
         title.textContent = `${activePorts.length} Dev Servers Active`;
         const portsHtml = activePorts.map(port => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.3);border-radius:6px;">
-            <span style="font-weight:600;">Port ${port}</span>
-            <div style="display:flex;gap:6px;">
-              <button onclick="copyPortUrl(${port})" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="copy" class="lucide" style="width:14px;height:14px;"></i></button>
-              <button class="primary" onclick="openPort(${port})" style="padding:4px 8px;font-size:0.75rem;"><i data-lucide="external-link" class="lucide" style="width:14px;height:14px;"></i> Open</button>
+          <div class="dev-port-item">
+            <span class="dev-port-label">Port ${port}</span>
+            <div class="dev-port-actions">
+              <button onclick="copyPortUrl(${port})" class="dev-port-btn"><i data-lucide="copy" class="lucide"></i></button>
+              <button class="primary dev-port-btn" onclick="openPort(${port})"><i data-lucide="external-link" class="lucide"></i> Open</button>
             </div>
           </div>`).join('');
-        content.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${portsHtml}</div>`;
+        content.innerHTML = `<div class="dev-port-list">${portsHtml}</div>`;
       }
 
       modal.classList.add('show');

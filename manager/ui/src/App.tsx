@@ -265,7 +265,7 @@ function Launcher() {
  * App wrapper - handles authentication flow
  */
 function AppContent() {
-  const { isAuthenticated, needsSetup, loading } = useAuth();
+  const { isAuthenticated, needsSetup, loading, user } = useAuth();
   const { health, history } = useClusterStatus();
 
   // Show loading while checking auth
@@ -289,7 +289,7 @@ function AppContent() {
   if (needsSetup) {
     return (
       <div className="launcher" style={{ maxWidth: 650 }}>
-        <SetupWizard />
+        <SetupWizard publicKey={user?.publicKey || ''} />
       </div>
     );
   }
