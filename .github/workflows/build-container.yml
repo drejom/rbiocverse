@@ -13,6 +13,7 @@ on:
       - 'v*'
     paths:
       - 'container/**'
+      - 'tools/hpc-proxy/**'
       - '.github/workflows/build-container.yml'
   workflow_dispatch:
     inputs:
@@ -45,6 +46,18 @@ jobs:
           else
             echo "version=${{ env.DEFAULT_BIOC_VERSION }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build hpc-proxy
+        run: |
+          cd tools/hpc-proxy
+          make build-linux
+          mkdir -p ../../container/bin
+          cp hpc-proxy-linux-amd64 ../../container/bin/hpc-proxy
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
