@@ -456,9 +456,9 @@ echo ${bootstrapBase64} | base64 -d | sh
 eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
 # Start hpc-proxy for dev server port routing
+# Note: hpc-proxy runs in background; SLURM cleans it up when job ends
 mkdir -p $HOME/.hpc-proxy
 /usr/local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
-HPC_PROXY_PID=$!
 
 # Wait for proxy to write port file (up to 5 seconds)
 for ((i=0; i<10; i++)); do
