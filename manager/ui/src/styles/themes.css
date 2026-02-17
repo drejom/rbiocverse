@@ -7,6 +7,9 @@
 :root {
   /* Dark theme (default) */
   --bg-primary: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  --bg-solid: linear-gradient(180deg, #252540 0%, #1e1e38 50%, #1a1a32 100%);
+  --bg-main-panel: linear-gradient(180deg, #2d2d4a 0%, #282845 50%, #242440 100%);
+  --bg-pill: #2a2a45;
   --bg-card: rgba(255, 255, 255, 0.1);
   --bg-card-hover: rgba(255, 255, 255, 0.15);
   --bg-input: rgba(255, 255, 255, 0.1);
@@ -39,6 +42,11 @@
   --gradient-button: linear-gradient(135deg, #3b82f6, #8b5cf6);
   --gradient-button-hover: linear-gradient(135deg, #60a5fa, #a78bfa);
 
+  /* Neumorphism shadows (dark theme) */
+  --shadow-outset: 6px 6px 12px rgba(0, 0, 0, 0.4), -6px -6px 12px rgba(255, 255, 255, 0.05);
+  --shadow-inset: inset 3px 3px 6px rgba(0, 0, 0, 0.4), inset -3px -3px 6px rgba(255, 255, 255, 0.05);
+  --shadow-outset-sm: 3px 3px 6px rgba(0, 0, 0, 0.4), -3px -3px 6px rgba(255, 255, 255, 0.05);
+
   /* Backdrop blur */
   --blur-card: blur(10px);
   --blur-panel: blur(20px);
@@ -47,37 +55,53 @@
   --overlay-bg: rgba(0, 0, 0, 0.7);
 }
 
-/* Light theme overrides */
+/* Light theme overrides - Polished, warm aesthetic */
 :root.light-theme {
-  --bg-primary: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  /* Warm gradient background with subtle depth */
+  --bg-primary: linear-gradient(145deg, #f8f9fc 0%, #e9edf4 50%, #dfe4ed 100%);
+  --bg-solid: #eef1f6;
+  --bg-main-panel: linear-gradient(180deg, #f0f3f8 0%, #e8ecf2 100%);
+  --bg-pill: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: #ffffff;
-  --bg-input: #f1f5f9;
-  --bg-input-hover: #e2e8f0;
-  --bg-panel: #f1f5f9;
+  --bg-card-hover: #f8f9fc;
+  --bg-input: #ffffff;
+  --bg-input-hover: #f8f9fc;
+  --bg-panel: rgba(255, 255, 255, 0.97);
 
-  --border-subtle: rgba(0, 0, 0, 0.15);
-  --border-input: rgba(0, 0, 0, 0.2);
+  /* Subtle blue-tinted borders for cohesion */
+  --border-subtle: rgba(59, 130, 246, 0.1);
+  --border-input: rgba(59, 130, 246, 0.15);
   --border-focus: #3b82f6;
 
-  --text-primary: #1e293b;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  /* Rich text colors */
+  --text-primary: #1a1f36;
+  --text-secondary: #3c4257;
+  --text-muted: #697386;
   --text-inverse: #ffffff;
 
-  --color-success-bg: rgba(74, 222, 128, 0.15);
-  --color-warning-bg: rgba(251, 191, 36, 0.15);
-  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  /* Vibrant status colors */
+  --color-success: #22c55e;
+  --color-success-bg: rgba(34, 197, 94, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-danger: #ef4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.12);
   --color-danger-text: #dc2626;
 
-  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.1);
-  --shadow-dropdown: 0 4px 20px rgba(0, 0, 0, 0.15);
-  --shadow-button: 0 4px 15px rgba(59, 130, 246, 0.25);
+  /* Elevated shadows with subtle blue tint */
+  --shadow-card: 0 4px 12px rgba(59, 130, 246, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-dropdown: 0 8px 24px rgba(59, 130, 246, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+  --shadow-button: 0 4px 12px rgba(59, 130, 246, 0.35);
 
-  --blur-card: blur(8px);
-  --blur-panel: blur(15px);
+  /* Refined neumorphism - more pronounced for light theme */
+  --shadow-outset: 6px 6px 14px rgba(166, 180, 200, 0.35), -6px -6px 14px rgba(255, 255, 255, 0.95);
+  --shadow-inset: inset 3px 3px 7px rgba(166, 180, 200, 0.3), inset -3px -3px 7px rgba(255, 255, 255, 0.9);
+  --shadow-outset-sm: 4px 4px 8px rgba(166, 180, 200, 0.3), -4px -4px 8px rgba(255, 255, 255, 0.95);
 
-  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --blur-card: blur(12px);
+  --blur-panel: blur(24px);
+
+  --overlay-bg: rgba(26, 31, 54, 0.4);
 }
 
 /* Apply theme variables */
@@ -97,10 +121,20 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  align-items: center;
   padding: 40px;
   background: var(--bg-card);
   backdrop-filter: var(--blur-card);
+}
+
+.login-left-spacer {
+  flex: 1;
+}
+
+.login-left-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .login-right {
@@ -239,7 +273,7 @@ body {
 .ide-icons {
   display: flex;
   gap: 24px;
-  margin-bottom: 40px;
+  margin-top: 24px;
 }
 
 .ide-icon {
@@ -257,6 +291,52 @@ body {
 .ide-icon span {
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+/* Ecosystem logos (Bioconductor, scverse) on login page */
+.ecosystem-logos {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+  margin-bottom: 32px;
+}
+
+.ecosystem-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+
+.ecosystem-logo:hover {
+  opacity: 1;
+}
+
+.ecosystem-logo img {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Theme-based logo visibility */
+.ecosystem-logo .logo-light {
+  display: none;
+}
+
+.ecosystem-logo .logo-dark {
+  display: block;
+}
+
+:root.light-theme .ecosystem-logo .logo-light {
+  display: block;
+}
+
+:root.light-theme .ecosystem-logo .logo-dark {
+  display: none;
 }
 
 /* Cluster health cards on login page */
@@ -568,6 +648,111 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+}
+
+/* Help content wrapper for TOC positioning */
+.help-content-wrapper {
+  position: relative;
+}
+
+/* Floating Table of Contents */
+.help-toc {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin-left: 16px;
+  margin-bottom: 16px;
+  z-index: 10;
+}
+
+.help-toc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.help-toc-toggle:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.help-toc.open .help-toc-toggle {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.help-toc-label {
+  font-weight: 500;
+}
+
+.help-toc-chevron {
+  transition: transform 0.2s;
+}
+
+.help-toc-chevron.open {
+  transform: rotate(90deg);
+}
+
+.help-toc-list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  max-width: 240px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 4px 0;
+  box-shadow: var(--shadow-dropdown);
+}
+
+.help-toc-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-toc-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.help-toc-item.active {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* Hide TOC on very small screens */
+@media (max-width: 500px) {
+  .help-toc {
+    display: none;
+  }
 }
 
 /* Markdown content styling */
@@ -889,9 +1074,147 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
-/* Light theme adjustment for health bar sparklines */
+/* Light theme component adjustments */
 :root.light-theme .health-bar {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+:root.light-theme .health-bar-mini {
+  background: rgba(59, 130, 246, 0.12);
+  border-radius: 3px;
+}
+
+/* Sidebar in light mode - electric blue-purple tinted panel */
+:root.light-theme .sidebar {
+  background: linear-gradient(180deg, #eaecfc 0%, #e2e4f8 50%, #dcdff4 100%);
+  border-right: 1px solid rgba(99, 102, 241, 0.12);
+  box-shadow: 4px 0 20px rgba(99, 102, 241, 0.08);
+}
+
+:root.light-theme .nav-item {
+  background: linear-gradient(145deg, #ffffff, #f5f7fa);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: 3px 3px 8px rgba(166, 180, 200, 0.25), -3px -3px 8px rgba(255, 255, 255, 0.9);
+}
+
+:root.light-theme .nav-item.active {
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+}
+
+:root.light-theme .nav-item:hover:not(.active) {
+  background: linear-gradient(145deg, #ffffff, #f8f9fc);
+  transform: translateY(-1px);
+  box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.95);
+}
+
+/* Main panel in light mode */
+:root.light-theme .main-panel {
+  background: var(--bg-main-panel);
+}
+
+/* Form inputs - elevated with glow on focus */
+:root.light-theme .form-field input,
+:root.light-theme .form-field select {
+  background: #ffffff;
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-inset);
+}
+
+:root.light-theme .form-field input:focus,
+:root.light-theme .form-field select:focus {
+  border-color: #3b82f6;
+  box-shadow: var(--shadow-inset), 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* IDE tabs in light mode - neumorphic buttons */
+:root.light-theme .ide-tab {
+  background: var(--bg-pill);
+  box-shadow: var(--shadow-outset-sm);
+}
+
+:root.light-theme .ide-tab:hover:not(.active):not(.running):not(.pending) {
+  background: #f8f9fc;
+}
+
+:root.light-theme .ide-tab.active {
+  background: #f0f2f5;
+  box-shadow: var(--shadow-inset);
+}
+
+/* Session cards - elevated white with subtle glow */
+:root.light-theme .session-card {
+  background: linear-gradient(145deg, #ffffff, #f8f9fc);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  border-radius: 16px;
+  box-shadow: var(--shadow-outset);
+}
+
+:root.light-theme .session-card.running {
+  background: linear-gradient(145deg, #ffffff, #f0fdf4);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+/* Form section - no border to match dark theme */
+:root.light-theme .form-section {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Cluster cards on login - elevated neumorphic */
+:root.light-theme .cluster-card {
+  background: linear-gradient(145deg, #ffffff, #f5f7fa);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: var(--shadow-outset);
+}
+
+:root.light-theme .cluster-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 8px 8px 20px rgba(166, 180, 200, 0.35), -8px -8px 20px rgba(255, 255, 255, 0.95);
+}
+
+/* Login form - prominent card */
+:root.light-theme .login-card {
+  background: linear-gradient(145deg, #ffffff, #f8f9fc);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  box-shadow: var(--shadow-outset);
+}
+
+/* Release selector dropdown */
+:root.light-theme .release-dropdown {
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  box-shadow: var(--shadow-outset-sm);
+}
+
+/* Compact release dropdown - match IDE tab styling */
+:root.light-theme .release-selector.compact .release-dropdown {
+  border-radius: 18px;
+  background: var(--bg-pill);
+  border: none;
+}
+
+/* IDE icons - better visibility */
+:root.light-theme .ide-icon-row i {
+  color: #3c4257;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* Buttons - elevated look */
+:root.light-theme .btn-neu {
+  box-shadow: var(--shadow-outset-sm);
+}
+
+:root.light-theme .btn-neu:active {
+  box-shadow: var(--shadow-inset);
 }
 
 /* =============================================================================
@@ -1306,6 +1629,31 @@ body {
   color: var(--text-muted);
 }
 
+/* Admin Cluster Container - groups widgets visually */
+.admin-cluster-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.admin-cluster-container .admin-cluster-detail,
+.admin-cluster-container .cluster-heatmap,
+.admin-cluster-container .session-heatmap {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.admin-cluster-container .admin-cluster-detail {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 /* Admin Cluster Detail Widget */
 .admin-cluster-detail {
   margin: 16px 0;
@@ -1382,6 +1730,45 @@ body {
   gap: 12px;
 }
 
+/* Compact metrics row */
+.admin-cluster-metrics-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-metric-compact {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.admin-metric-compact-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-metric-compact .health-bar {
+  height: 4px;
+  margin-bottom: 6px;
+}
+
+.admin-metric-compact-value {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .admin-metric {
   padding: 12px;
   background: rgba(255, 255, 255, 0.03);
@@ -1417,6 +1804,124 @@ body {
 
 .admin-metric-sparkline {
   margin-top: 4px;
+}
+
+/* Admin Partition Limits Display */
+.admin-partitions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admin-partitions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.admin-partitions-header h5 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.admin-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-refresh-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.admin-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+.admin-partitions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.admin-partition {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.admin-partition:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-partition.restricted {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.admin-partition-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.admin-partition-default {
+  font-size: 0.65rem;
+  font-weight: 400;
+  padding: 1px 6px;
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--color-primary);
+  border-radius: 4px;
+}
+
+.admin-partition-restricted {
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+}
+
+.admin-partition-limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.admin-partition-limits span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: var(--bg-card);
+  border-radius: 4px;
+}
+
+.admin-partition-limits svg {
+  opacity: 0.6;
 }
 
 /* Admin Usage Report Widget */

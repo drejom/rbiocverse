@@ -1,0 +1,227 @@
+package main
+
+import (
+	"compress/gzip"
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Pre-compiled regexes for performance
+var (
+	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
+	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
+)
+
+// Proxy handles HTTP/WebSocket reverse proxying with path-based routing
+type Proxy struct {
+	port        int
+	baseRewrite bool
+	verbose     bool
+	server      *http.Server
+	listener    net.Listener
+}
+
+// NewProxy creates a new proxy instance
+func NewProxy(port int, baseRewrite, verbose bool) *Proxy {
+	return &Proxy{
+		port:        port,
+		baseRewrite: baseRewrite,
+		verbose:     verbose,
+	}
+}
+
+// Start begins listening and returns the actual port (useful when port=0)
+func (p *Proxy) Start() (int, error) {
+	// Bind to localhost only for security on shared HPC nodes
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p.port))
+	if err != nil {
+		return 0, fmt.Errorf("listen: %w", err)
+	}
+	p.listener = listener
+
+	// Get actual port (in case p.port was 0)
+	actualPort := listener.Addr().(*net.TCPAddr).Port
+	p.port = actualPort
+
+	p.server = &http.Server{
+		Handler:      p,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 0, // Disable for WebSocket/SSE
+		IdleTimeout:  120 * time.Second,
+	}
+
+	go func() {
+		if err := p.server.Serve(listener); err != http.ErrServerClosed {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	return actualPort, nil
+}
+
+// Shutdown gracefully stops the proxy
+func (p *Proxy) Shutdown() {
+	if p.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		p.server.Shutdown(ctx)
+	}
+}
+
+// ServeHTTP handles all incoming requests (HTTP and WebSocket)
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Parse route: /port/:port/*
+	targetPort, remainingPath, ok := p.parseRoute(r.URL.Path)
+	if !ok {
+		http.Error(w, "Invalid route. Use /port/:port/path", http.StatusBadRequest)
+		return
+	}
+
+	// Validate port
+	if targetPort < 1 || targetPort > 65535 {
+		http.Error(w, "Invalid port number", http.StatusBadRequest)
+		return
+	}
+
+	if p.verbose {
+		log.Printf("%s %s -> localhost:%d%s", r.Method, r.URL.Path, targetPort, remainingPath)
+	}
+
+	// Proxy HTTP/WebSocket request (httputil.ReverseProxy handles both in Go 1.21+)
+	p.handleHTTP(w, r, targetPort, remainingPath)
+}
+
+// parseRoute extracts port and path from /port/:port/remaining/path
+func (p *Proxy) parseRoute(path string) (port int, remaining string, ok bool) {
+	matches := routePattern.FindStringSubmatch(path)
+	if matches == nil {
+		return 0, "", false
+	}
+
+	port, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, "", false
+	}
+
+	remaining = matches[2]
+	if remaining == "" {
+		remaining = "/"
+	}
+
+	return port, remaining, true
+}
+
+// handleHTTP proxies HTTP and WebSocket requests using httputil.ReverseProxy
+func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort int, path string) {
+	target := &url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("127.0.0.1:%d", targetPort),
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	// Customize director to rewrite path
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.URL.Path = path
+		req.URL.RawPath = path
+		// Preserve query string
+		req.URL.RawQuery = r.URL.RawQuery
+		// Set X-Forwarded headers
+		req.Header.Set("X-Forwarded-Host", r.Host)
+		// Detect protocol from existing header or TLS state
+		proto := r.Header.Get("X-Forwarded-Proto")
+		if proto == "" {
+			if r.TLS != nil {
+				proto = "https"
+			} else {
+				proto = "http"
+			}
+		}
+		req.Header.Set("X-Forwarded-Proto", proto)
+		req.Header.Set("X-Original-Path", r.URL.Path)
+	}
+
+	// Optionally modify response for base tag injection (HTTP only, not WebSocket)
+	if p.baseRewrite {
+		proxy.ModifyResponse = func(resp *http.Response) error {
+			return p.injectBaseTag(resp, targetPort)
+		}
+	}
+
+	// Handle errors
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("Proxy error to port %d: %v", targetPort, err)
+		http.Error(w, fmt.Sprintf("Service on port %d unavailable", targetPort), http.StatusBadGateway)
+	}
+
+	proxy.ServeHTTP(w, r)
+}
+
+// injectBaseTag modifies HTML responses to inject a <base> tag
+func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/html") {
+		return nil
+	}
+
+	// Handle compressed responses
+	encoding := resp.Header.Get("Content-Encoding")
+	var reader io.Reader = resp.Body
+	var isGzipped bool
+
+	if encoding == "gzip" {
+		gzReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			// Not actually gzipped, use original body
+			reader = resp.Body
+		} else {
+			reader = gzReader
+			isGzipped = true
+			defer gzReader.Close()
+		}
+	}
+
+	// Read body
+	body, err := io.ReadAll(reader)
+	resp.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	// Inject base tag after <head>
+	baseTag := fmt.Sprintf(`<base href="/port/%d/">`, targetPort)
+	bodyStr := string(body)
+
+	// Try to inject after <head> tag
+	if headPattern.MatchString(bodyStr) {
+		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
+	} else {
+		// Fallback: inject at start of document
+		bodyStr = baseTag + "\n" + bodyStr
+	}
+
+	// Update response (always return uncompressed for simplicity)
+	resp.Body = io.NopCloser(strings.NewReader(bodyStr))
+	resp.ContentLength = int64(len(bodyStr))
+	resp.Header.Set("Content-Length", strconv.Itoa(len(bodyStr)))
+	// Clear Transfer-Encoding since we now have a fixed Content-Length
+	resp.Header.Del("Transfer-Encoding")
+	resp.TransferEncoding = nil
+	if isGzipped {
+		resp.Header.Del("Content-Encoding")
+	}
+
+	return nil
+}

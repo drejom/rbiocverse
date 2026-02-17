@@ -13,7 +13,7 @@ describe('StateManager Integration Tests', () => {
     // Clean up any leftover state file from previous test
     try {
       await fs.unlink(testStateFile);
-    } catch (e) {
+    } catch {
       // File might not exist
     }
     process.env.STATE_FILE = testStateFile;
@@ -27,7 +27,7 @@ describe('StateManager Integration Tests', () => {
     // Clean up test state file
     try {
       await fs.unlink(testStateFile);
-    } catch (e) {
+    } catch {
       // File might not exist
     }
     delete process.env.STATE_FILE;

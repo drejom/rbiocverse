@@ -1,19 +1,25 @@
 {
   "name": "hpc-code-server-manager",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "prestart": "npm run build:ts",
+    "start": "node dist/server.js",
+    "dev": "ts-node server.ts",
+    "dev:watch": "node --watch -r ts-node/register server.ts",
     "dev:ui": "cd ui && npm run dev",
-    "build": "cd ui && npm run build",
+    "build": "tsc && cd ui && npm run build",
+    "build:ts": "tsc",
     "postinstall": "cd ui && npm install",
-    "test": "NODE_ENV=test mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:watch": "NODE_ENV=test mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:coverage": "NODE_ENV=test c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
-    "test:e2e": "NODE_ENV=test mocha 'test/e2e/**/*.test.js' --timeout 60000",
-    "test:all": "NODE_ENV=test mocha 'test/**/*.test.js' --timeout 60000"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.js",
+    "test": "NODE_ENV=test mocha",
+    "test:watch": "NODE_ENV=test mocha --watch",
+    "test:coverage": "NODE_ENV=test c8 mocha",
+    "test:e2e": "NODE_ENV=test mocha 'test/e2e/**/*.test.{ts,js}' --timeout 60000",
+    "test:all": "NODE_ENV=test mocha 'test/**/*.test.{ts,js}' --timeout 60000",
+    "prepare": "cd .. && husky manager/.husky"
   },
   "c8": {
     "reporter": [
@@ -25,17 +31,46 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "express": "^4.18.2",
+    "find-process": "^2.0.0",
     "http-proxy": "^1.18.1",
     "joi": "^17.13.3",
+    "sshpk": "^1.18.0",
     "winston": "^3.19.0"
   },
+  "lint-staged": {
+    "*.{ts,js}": [
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/chai": "^5.2.3",
+    "@types/express": "^5.0.6",
+    "@types/http-proxy": "^1.17.17",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.0.10",
+    "@types/sinon": "^21.0.0",
+    "@types/sinon-chai": "^4.0.0",
+    "@types/sshpk": "^1.17.4",
+    "@types/supertest": "^6.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
     "c8": "^9.0.0",
     "chai": "^4.3.10",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "mocha": "^12.0.0-beta-5",
+    "prettier": "^3.8.1",
     "puppeteer": "^24.34.0",
     "sinon": "^21.0.1",
     "sinon-chai": "^3.7.0",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.1"
   }
 }

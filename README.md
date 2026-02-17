@@ -12,14 +12,14 @@ Unified R/Bioconductor development environment for HPC clusters. Provides browse
 ## Components
 
 ### Container (`container/`)
-Docker container extending [Bioconductor Docker](https://bioconductor.org/help/docker/) for HPC.
+Lean Docker container (~2-3GB) extending [Bioconductor Docker](https://bioconductor.org/help/docker/) for HPC. Contains system dependencies and tools; R/Python packages live on cluster shared storage.
 
 **Included:**
-- **R 4.5** with ~1500 Bioconductor/CRAN packages (Seurat, DESeq2, etc.)
-- **Python 3.12** with SCverse ecosystem (scanpy, scvi-tools, etc.)
+- System deps for R packages (Seurat, monocle3, velocyto.R, etc.)
 - **JupyterLab** with LSP, formatting, resource monitor, git integration
 - **pixi** for additional package management
 - **Genomics tools**: bcftools, samtools, bedtools, sra-tools
+- **VS Code CLI** for serve-web and tunnels
 
 See [container/USER_GUIDE.md](container/USER_GUIDE.md) for usage.
 
@@ -35,45 +35,6 @@ Web-based session manager for launching IDE sessions on HPC.
 - **Themes** - Light and dark mode with system preference detection
 
 See [manager/docs/ARCHITECTURE.md](manager/docs/ARCHITECTURE.md) for details.
-
-## Deployment
-
-### Pre-built Images (Recommended)
-
-```bash
-# Copy environment template and configure
-cp .env.example .env
-# Edit .env with your settings
-
-# Pull and start
-docker compose pull
-docker compose up -d
-```
-
-**Images:**
-- `ghcr.io/drejom/rbiocverse` - Bioconductor container for HPC
-- `ghcr.io/drejom/rbiocverse-manager` - Web session manager
-
-### Environment Configurations
-
-| File | Environment | Description |
-|------|-------------|-------------|
-| `.env.dokploy.example` | Dokploy/TrueNAS | Double jump host SSH, Traefik routing |
-| `.env.cgt.example` | cgt.coh.org | Direct HPC access from work VM |
-
-## Development
-
-```bash
-# Manager (Node.js)
-cd manager
-npm install
-npm test
-npm start
-
-# Container (Docker)
-cd container
-docker buildx build --platform linux/amd64 -t rbiocverse:test .
-```
 
 ## Architecture
 
@@ -96,6 +57,58 @@ Container (lean, ~2-3GB)          Shared Libraries (HPC storage)
 │ JupyterLab + extensions │──────▶│ python/bioc-3.22/ (Python)  │
 │ pixi, VS Code CLI       │       │ Shared by all users         │
 └─────────────────────────┘       └─────────────────────────────┘
+```
+
+## Deployment
+
+### Manager (Docker Compose)
+
+The manager runs on a host with SSH access to HPC clusters.
+
+```bash
+# Clone and configure
+git clone https://github.com/drejom/rbiocverse.git
+cd rbiocverse
+cp .env.cgt.example .env   # or .env.dokploy.example
+# Edit .env with your settings (SSH paths, JWT secret, etc.)
+
+# Start manager
+docker compose up -d
+```
+
+| Environment | SSH Config | Use `.env` template |
+|-------------|------------|---------------------|
+| cgt.coh.org | Direct access to HPC | `.env.cgt.example` |
+| Dokploy/TrueNAS | Double jump host | `.env.dokploy.example` |
+
+### HPC Container (Singularity)
+
+The Bioconductor container is built by GitHub Actions and pulled to clusters as a Singularity image.
+
+```bash
+# On HPC: Pull latest container (submits SLURM job)
+cd container
+./scripts/pull-container.sh --tag latest
+
+# Install/update R packages to shared storage
+./scripts/install-packages.sh --to 3.22 --submit
+
+# Install/update Python packages
+./scripts/install-python.sh --to 3.22 --submit
+```
+
+## Development
+
+```bash
+# Manager
+cd manager
+npm install
+./scripts/dev.sh start   # Start dev server at http://localhost:3000
+npm test                 # Run tests
+
+# Container
+cd container
+docker buildx build --platform linux/amd64 -t rbiocverse:test .
 ```
 
 ## Documentation
