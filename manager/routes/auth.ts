@@ -29,7 +29,6 @@ import { errorLogger } from '../services/ErrorLogger';
 import { generateToken, verifyToken, TokenPayload } from '../lib/auth/token';
 import {
   generateSshKeypair,
-  encryptPrivateKey,
   decryptPrivateKey,
   encryptWithServerKey,
   parsePrivateKeyPem,
