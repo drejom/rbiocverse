@@ -1,0 +1,41 @@
+{
+  "name": "hpc-code-server-manager",
+  "version": "0.0.7",
+  "description": "Manager for HPC Code Server - handles job submission and SSH tunneling",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:ui": "cd ui && npm run dev",
+    "build": "cd ui && npm run build",
+    "postinstall": "cd ui && npm install",
+    "test": "NODE_ENV=test mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:watch": "NODE_ENV=test mocha --watch 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:coverage": "NODE_ENV=test c8 mocha 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
+    "test:e2e": "NODE_ENV=test mocha 'test/e2e/**/*.test.js' --timeout 60000",
+    "test:all": "NODE_ENV=test mocha 'test/**/*.test.js' --timeout 60000"
+  },
+  "c8": {
+    "reporter": [
+      "text",
+      "json-summary"
+    ],
+    "report-dir": "coverage"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^4.18.2",
+    "http-proxy": "^1.18.1",
+    "joi": "^17.13.3",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "c8": "^9.0.0",
+    "chai": "^4.3.10",
+    "mocha": "^12.0.0-beta-5",
+    "puppeteer": "^24.34.0",
+    "sinon": "^21.0.1",
+    "sinon-chai": "^3.7.0",
+    "supertest": "^6.3.3"
+  }
+}

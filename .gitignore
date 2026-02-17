@@ -1,0 +1,22 @@
+.env
+*.log
+node_modules/
+
+# User data (generated at runtime)
+manager/data/users.json
+manager/data/test_*.json
+
+# Test artifacts
+manager/ui/test-results/
+manager/ui/playwright-report/
+.claude/settings.local.json
+
+# Dev server
+manager/scripts/.dev.pid
+manager/scripts/.dev.log
+manager/scripts/.env.dev
+
+# Database
+manager/data/*.db
+manager/data/*.db-wal
+manager/data/*.db-shm

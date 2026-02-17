@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+ui/node_modules/
+
+# Build outputs
+ui/dist/
+coverage/
+
+# Development files
+.git/
+.gitignore
+*.md
+.env*
+
+# Test files
+test/
+*.test.js
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

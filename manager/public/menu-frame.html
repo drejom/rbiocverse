@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/js/pie-chart.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+    #toggle {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(30,30,40,0.95);
+      border: 2px solid #4ade80;
+      color: #fff;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: absolute;
+      top: 0;
+      right: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #toggle:hover { transform: scale(1.05); }
+    #toggle:active { cursor: grabbing; }
+    #toggle.open { background: rgba(74,222,128,0.8); }
+    #toggle.warning { border-color: #fbbf24; }
+    #toggle.critical { border-color: #ef4444; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    @keyframes pulse-stop {
+      0%, 100% { opacity: 1; background: #ef4444; }
+      50% { opacity: 0.7; background: #dc2626; }
+    }
+    /* Stop progress bar */
+    .stop-progress {
+      margin: 8px 0;
+    }
+    .stop-progress-text {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 6px;
+    }
+    .stop-progress-bar {
+      height: 3px;
+      background: #374151;
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .stop-progress-fill {
+      height: 100%;
+      width: 30%;
+      background: #ef4444;
+      position: absolute;
+      animation: stop-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes stop-indeterminate {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
+    #panel {
+      display: none;
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: rgba(30,30,40,0.98);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      color: #fff;
+    }
+    #panel.open { display: block; }
+    .cluster-name {
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cluster-name .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+    .cluster-name .dot.stopping {
+      background: #ef4444;
+      animation: pulse-stop 0.5s infinite;
+    }
+    .ide-badge {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    /* Time pie chart */
+    .time-pie {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .time-pie svg {
+      width: 32px;
+      height: 32px;
+    }
+    .time-pie-bg {
+      fill: rgba(255,255,255,0.1);
+      stroke: none;
+    }
+    .time-pie-fill {
+      fill: #4ade80;
+      stroke: none;
+    }
+    .time-pie-fill.warning { fill: #fbbf24; }
+    .time-pie-fill.critical { fill: #ef4444; }
+    .time-pie-text {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #4ade80;
+    }
+    .time-pie-text.warning { color: #fbbf24; }
+    .time-pie-text.critical { color: #ef4444; }
+    .resources {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 4px;
+    }
+    .session-details {
+      display: flex;
+      gap: 0.8em;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4px;
+    }
+    .node {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 8px;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .actions button {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .actions button:hover { background: rgba(255,255,255,0.1); }
+    .actions button.danger {
+      border-color: rgba(239,68,68,0.5);
+      color: #fca5a5;
+    }
+    .actions button.danger:hover { background: rgba(239,68,68,0.2); }
+    .actions button.live-server {
+      border-color: rgba(74,222,128,0.5);
+      color: #4ade80;
+    }
+    .actions button.live-server:hover { background: rgba(74,222,128,0.2); }
+    .actions button.shiny-server {
+      border-color: rgba(59,130,246,0.5);
+      color: #60a5fa;
+    }
+    .actions button.shiny-server:hover { background: rgba(59,130,246,0.2); }
+    .actions button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Live Server Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+    }
+    .modal-overlay.show { display: flex; align-items: center; justify-content: center; }
+    .modal {
+      background: rgba(30,30,40,0.98);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 300px;
+      width: 90%;
+      color: #fff;
+    }
+    .modal h3 {
+      margin-bottom: 12px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    /* Lucide icon styling */
+    .lucide {
+      width: 1em;
+      height: 1em;
+      vertical-align: -0.125em;
+      stroke-width: 2;
+    }
+    .resource-icon {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      margin-right: 2px;
+      opacity: 0.7;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .modal-actions button {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .modal-actions button:hover { background: rgba(255,255,255,0.1); }
+    .modal-actions button.primary {
+      background: #4ade80;
+      border-color: #4ade80;
+      color: #000;
+    }
+    .modal-actions button.primary:hover { background: #22c55e; }
+    .copy-feedback {
+      font-size: 0.75rem;
+      color: #4ade80;
+      margin-top: 8px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .copy-feedback.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <button id="toggle"><i data-lucide="panel-right"></i></button>
+  <div id="panel">
+    <div id="content">Loading...</div>
+  </div>
+
+  <!-- Live Server Modal -->
+  <div id="live-modal" class="modal-overlay">
+    <div class="modal">
+      <h3><i data-lucide="globe" style="width:18px;height:18px;"></i> Live Server</h3>
+      <div class="modal-actions">
+        <button onclick="copyLiveUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+        <button class="primary" onclick="openLiveServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      </div>
+      <div id="copy-feedback" class="copy-feedback">Copied!</div>
+      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
+        Start Live Server in VS Code (port 5500)
+      </div>
+    </div>
+  </div>
+
+  <!-- Shiny Server Modal -->
+  <div id="shiny-modal" class="modal-overlay">
+    <div class="modal">
+      <h3><i data-lucide="sparkles" style="width:18px;height:18px;"></i> Shiny App</h3>
+      <div class="modal-actions">
+        <button onclick="copyShinyUrl()"><i data-lucide="copy" class="lucide"></i> Copy URL</button>
+        <button class="primary" onclick="openShinyServer()"><i data-lucide="external-link" class="lucide"></i> Open</button>
+      </div>
+      <div id="shiny-copy-feedback" class="copy-feedback">Copied!</div>
+      <div style="margin-top:12px;font-size:0.7rem;color:rgba(255,255,255,0.4);font-weight:normal;">
+        Run shiny::runApp(port=3838)
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const toggle = document.getElementById('toggle');
+    const panel = document.getElementById('panel');
+    let open = false;
+    let countdown = null;
+    let walltime = null;
+    let activeSession = null;  // { hpc, ide }
+    let availableIdes = {};    // IDE info from server
+    let liveServerAvailable = false;
+    let shinyServerAvailable = false;
+    let currentStatus = null;
+    let isStopping = false;     // Prevent UI updates during stop
+
+    // Drag functionality
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    let hasMoved = false;
+
+    function onDragStart(e) {
+      isDragging = true;
+      hasMoved = false;
+      const touch = e.touches ? e.touches[0] : e;
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+      e.preventDefault();
+    }
+
+    function onDragMove(e) {
+      if (!isDragging) return;
+      const touch = e.touches ? e.touches[0] : e;
+      const dx = touch.clientX - dragStartX;
+      const dy = touch.clientY - dragStartY;
+
+      // Lower threshold (2px) for smoother dragging while still detecting clicks
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        hasMoved = true;
+      }
+      // Always send position updates once dragging starts (hasMoved)
+      if (hasMoved) {
+        parent.postMessage({ type: 'hpc-menu-drag', dx, dy }, window.location.origin);
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+      }
+    }
+
+    function onDragEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      if (!hasMoved) {
+        open = !open;
+        toggle.classList.toggle('open', open);
+        panel.classList.toggle('open', open);
+
+
+
+
+        // Notify parent wrapper to resize iframe dynamically
+        parent.postMessage({ type: open ? 'hpc-menu-expand' : 'hpc-menu-collapse' }, window.location.origin);
+
+      }
+    }
+
+    toggle.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+    toggle.addEventListener('touchstart', onDragStart, { passive: false });
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
+
+    function formatTime(seconds) {
+      if (!seconds || seconds <= 0) return '0m';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    // Pie chart functions from shared /js/pie-chart.js (PieChart.*)
+    function renderTimePie(remaining, total) {
+      return PieChart.renderPieChart(remaining, total, 'menu');
+    }
+
+    function render() {
+      if (isStopping) return;  // Don't update UI during stop
+      const content = document.getElementById('content');
+      if (!activeSession) {
+        content.innerHTML =
+          '<div style="color:rgba(255,255,255,0.5);margin-bottom:12px;">No active session</div>' +
+          '<div class="actions">' +
+          '<button onclick="goToMenu()"><i data-lucide="home" class="lucide"></i> Main Menu</button>' +
+          '</div>';
+        lucide.createIcons();
+        return;
+      }
+
+      const { hpc, ide } = activeSession;
+      const ideInfo = availableIdes[ide] || { name: ide, icon: 'box' };
+
+      // Update toggle button appearance
+      toggle.className = '';
+      if (countdown < 600) toggle.classList.add('critical');
+      else if (countdown < 1800) toggle.classList.add('warning');
+      if (open) toggle.classList.add('open');
+
+      // Only show Live Server and Shiny for VS Code
+      const showDevServers = ide === 'vscode';
+      const liveServerBtn = showDevServers
+        ? (liveServerAvailable
+            ? '<button class="live-server" onclick="showLiveModal()"><i data-lucide="globe" class="lucide"></i> Live Server</button>'
+            : '<button class="live-server" disabled title="Start Live Server in VS Code (port 5500)"><i data-lucide="globe" class="lucide"></i> Live Server</button>')
+        : '';
+      const shinyServerBtn = showDevServers
+        ? (shinyServerAvailable
+            ? '<button class="shiny-server" onclick="showShinyModal()"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>'
+            : '<button class="shiny-server" disabled title="Run shiny::runApp(port=3838)"><i data-lucide="sparkles" class="lucide"></i> Shiny</button>')
+        : '';
+
+      let resourcesHtml = '';
+      let nodeText = '';
+      let sessionDetails = '';
+      if (currentStatus) {
+        resourcesHtml = '<i data-lucide="cpu" class="resource-icon"></i> ' + (currentStatus.cpus || '?') + ' CPUs &nbsp;&nbsp; <i data-lucide="memory-stick" class="resource-icon"></i> ' + (currentStatus.memory || '?');
+        nodeText = '<i data-lucide="server" class="resource-icon"></i> ' + (currentStatus.node || '');
+
+        // Build session details line (GPU, Release)
+        const detailParts = [];
+        if (currentStatus.gpu) {
+          detailParts.push('<span><i data-lucide="zap" class="resource-icon"></i> ' + currentStatus.gpu.toUpperCase() + '</span>');
+        }
+        if (currentStatus.releaseVersion) {
+          detailParts.push('<span><i data-lucide="package" class="resource-icon"></i> Bioc ' + currentStatus.releaseVersion + '</span>');
+        }
+        if (detailParts.length > 0) {
+          sessionDetails = '<div class="session-details">' + detailParts.join('') + '</div>';
+        }
+      }
+
+      content.innerHTML =
+        '<div class="cluster-name"><span class="dot"></span>' + hpc.charAt(0).toUpperCase() + hpc.slice(1) + '</div>' +
+        '<div class="ide-badge"><i class="' + ideInfo.icon + ' resource-icon"></i> ' + ideInfo.name + '</div>' +
+        renderTimePie(countdown || 0, walltime || countdown || 1) +
+        '<div class="resources">' + resourcesHtml + '</div>' +
+        sessionDetails +
+        '<div class="node">' + nodeText + '</div>' +
+        '<div class="actions">' +
+        liveServerBtn +
+        shinyServerBtn +
+        '<button onclick="goToMenu()"><i data-lucide="arrow-left" class="lucide"></i> Main Menu</button>' +
+        '<button class="danger" onclick="stopJob()"><i data-lucide="square" class="lucide"></i> Stop</button>' +
+        '</div>';
+
+      lucide.createIcons();
+    }
+
+    async function checkDevServers() {
+      // Only check if VS Code is active
+      if (!activeSession || activeSession.ide !== 'vscode') {
+        liveServerAvailable = false;
+        shinyServerAvailable = false;
+        return;
+      }
+      try {
+        const res = await fetch('/api/dev-servers');
+        if (res.ok) {
+          const data = await res.json();
+          liveServerAvailable = data.liveServer || false;
+          shinyServerAvailable = data.shiny || false;
+        } else {
+          liveServerAvailable = false;
+          shinyServerAvailable = false;
+        }
+      } catch (e) {
+        liveServerAvailable = false;
+        shinyServerAvailable = false;
+      }
+      render();
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/cluster-status');
+        const data = await res.json();
+
+        // Store available IDEs
+        if (data.ides) {
+          availableIdes = data.ides;
+        }
+
+        // Get active session { hpc, ide }
+        activeSession = data.activeSession;
+
+        if (activeSession) {
+          const { hpc, ide } = activeSession;
+          // Get IDE-specific status from nested structure: data[hpc][ide]
+          const hpcData = data[hpc];
+          const ideStatus = hpcData ? hpcData[ide] : null;
+
+          if (ideStatus && ideStatus.status === 'running') {
+            currentStatus = ideStatus;
+            if (countdown === null && ideStatus.timeLeftSeconds) {
+              countdown = ideStatus.timeLeftSeconds;
+              walltime = ideStatus.timeLimitSeconds || ideStatus.timeLeftSeconds;
+            }
+          } else {
+            currentStatus = null;
+            countdown = null;
+            walltime = null;
+          }
+        } else {
+          currentStatus = null;
+          countdown = null;
+          walltime = null;
+        }
+        render();
+      } catch(e) {
+        console.error('Status error:', e);
+      }
+    }
+
+    function tickCountdown() {
+      if (countdown !== null && countdown > 0) {
+        countdown--;
+        const remaining = countdown;
+        const total = walltime || remaining;
+
+        // Update pie chart using shared module
+        PieChart.updatePieChart('menu', remaining, total);
+
+        // Update toggle button appearance
+        toggle.className = open ? 'open' : '';
+        if (countdown < 600) toggle.classList.add('critical');
+        else if (countdown < 1800) toggle.classList.add('warning');
+      }
+    }
+
+    function goToMenu() {
+      console.log('[Menu] Navigating to main menu');
+      window.top.location.href = '/';
+    }
+
+    async function stopJob() {
+      // Guard against race conditions - prevent multiple simultaneous stops
+      if (isStopping) return;
+      if (!activeSession) return;
+      const { hpc, ide } = activeSession;
+      const ideInfo = availableIdes[ide] || { name: ide };
+
+      if (!confirm('Stop ' + ideInfo.name + ' on ' + hpc + '?')) return;
+      console.log('[Menu] Stop job requested:', hpc, ide);
+
+      // Prevent UI updates during stop
+      isStopping = true;
+
+      // Replace actions with progress indicator
+      const actionsEl = document.querySelector('.actions');
+      if (actionsEl) {
+        actionsEl.innerHTML =
+          '<div class="stop-progress">' +
+          '<div class="stop-progress-text">Stopping job...</div>' +
+          '<div class="stop-progress-bar"><div class="stop-progress-fill"></div></div>' +
+          '</div>';
+      }
+
+      // Pulse the status dot red while stopping
+      const dot = document.querySelector('.cluster-name .dot');
+      if (dot) dot.classList.add('stopping');
+
+      // Use SSE for progress (even though it's indeterminate, keeps connection alive)
+      const eventSource = new EventSource('/api/stop/' + hpc + '/' + ide + '/stream');
+
+      // Fallback timeout - if SSE hangs, redirect after 15s
+      const fallbackTimeout = setTimeout(function() {
+        if (isStopping) {
+          console.log('[Menu] Stop timeout, redirecting');
+          isStopping = false;
+          eventSource.close();
+          window.top.location.href = '/';
+        }
+      }, 15000);
+
+      eventSource.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[Menu] Stop SSE event:', data);
+
+          if (data.type === 'progress') {
+            const textEl = document.querySelector('.stop-progress-text');
+            if (textEl) textEl.textContent = data.message;
+          }
+
+          if (data.type === 'complete' || data.type === 'error') {
+            clearTimeout(fallbackTimeout);
+            isStopping = false;
+            eventSource.close();
+            if (data.type === 'error') {
+              alert('Failed: ' + (data.message || 'Unknown error'));
+            }
+            window.top.location.href = '/';
+          }
+        } catch(e) {
+          console.error('[Menu] Stop SSE parse error:', e);
+        }
+      };
+
+      eventSource.onerror = function() {
+        console.error('[Menu] Stop SSE connection error');
+        clearTimeout(fallbackTimeout);
+        isStopping = false;
+        eventSource.close();
+        // Fallback to direct navigation
+        window.top.location.href = '/';
+      };
+    }
+
+    // Live Server Modal functions
+    function getLiveUrl() {
+      return window.location.origin + '/live/';
+    }
+
+    function showLiveModal() {
+      console.log('[Menu] Live Server modal opened');
+      document.getElementById('live-modal').classList.add('show');
+      lucide.createIcons();
+    }
+
+    function hideLiveModal() {
+      document.getElementById('live-modal').classList.remove('show');
+      document.getElementById('copy-feedback').classList.remove('show');
+    }
+
+    function copyLiveUrl() {
+      const url = getLiveUrl();
+      console.log('[Menu] Copying Live Server URL:', url);
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('copy-feedback').classList.add('show');
+        setTimeout(() => {
+          document.getElementById('copy-feedback').classList.remove('show');
+        }, 2000);
+      });
+    }
+
+    function openLiveServer() {
+      console.log('[Menu] Opening Live Server in new tab');
+      window.open('/live/', '_blank');
+      hideLiveModal();
+    }
+
+    document.getElementById('live-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideLiveModal();
+    });
+
+    // Shiny Server Modal functions
+    function getShinyUrl() {
+      return window.location.origin + '/shiny/';
+    }
+
+    function showShinyModal() {
+      console.log('[Menu] Shiny modal opened');
+      document.getElementById('shiny-modal').classList.add('show');
+      lucide.createIcons();
+    }
+
+    function hideShinyModal() {
+      document.getElementById('shiny-modal').classList.remove('show');
+      document.getElementById('shiny-copy-feedback').classList.remove('show');
+    }
+
+    function copyShinyUrl() {
+      const url = getShinyUrl();
+      console.log('[Menu] Copying Shiny URL:', url);
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById('shiny-copy-feedback').classList.add('show');
+        setTimeout(() => {
+          document.getElementById('shiny-copy-feedback').classList.remove('show');
+        }, 2000);
+      });
+    }
+
+    function openShinyServer() {
+      console.log('[Menu] Opening Shiny in new tab');
+      window.open('/shiny/', '_blank');
+      hideShinyModal();
+    }
+
+    document.getElementById('shiny-modal').addEventListener('click', function(e) {
+      if (e.target === this) hideShinyModal();
+    });
+
+    // Initialize
+    fetchStatus();
+    checkDevServers();
+    setInterval(fetchStatus, 60000);
+    setInterval(checkDevServers, 10000);
+    setInterval(tickCountdown, 1000);
+    lucide.createIcons();
+  </script>
+</body>
+</html>

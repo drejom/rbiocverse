@@ -1,0 +1,21 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sun" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <linearGradient id="gemini" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <!-- Corona glow -->
+  <circle cx="52" cy="52" r="50" fill="#f59e0b" fill-opacity="0.1"/>
+  <circle cx="52" cy="52" r="45" fill="#f59e0b" fill-opacity="0.15"/>
+  <!-- Sun - Apollo -->
+  <circle cx="44" cy="44" r="32" fill="url(#sun)"/>
+  <!-- Gemini -->
+  <circle cx="66" cy="66" r="42" fill="url(#gemini)"/>
+  <!-- Highlight -->
+  <circle cx="52" cy="52" r="5" fill="white" fill-opacity="0.25"/>
+</svg>

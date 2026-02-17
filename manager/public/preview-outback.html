@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Australian Outback Theme Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #2C1810 0%, #4A2C1B 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      padding: 20px;
+    }
+
+    .launcher {
+      background: rgba(201, 76, 76, 0.15);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .theme-badge {
+      background: rgba(242, 201, 76, 0.2);
+      color: #F2C94C;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      text-align: center;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+      text-align: center;
+      color: #F2C94C;
+    }
+
+    .subtitle {
+      color: rgba(242, 201, 76, 0.6);
+      margin-bottom: 25px;
+      text-align: center;
+    }
+
+    .cluster-card {
+      background: rgba(242, 201, 76, 0.05);
+      border: 2px solid rgba(242, 201, 76, 0.2);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 15px;
+    }
+
+    .cluster-card.running {
+      border-color: #84A98C;
+      background: rgba(132, 169, 140, 0.15);
+    }
+
+    .cluster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .cluster-name {
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #84A98C;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .cluster-info {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #002593, #6A8BE8);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: #84A98C;
+      color: #fff;
+      margin-right: 10px;
+    }
+
+    .form-input {
+      margin-bottom: 12px;
+    }
+
+    .form-input label {
+      display: block;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 4px;
+    }
+
+    .form-input input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 0.9rem;
+    }
+
+    .form-input input:focus {
+      outline: none;
+      border-color: #C94C4C;
+    }
+
+    .color-palette {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .color-swatch {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.8rem;
+    }
+
+    .color-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="launcher">
+    <div class="theme-badge">🏜️ AUSTRALIAN OUTBACK THEME</div>
+
+    <h1>Computational Biology & Mathematics</h1>
+    <p class="subtitle">City of Hope • HPC Development Environment</p>
+
+    <div class="cluster-card running">
+      <div class="cluster-header">
+        <span class="cluster-name">Gemini</span>
+        <div>
+          <span class="status-dot"></span>
+          <span>Running</span>
+        </div>
+      </div>
+      <div class="cluster-info">VSCode • 4 CPUs • 16GB RAM • 2h 30m remaining</div>
+      <button class="btn btn-success">Open VSCode</button>
+      <button class="btn btn-primary">Extend Time</button>
+    </div>
+
+    <div class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-name">Apollo</span>
+      </div>
+      <div class="form-input">
+        <label>CPUs</label>
+        <input type="number" value="4" placeholder="4">
+      </div>
+      <button class="btn btn-primary">Launch Session</button>
+    </div>
+
+    <div class="color-palette">
+      <div class="color-swatch">
+        <div class="color-box" style="background: #C94C4C;"></div>
+        <div>Red Earth<br>#C94C4C</div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-box" style="background: #F2C94C;"></div>
+        <div>Wattle Gold<br>#F2C94C</div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-box" style="background: #84A98C;"></div>
+        <div>Desert Sage<br>#84A98C</div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-box" style="background: #002593;"></div>
+        <div>CoH Blue<br>#002593</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
