@@ -12,8 +12,9 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import KeyManagementModal from './KeyManagementModal';
 
 type ClusterName = 'gemini' | 'apollo';
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -41,6 +42,7 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
     apollo: { status: 'idle', error: null },
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
   // Skip auto-test if ?skipAutoTest=1 in URL (for debugging)
   const skipAutoTest = new URLSearchParams(window.location.search).has('skipAutoTest');
   const [initialTestDone, setInitialTestDone] = useState(skipAutoTest);
@@ -205,10 +207,27 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
       {needsKeySetup && !existingKeysWork ? (
         <p className="setup-wizard-intro">
           {anyFailed
-            ? "We couldn't connect to both HPC clusters. You'll need to install your SSH key before you can launch IDE sessions. This is a one-time setup."
+            ? "We couldn't connect to both HPC clusters. You'll need to set up SSH key access before you can launch IDE sessions. This is a one-time setup."
             : 'Almost there! Test your connections to continue.'}
         </p>
       ) : null}
+
+      {/* Manage Keys button - opens modal with Generate/Import options */}
+      {needsKeySetup && (
+        <div className="setup-section">
+          <button
+            className="key-btn"
+            onClick={() => setShowKeyModal(true)}
+            style={{ width: '100%', justifyContent: 'center', padding: '12px 16px' }}
+          >
+            <Settings size={18} />
+            {publicKey ? 'Manage SSH Keys' : 'Set Up SSH Key'}
+          </button>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: 8 }}>
+            Generate a new key or import an existing one
+          </p>
+        </div>
+      )}
 
       {/* SSH Key Section - show if we have a managed key to display */}
       {publicKey && (
@@ -388,6 +407,12 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
       >
         {bothConnected ? 'Continue to Launcher' : 'Connect to both clusters to continue'}
       </button>
+
+      {/* Key Management Modal */}
+      <KeyManagementModal
+        isOpen={showKeyModal}
+        onClose={() => setShowKeyModal(false)}
+      />
     </div>
   );
 }
