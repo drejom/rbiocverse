@@ -210,13 +210,21 @@ describe('TunnelService', () => {
     it('should log SSH stderr output', async function() {
       this.timeout(5000);
 
-      sinon.stub(tunnelService, 'checkPort').resolves(true);
+      // First call returns false (port not in use), subsequent calls return true (tunnel established)
+      const checkPortStub = sinon.stub(tunnelService, 'checkPort');
+      checkPortStub.onFirstCall().resolves(false);  // Pre-check: port not in use
+      checkPortStub.resolves(true);  // Tunnel established
       sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
+      // forceReleasePort won't be called when port is not in use (checkPort returns false)
+      sinon.stub(tunnelService, 'forceReleasePort').resolves(true);
       // Stub the logger's ssh method to verify it gets called
       const { log } = require('../../lib/logger');
       const sshStub = sinon.stub(log, 'ssh');
 
       const promise = tunnelService.start('gemini', 'node01', 'vscode');
+
+      // Small delay to ensure stderr listener is attached
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Simulate SSH stderr
       mockTunnelProcess.stderr.emit('data', Buffer.from('SSH warning'));
@@ -226,6 +234,22 @@ describe('TunnelService', () => {
       expect(sshStub).to.have.been.calledWith('SSH warning', sinon.match({ hpc: 'gemini' }));
 
       sshStub.restore();
+    });
+
+    it('should call forceReleasePort when port is in use', async function() {
+      this.timeout(5000);
+
+      // First call returns true (port in use), second returns true (tunnel ready)
+      const checkPortStub = sinon.stub(tunnelService, 'checkPort');
+      checkPortStub.onFirstCall().resolves(true);  // Pre-check: port IS in use
+      checkPortStub.resolves(true);  // Tunnel established
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
+      const forceReleaseStub = sinon.stub(tunnelService, 'forceReleasePort').resolves(true);
+
+      await tunnelService.start('gemini', 'node01', 'vscode');
+
+      // Verify forceReleasePort was called with the IDE port (8000 for VS Code)
+      expect(forceReleaseStub).to.have.been.calledWith(8000);
     });
 
     it('should use correct port for RStudio', async function() {

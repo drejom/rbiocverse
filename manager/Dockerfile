@@ -23,8 +23,9 @@ RUN cd ui && npm run build
 FROM node:20-alpine
 
 # Install SSH client for tunnel management
+# Install lsof for orphaned tunnel cleanup (forceReleasePort)
 # Install build tools for native modules (better-sqlite3)
-RUN apk add --no-cache openssh-client curl python3 make g++
+RUN apk add --no-cache openssh-client lsof curl python3 make g++
 
 # Create apps user with UID 568 (matches TrueNAS apps user)
 RUN addgroup -g 568 apps && adduser -u 568 -G apps -h /home/apps -D apps
