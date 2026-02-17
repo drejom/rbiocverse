@@ -222,8 +222,11 @@ function runMigrations(database: DatabaseInstance): void {
     database.exec('ALTER TABLE cluster_health ADD COLUMN v100_cpus_percent INTEGER');
   }
 
-  // Migration: Rename used_live_server/used_shiny to used_dev_server
+  // TODO: Remove this migration block before v0.1.0 release
+  // One-time migration: Rename used_live_server/used_shiny to used_dev_server
   // For existing databases with old schema, add new column and migrate data
+  // This migration was added in PR #49 and can be removed once all deployments
+  // have been migrated (Dokploy production and any dev instances)
   const activeSessionsInfo = database.prepare('PRAGMA table_info(active_sessions)').all() as TableColumn[];
   const activeColumns = new Set(activeSessionsInfo.map(col => col.name));
 
