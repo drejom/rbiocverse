@@ -18,6 +18,8 @@ interface HeatmapData {
   totalPending: number;
 }
 
+type MetricKey = 'avgCpus' | 'maxCpus' | 'avgMemory' | 'avgNodes' | 'avgA100' | 'avgV100' | 'totalRunning' | 'totalPending';
+
 interface ClusterHeatmapProps {
   getAuthHeader: () => Record<string, string>;
   hpc?: string;
@@ -28,7 +30,7 @@ export function ClusterHeatmap({ getAuthHeader, hpc = 'gemini', data: externalDa
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<HeatmapData[]>(externalData || []);
-  const [metric, setMetric] = useState<string>('avgCpus');
+  const [metric, setMetric] = useState<MetricKey>('avgCpus');
   const [loading, setLoading] = useState(!externalData);
 
   // Only fetch if no external data provided
@@ -66,7 +68,7 @@ export function ClusterHeatmap({ getAuthHeader, hpc = 'gemini', data: externalDa
     renderHeatmap(svgRef.current, {
       dateMap,
       colorScale,
-      getValue: (dayData) => (dayData as unknown as Record<string, number>)[metric] || 0,
+      getValue: (dayData) => dayData[metric] ?? 0,
       getTooltipHtml: (date, dayData) => {
         let html = `<strong>${date.toLocaleDateString()}</strong><br/>
           CPU: ${dayData?.avgCpus || 0}% (max: ${dayData?.maxCpus || 0}%)<br/>`;
@@ -83,7 +85,7 @@ export function ClusterHeatmap({ getAuthHeader, hpc = 'gemini', data: externalDa
   }, [data, metric, hpc]);
 
   // Build metrics list - include GPU partitions only for Gemini
-  const baseMetrics = [
+  const baseMetrics: { value: MetricKey; label: string }[] = [
     { value: 'avgCpus', label: 'CPU' },
   ];
 

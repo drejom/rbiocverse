@@ -20,7 +20,7 @@ export function ReleaseSelector({ releases, selectedVersion, onSelect, cluster, 
 
   // Filter releases available for this cluster
   const clusterReleases = Object.entries(releases).filter(
-    ([, info]) => info.clusters.includes(cluster)
+    ([, info]) => (info.clusters ?? []).includes(cluster)
   );
 
   // Use theme-appropriate logo

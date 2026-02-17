@@ -84,16 +84,19 @@ export function AdoptionCurve({ getAuthHeader, version }: AdoptionCurveProps) {
 
     // Parse dates
     const parseDate = d3.timeParse('%Y-%m-%d');
-    const chartData: ParsedDataPoint[] = data.map(d => ({
-      date: parseDate(d.date) as Date,
-      users: d.cumulativeUsers,
-    })).filter(d => d.date);
+    const chartData = data
+      .map(d => {
+        const date = parseDate(d.date);
+        return date ? { date, users: d.cumulativeUsers } : null;
+      })
+      .filter((d): d is ParsedDataPoint => d !== null);
 
     if (chartData.length === 0) return;
 
     // Scales
+    const dateExtent = d3.extent(chartData, d => d.date);
     const x = d3.scaleTime()
-      .domain(d3.extent(chartData, d => d.date) as [Date, Date])
+      .domain(dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()])
       .range([0, width]);
 
     const y = d3.scaleLinear()

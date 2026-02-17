@@ -11,6 +11,7 @@ interface GrowthData {
 }
 
 interface ParsedGrowthData {
+  month: string;
   date: Date;
   sessions: number;
   uniqueUsers: number;
@@ -61,10 +62,12 @@ export function GrowthTrend({ getAuthHeader }: GrowthTrendProps) {
 
     // Parse dates
     const parseMonth = d3.timeParse('%Y-%m');
-    const parsedData: ParsedGrowthData[] = data.map(d => ({
-      ...d,
-      date: parseMonth(d.month) as Date,
-    })).filter(d => d.date);
+    const parsedData: ParsedGrowthData[] = data
+      .map(d => {
+        const date = parseMonth(d.month);
+        return date ? { ...d, date } : null;
+      })
+      .filter((d): d is ParsedGrowthData => d !== null);
 
     // If no valid dates were parsed, skip rendering to avoid invalid scale domains
     if (!parsedData.length) {
@@ -72,8 +75,9 @@ export function GrowthTrend({ getAuthHeader }: GrowthTrendProps) {
     }
 
     // Scales
+    const dateExtent = d3.extent(parsedData, d => d.date);
     const x = d3.scaleTime()
-      .domain(d3.extent(parsedData, d => d.date) as [Date, Date])
+      .domain(dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()])
       .range([0, width]);
 
     const maxSessions = d3.max(parsedData, d => d.sessions) || 1;

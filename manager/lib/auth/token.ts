@@ -71,10 +71,11 @@ function verifyToken(token: string | undefined | null): TokenPayload | null {
   }
 }
 
+export type { TokenPayload };
+
 export {
   generateToken,
   verifyToken,
-  TokenPayload,
 };
 
 // CommonJS compatibility for existing require() calls
