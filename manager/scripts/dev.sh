@@ -52,8 +52,8 @@ export ENABLE_STATE_PERSISTENCE=true
 # Node environment
 export NODE_ENV=development
 
-# Default port
-PORT="${PORT:-3000}"
+# Default port (exported for potential use by server)
+export PORT="${PORT:-3000}"
 
 # Kill any process holding the port (graceful then force)
 kill_port() {

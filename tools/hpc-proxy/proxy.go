@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -288,7 +289,8 @@ func (p *Proxy) rewriteHTML(resp *http.Response, prefix string, basePath string)
 	// This ensures relative paths like "deps/..." resolve correctly in subdirectories
 	// Skip if HTML already has a base tag to avoid invalid HTML with multiple base tags
 	if !baseTagPattern.MatchString(bodyStr) {
-		baseTag := fmt.Sprintf(`<base href="%s">`, basePath)
+		// HTML-escape basePath to prevent XSS via crafted URLs
+		baseTag := fmt.Sprintf(`<base href="%s">`, html.EscapeString(basePath))
 		if headPattern.MatchString(bodyStr) {
 			bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
 		} else {
