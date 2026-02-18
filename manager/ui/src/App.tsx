@@ -7,6 +7,7 @@ import { useCountdown } from './hooks/useCountdown';
 import { useLaunch } from './hooks/useLaunch';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SessionStateProvider, useSessionState } from './contexts/SessionStateContext';
 import Sidebar from './components/Sidebar';
 import MainPanel from './components/MainPanel';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -43,8 +44,10 @@ const SESSION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
-  const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
+  // useLaunch now uses SessionStateContext - no longer needs onRefresh callback
+  const { launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides);
   const { user, checkSession } = useAuth();
+  const { clearSession } = useSessionState();
 
   // Periodic session check for sliding token refresh
   // Ensures active users get their token refreshed before expiry
@@ -136,6 +139,8 @@ function Launcher() {
       });
       eventSource.close();
       stopEventSourcesRef.current.delete(key);
+      // Clear session from context so UI updates immediately
+      clearSession(hpc, ide);
       refresh();
     };
 
@@ -160,7 +165,7 @@ function Launcher() {
       clearTimeout(timeout);
       cleanup();
     };
-  }, [user, config, stoppingJobs, refresh]);
+  }, [user, config, stoppingJobs, refresh, clearSession]);
 
   if (loading && !config.ides) {
     return (
@@ -239,16 +244,8 @@ function Launcher() {
         </div>
       </div>
 
+      {/* LoadingOverlay now reads from SessionStateContext */}
       <LoadingOverlay
-        visible={launchState.active}
-        header={launchState.header}
-        message={launchState.message}
-        progress={launchState.progress}
-        step={launchState.step}
-        error={launchState.error}
-        pending={launchState.pending}
-        indeterminate={launchState.indeterminate}
-        isSshError={launchState.isSshError}
         onBack={backToMenu}
         onCancel={stopLaunch}
         onSetupKeys={handleSetupKeys}
@@ -305,8 +302,10 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppContent />
-        <AppFooter />
+        <SessionStateProvider>
+          <AppContent />
+          <AppFooter />
+        </SessionStateProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -7,6 +7,7 @@ import { Play, Plug, Square, X, Cpu, MemoryStick, Package, Zap } from 'lucide-re
 import ReleaseSelector from './ReleaseSelector';
 import LaunchForm from './LaunchForm';
 import { TimePie } from './TimePie';
+import { useSessionState } from '../contexts/SessionStateContext';
 import type {
   ClusterName,
   ClusterConfig,
@@ -95,6 +96,7 @@ export function MainPanel({
   onConnect,
   onStop,
 }: MainPanelProps) {
+  const { getSession } = useSessionState();
   const { ides, releases, defaultReleaseVersion, gpuConfig, partitionLimits, defaultPartitions } = config;
 
   // Get ordered list of IDEs
@@ -135,16 +137,21 @@ export function MainPanel({
   }, [defaultReleaseVersion, selectedRelease]);
 
   // Categorize IDEs by status
+  // Check both polling and context (SSE) for status
   const idesByStatus = useMemo(() => {
     const running: string[] = [];
     const pending: string[] = [];
     const idle: string[] = [];
 
     for (const ide of ideList) {
-      const status = ideStatuses?.[ide];
-      if (status?.status === 'running') {
+      const pollingStatus = ideStatuses?.[ide];
+      const contextStatus = getSession(cluster, ide);
+      // Context takes priority (SSE updates are more immediate)
+      const status = contextStatus?.status || pollingStatus?.status;
+
+      if (status === 'running') {
         running.push(ide);
-      } else if (status?.status === 'pending') {
+      } else if (status === 'pending') {
         pending.push(ide);
       } else {
         idle.push(ide);
@@ -152,7 +159,7 @@ export function MainPanel({
     }
 
     return { running, pending, idle };
-  }, [ideList, ideStatuses]);
+  }, [ideList, ideStatuses, cluster, getSession]);
 
   // Find which IDEs are available for the selected release
   const availableIdesForRelease = useMemo(() => {
@@ -162,7 +169,31 @@ export function MainPanel({
   }, [releases, selectedRelease]);
 
   // Get current session status for selected tab
-  const currentStatus = ideStatuses?.[selectedIdeTab];
+  // Check both polling data (ideStatuses) and context (from SSE updates)
+  // Context takes priority since SSE is more immediate than polling
+  const pollingStatus = ideStatuses?.[selectedIdeTab];
+  const contextStatus = getSession(cluster, selectedIdeTab);
+
+  // Merge: use context status if it's more recent (pending/running from SSE)
+  // Fall back to polling data for other fields
+  const currentStatus = pollingStatus ? {
+    ...pollingStatus,
+    // Context status takes priority when set (SSE updates are faster)
+    status: contextStatus?.status || pollingStatus.status,
+    estimatedStartTime: contextStatus?.estimatedStartTime || pollingStatus.estimatedStartTime,
+  } : contextStatus ? {
+    status: contextStatus.status,
+    jobId: contextStatus.jobId,
+    node: contextStatus.node,
+    cpus: contextStatus.cpus,
+    memory: contextStatus.memory,
+    estimatedStartTime: contextStatus.estimatedStartTime,
+    gpu: contextStatus.gpu,
+    releaseVersion: contextStatus.releaseVersion,
+    timeLeftSeconds: contextStatus.timeLeftSeconds,
+    timeLimitSeconds: contextStatus.timeLimitSeconds,
+  } as ExtendedIdeStatus : undefined;
+
   const isRunning = currentStatus?.status === 'running';
   const isPending = currentStatus?.status === 'pending';
   const isIdle = !isRunning && !isPending;
@@ -215,10 +246,13 @@ export function MainPanel({
         />
         <div className="ide-tabs">
           {ideList.map((ide) => {
-            const status = ideStatuses?.[ide];
+            const pollingStatus = ideStatuses?.[ide];
+            const contextStatus = getSession(cluster, ide);
+            // Use context status (from SSE) if available, fallback to polling
+            const effectiveStatus = contextStatus?.status || pollingStatus?.status;
             const isActive = ide === selectedIdeTab;
-            const ideRunning = status?.status === 'running';
-            const idePending = status?.status === 'pending';
+            const ideRunning = effectiveStatus === 'running';
+            const idePending = effectiveStatus === 'pending';
             const isAvailable = availableIdesForRelease.includes(ide);
             const isDisabled = !isAvailable && !ideRunning && !idePending;
 
@@ -333,11 +367,32 @@ export function MainPanel({
               </span>
               {!isStopping && <span className="spinner" />}
             </div>
-            <div className="cluster-info" style={{ marginBottom: 12 }}>Waiting for resources...</div>
+            <div className="session-stats-inline">
+              <span className="stat-inline">
+                <Cpu size={14} />
+                {currentStatus.cpus || formValues.cpus || '?'}
+              </span>
+              <span className="stat-inline">
+                <MemoryStick size={14} />
+                {currentStatus.memory || formValues.mem || '?'}
+              </span>
+              {(currentStatus.releaseVersion || selectedRelease) && (
+                <span className="stat-inline">
+                  <Package size={14} />
+                  Bioc {currentStatus.releaseVersion || selectedRelease}
+                </span>
+              )}
+              {(currentStatus.gpu || selectedGpu) && (
+                <span className="stat-inline">
+                  <Zap size={14} />
+                  {(currentStatus.gpu || selectedGpu).toUpperCase()}
+                </span>
+              )}
+            </div>
             <div className="estimated-start" style={{ marginBottom: 12 }}>
-              {(currentStatus.startTime || currentStatus.estimatedStartTime)
-                ? `Est: ${formatEstimatedStart(currentStatus.startTime || currentStatus.estimatedStartTime!)}`
-                : 'Waiting for start time...'}
+              {currentStatus.estimatedStartTime
+                ? `Est: ${formatEstimatedStart(currentStatus.estimatedStartTime)}`
+                : 'Waiting for estimated start time...'}
             </div>
             {isStopping ? (
               <div className="stop-progress">

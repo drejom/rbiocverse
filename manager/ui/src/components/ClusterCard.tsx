@@ -5,6 +5,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Play, Square } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { useSessionState } from '../contexts/SessionStateContext';
 import { HealthBars } from './HealthBar';
 import ReleaseSelector from './ReleaseSelector';
 import IdeSelector from './IdeSelector';
@@ -70,6 +71,7 @@ export function ClusterCard({
 }: ClusterCardProps) {
   const { ides, releases, defaultReleaseVersion, gpuConfig, partitionLimits, defaultPartitions } = config;
   const api = useApi();
+  const { clearSession } = useSessionState();
 
   // Local state for launch form
   const [selectedIde, setSelectedIde] = useState('vscode');
@@ -200,6 +202,11 @@ export function ClusterCard({
         setStopAllError(`Failed to stop ${data.failed.length} job(s): ${data.failed.join(', ')}`);
       }
 
+      // Clear all sessions for this cluster from context
+      for (const ide of Object.keys(ides)) {
+        clearSession(hpc, ide);
+      }
+
       // Trigger a status refresh
       window.dispatchEvent(new CustomEvent('refresh-status'));
     } catch (e) {
@@ -207,7 +214,7 @@ export function ClusterCard({
     } finally {
       setIsStoppingAll(false);
     }
-  }, [api, hpc, activeJobCount]);
+  }, [api, hpc, activeJobCount, ides, clearSession]);
 
   // Check if any IDEs are available to launch
   const canLaunch = useMemo(() => {
