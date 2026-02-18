@@ -42,8 +42,9 @@ func NewProxy(port int, baseRewrite, verbose bool) *Proxy {
 
 // Start begins listening and returns the actual port (useful when port=0)
 func (p *Proxy) Start() (int, error) {
-	// Bind to localhost only for security on shared HPC nodes
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p.port))
+	// Bind to all interfaces so SSH tunnel can reach via node hostname
+	// Security: runs inside Singularity container, HPC compute nodes aren't externally accessible
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", p.port))
 	if err != nil {
 		return 0, fmt.Errorf("listen: %w", err)
 	}

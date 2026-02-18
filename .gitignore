@@ -8,9 +8,12 @@
 *.log
 node_modules/
 
+# Security scanning cache
+.cache_ggshield
+
 # User data (generated at runtime)
-manager/data/users.json
-manager/data/test_*.json
+manager/data/*
+!manager/data/.gitkeep
 
 # Test artifacts
 manager/ui/test-results/

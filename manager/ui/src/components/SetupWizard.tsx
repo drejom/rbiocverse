@@ -12,8 +12,9 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Download, CheckCircle, XCircle, Key, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, Terminal } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import KeyManagementModal from './KeyManagementModal';
 
 type ClusterName = 'gemini' | 'apollo';
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -29,27 +30,22 @@ interface TestsState {
 }
 
 interface SetupWizardProps {
-  publicKey: string;
   onComplete?: () => void;
 }
 
-function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
-  const { completeSetup } = useAuth();
-  const [copied, setCopied] = useState<string | null>(null);
+function SetupWizard({ onComplete }: SetupWizardProps) {
+  const { completeSetup, user } = useAuth();
   const [tests, setTests] = useState<TestsState>({
     gemini: { status: 'idle', error: null },
     apollo: { status: 'idle', error: null },
   });
-  const [showHelp, setShowHelp] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
   // Skip auto-test if ?skipAutoTest=1 in URL (for debugging)
   const skipAutoTest = new URLSearchParams(window.location.search).has('skipAutoTest');
   const [initialTestDone, setInitialTestDone] = useState(skipAutoTest);
   const [autoCompleting] = useState(false);
   // Track if SSH passed but user has a managed key to install
   const [existingKeysWork, setExistingKeysWork] = useState(false);
-
-  // Generate one-liner for SSH key installation
-  const oneLiner = publicKey ? `echo "${publicKey}" >> ~/.ssh/authorized_keys` : '';
 
   // Test connection to a cluster
   const testConnection = useCallback(async (cluster: ClusterName): Promise<boolean> => {
@@ -115,31 +111,6 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
 
     runInitialTests();
   }, [initialTestDone, testConnection]);
-
-  // Copy to clipboard
-  const copyToClipboard = useCallback(async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      setTimeout(() => setCopied(null), 2000);
-    } catch (err) {
-      console.error('Copy failed:', err);
-    }
-  }, []);
-
-  // Download public key as file
-  const downloadKey = useCallback(() => {
-    const blob = new Blob([publicKey], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rbiocverse_id.pub';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [publicKey]);
-
   // Check if BOTH connections succeeded (required for setup completion)
   const bothConnected = tests.gemini.status === 'success' && tests.apollo.status === 'success';
   const anyFailed = tests.gemini.status === 'error' || tests.apollo.status === 'error';
@@ -194,7 +165,7 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
               Your SSH keys are working
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-              {publicKey
+              {user?.publicKey
                 ? 'You can continue with your current setup, or install the managed key below if you want rbiocverse to manage your SSH access.'
                 : 'You can continue with your current setup. You can also generate a managed key later from the user menu if needed.'}
             </p>
@@ -202,110 +173,27 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {needsKeySetup && !existingKeysWork ? (
+      {needsKeySetup ? (
         <p className="setup-wizard-intro">
           {anyFailed
-            ? "We couldn't connect to both HPC clusters. You'll need to install your SSH key before you can launch IDE sessions. This is a one-time setup."
+            ? "We couldn't connect to both HPC clusters. You'll need to set up SSH key access before you can launch IDE sessions. This is a one-time setup."
             : 'Almost there! Test your connections to continue.'}
         </p>
       ) : null}
 
-      {/* SSH Key Section - show if we have a managed key to display */}
-      {publicKey && (
-        <div className="setup-section">
-          <h3>
-            <Key size={18} style={{ marginRight: 8, verticalAlign: -3 }} />
-            Install your SSH key
-          </h3>
-          <p>
-            Copy your public key to the cluster's <code>~/.ssh/authorized_keys</code> file.
-            Use one of the methods below:
-          </p>
-
-          <div className="key-actions">
-            <button
-              className={`key-btn ${copied === 'key' ? 'copied' : ''}`}
-              onClick={() => copyToClipboard(publicKey, 'key')}
-            >
-              {copied === 'key' ? (
-                <>
-                  <CheckCircle size={16} />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy size={16} />
-                  Copy Key
-                </>
-              )}
-            </button>
-
-            <button
-              className={`key-btn ${copied === 'oneliner' ? 'copied' : ''}`}
-              onClick={() => copyToClipboard(oneLiner, 'oneliner')}
-            >
-              {copied === 'oneliner' ? (
-                <>
-                  <CheckCircle size={16} />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Terminal size={16} />
-                  Copy One-Liner
-                </>
-              )}
-            </button>
-
-            <button className="key-btn" onClick={downloadKey}>
-              <Download size={16} />
-              Download .pub
-            </button>
-          </div>
-
-          <button
-            className="key-btn"
-            onClick={() => setShowHelp(!showHelp)}
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            {showHelp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            {showHelp ? 'Hide help' : 'Show installation help'}
-          </button>
-
-          {showHelp && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: 16,
-                background: 'var(--bg-input)',
-                borderRadius: 8,
-                fontSize: '0.9rem',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <p style={{ marginBottom: 12 }}>
-                <strong>Option A: One-liner</strong> (easiest)
-              </p>
-              <ol style={{ marginLeft: 20, marginBottom: 16 }}>
-                <li>SSH into Gemini or Apollo from your terminal</li>
-                <li>Run the one-liner command</li>
-                <li>Done!</li>
-              </ol>
-
-              <p style={{ marginBottom: 12 }}>
-                <strong>Option B: Manual</strong>
-              </p>
-              <ol style={{ marginLeft: 20 }}>
-                <li>Copy the public key</li>
-                <li>SSH into the cluster</li>
-                <li>Open <code>~/.ssh/authorized_keys</code> in a text editor</li>
-                <li>Paste the key on a new line</li>
-                <li>Save and exit</li>
-              </ol>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Manage Keys button - always visible so users can import/generate keys */}
+      <div className="setup-section">
+        <button
+          className="key-btn key-btn--full-width"
+          onClick={() => setShowKeyModal(true)}
+        >
+          <Settings size={18} />
+          {user?.publicKey ? 'Manage SSH Keys' : 'Set Up SSH Key'}
+        </button>
+        <p className="setup-wizard-hint">
+          Generate a new key or import an existing one
+        </p>
+      </div>
 
       {/* Test Connection Section */}
       <div className="setup-section">
@@ -388,6 +276,12 @@ function SetupWizard({ publicKey, onComplete }: SetupWizardProps) {
       >
         {bothConnected ? 'Continue to Launcher' : 'Connect to both clusters to continue'}
       </button>
+
+      {/* Key Management Modal */}
+      <KeyManagementModal
+        isOpen={showKeyModal}
+        onClose={() => setShowKeyModal(false)}
+      />
     </div>
   );
 }
