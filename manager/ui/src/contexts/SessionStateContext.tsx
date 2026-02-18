@@ -15,7 +15,7 @@ import { createContext, useContext, useState, useCallback, useMemo, type ReactNo
  * Merges data from SSE events and polling
  */
 export interface SessionState {
-  status: 'idle' | 'pending' | 'running' | 'starting' | 'stopping' | 'error';
+  status: 'idle' | 'pending' | 'running' | 'stopping' | 'error';
   jobId?: string;
   node?: string;
   cpus?: number | string;
