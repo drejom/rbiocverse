@@ -157,7 +157,7 @@ export function useLaunch(
               message: 'Job queued - waiting for resources',
               pending: true,
             }));
-            // After delay, check status - if running, auto-connect; otherwise show pending card
+            // After brief delay, check status - if running, auto-connect; otherwise show pending card
             setTimeout(async () => {
               try {
                 const statusRes = await fetch('/api/cluster-status');
@@ -169,16 +169,17 @@ export function useLaunch(
                   resetState();
                   connectRef.current?.(hpc, ide);
                 } else {
-                  // Still pending - show pending card
-                  resetState();
+                  // Still pending - trigger refresh first, then hide modal after brief delay
+                  // This overlaps the data fetch with modal display to avoid flash
                   onRefresh?.();
+                  setTimeout(resetState, 300);
                 }
               } catch {
-                // On error, just show pending card
-                resetState();
+                // On error, trigger refresh first then hide modal
                 onRefresh?.();
+                setTimeout(resetState, 300);
               }
-            }, 2000);
+            }, 1500);
             break;
 
           case 'complete':

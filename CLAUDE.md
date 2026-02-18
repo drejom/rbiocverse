@@ -82,6 +82,28 @@ npm test
 npm run test:coverage
 ```
 
+### Playwright Browser Tests
+
+Manual browser automation scripts for testing the UI:
+
+```bash
+# Setup (one-time)
+npm install playwright
+npx playwright install chromium
+
+# Run tests (from repo root)
+node manager/scripts/playwright/login-test.js
+node manager/scripts/playwright/launch-quick.js
+node manager/scripts/playwright/launch-pending.js
+```
+
+Configure via environment variables:
+```bash
+TEST_URL=http://localhost:3000 TEST_USERNAME=user TEST_PASSWORD=pass node manager/scripts/playwright/login-test.js
+```
+
+See `manager/scripts/playwright/README.md` for details and `helpers.js` for reusable functions.
+
 ### Container Build
 
 ```bash
