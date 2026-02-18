@@ -25,6 +25,7 @@ export interface Session {
   token: string | null;
   submittedAt: string | null;
   startedAt: string | null;
+  estimatedStartTime: string | null;  // SLURM's forecast for pending jobs
   error: string | null;
   timeLeftSeconds: number | null;
   lastActivity: string | null;
@@ -121,6 +122,7 @@ function rowToSession(row: SessionRow | undefined): Session | null {
     token: row.token,
     submittedAt: row.submitted_at,
     startedAt: row.started_at,
+    estimatedStartTime: null,  // Not stored in DB - refreshed from SLURM polling
     error: row.error,
     timeLeftSeconds: row.time_left_seconds,
     lastActivity: row.last_activity,

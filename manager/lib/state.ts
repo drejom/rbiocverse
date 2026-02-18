@@ -35,6 +35,7 @@ interface JobInfo {
   state: string;
   node?: string;
   timeLeftSeconds?: number;
+  startTime?: string | null;  // For pending jobs: SLURM's estimated start time
 }
 
 type HpcServiceFactory = (hpc: string) => HpcService;
@@ -171,6 +172,7 @@ function createIdleSession(ide: string): Session {
     node: null,
     tunnelProcess: null,
     startedAt: null,
+    estimatedStartTime: null,
     cpus: null,
     memory: null,
     walltime: null,
@@ -602,7 +604,31 @@ class StateManager {
     log.state('Updating session', { sessionKey, fields: Object.keys(updates) });
     Object.assign(session, updates);
     await this.save();
+
+    // If session went pending, reschedule polling to run sooner
+    if (updates.status === 'pending') {
+      this.triggerFastPoll();
+    }
+
     return session;
+  }
+
+  /**
+   * Trigger faster polling when session state changes to pending
+   * Cancels current timer and reschedules based on new state
+   */
+  private triggerFastPoll(): void {
+    if (this.pollingStopped || !this.hpcServiceFactory) return;
+
+    // Cancel existing timer
+    if (this.jobPollTimer) {
+      clearTimeout(this.jobPollTimer);
+      this.jobPollTimer = null;
+    }
+
+    // Reschedule with new interval (will be FREQUENT for pending sessions)
+    this.scheduleJobPoll();
+    log.state('Rescheduled polling for pending session');
   }
 
   /**
@@ -953,10 +979,17 @@ class StateManager {
       if (jobInfo.state === 'RUNNING' && session.status !== 'running') {
         session.status = 'running';
         session.node = jobInfo.node || null;
+        session.estimatedStartTime = null;  // Clear estimate once running
         significantChange = true;
-      } else if (jobInfo.state === 'PENDING' && session.status !== 'pending') {
-        session.status = 'pending';
-        significantChange = true;
+      } else if (jobInfo.state === 'PENDING') {
+        if (session.status !== 'pending') {
+          session.status = 'pending';
+          significantChange = true;
+        }
+        // Update estimated start time from SLURM (may arrive after a few polls)
+        if (jobInfo.startTime && jobInfo.startTime !== session.estimatedStartTime) {
+          session.estimatedStartTime = jobInfo.startTime;
+        }
       }
 
       // Update time remaining (not a significant change for backoff purposes)

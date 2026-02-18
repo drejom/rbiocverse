@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -210,17 +211,11 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 	// For /index.html -> base is /
 	basePath := originalPath
 	if !strings.HasSuffix(basePath, "/") {
-		// Check if this looks like a file (has extension) or directory
-		// Files: /port/5500/index.html, /foo.css -> strip filename
-		// Directories: /port/5500, /docs -> append trailing slash
-		lastSlash := strings.LastIndex(basePath, "/")
-		lastDot := strings.LastIndex(basePath, ".")
-		if lastDot > lastSlash {
-			// Has extension after last slash -> it's a file, get directory part
+		// Use path.Ext to check for file extension, path.Dir to get directory
+		if path.Ext(basePath) != "" {
+			// Has extension -> it's a file, get directory part
 			// e.g., /port/5500/docs/index.html -> /port/5500/docs/
-			if lastSlash >= 0 {
-				basePath = basePath[:lastSlash+1]
-			}
+			basePath = path.Dir(basePath) + "/"
 		} else {
 			// No extension -> treat as directory, append slash
 			// e.g., /port/5500 -> /port/5500/

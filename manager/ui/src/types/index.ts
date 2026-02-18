@@ -105,6 +105,7 @@ export interface IdeStatus {
   timeRemaining?: number;
   startTime?: string;
   endTime?: string;
+  estimatedStartTime?: string;  // SLURM forecast for pending jobs
   error?: string;
   resources?: {
     cpus?: number;
