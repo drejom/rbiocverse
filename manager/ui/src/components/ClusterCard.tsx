@@ -203,7 +203,7 @@ export function ClusterCard({
       }
 
       // Clear all sessions for this cluster from context
-      for (const ide of Object.keys(ides)) {
+      for (const ide of Object.keys(ideStatuses)) {
         clearSession(hpc, ide);
       }
 
@@ -214,7 +214,7 @@ export function ClusterCard({
     } finally {
       setIsStoppingAll(false);
     }
-  }, [api, hpc, activeJobCount, ides, clearSession]);
+  }, [api, hpc, activeJobCount, ideStatuses, clearSession]);
 
   // Check if any IDEs are available to launch
   const canLaunch = useMemo(() => {

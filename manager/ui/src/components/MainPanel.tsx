@@ -8,6 +8,7 @@ import ReleaseSelector from './ReleaseSelector';
 import LaunchForm from './LaunchForm';
 import { TimePie } from './TimePie';
 import { useSessionState } from '../contexts/SessionStateContext';
+import { formatEstimatedStart } from '../lib/timeFormat';
 import type {
   ClusterName,
   ClusterConfig,
@@ -69,36 +70,6 @@ function getEffectiveStatus(
   }
 
   return undefined;
-}
-
-/**
- * Format estimated start time in human-friendly way
- */
-function formatEstimatedStart(isoTime: string): string {
-  const startDate = new Date(isoTime);
-  const now = new Date();
-  const diffMs = startDate.getTime() - now.getTime();
-
-  if (diffMs < 0) {
-    return 'soon';
-  }
-
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const remainingMins = diffMins % 60;
-
-  if (diffHours < 1) {
-    return `in ${diffMins}m`;
-  } else if (diffHours < 24) {
-    return remainingMins > 0 ? `in ${diffHours}h ${remainingMins}m` : `in ${diffHours}h`;
-  } else {
-    return startDate.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  }
 }
 
 interface ExtendedIdeStatus extends IdeStatus {

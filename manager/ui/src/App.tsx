@@ -272,6 +272,14 @@ function LoginWrapper() {
  */
 function AppContent() {
   const { isAuthenticated, needsSetup, loading } = useAuth();
+  const { clearAllSessions } = useSessionState();
+
+  // Clear session data when user logs out to prevent stale data persisting
+  useEffect(() => {
+    if (!isAuthenticated && !loading) {
+      clearAllSessions();
+    }
+  }, [isAuthenticated, loading, clearAllSessions]);
 
   // Show loading while checking auth
   if (loading) {

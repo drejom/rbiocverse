@@ -55,16 +55,28 @@ export NODE_ENV=development
 # Default port (exported for potential use by server)
 export PORT="${PORT:-3000}"
 
+# Get PIDs listening on a port (portable: lsof or ss)
+get_port_pids() {
+    local port=$1
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -ti:"$port" 2>/dev/null || true
+    elif command -v ss >/dev/null 2>&1; then
+        ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}' | sort -u || true
+    else
+        echo ""
+    fi
+}
+
 # Kill any process holding the port (graceful then force)
 kill_port() {
     local port=$1
-    local pids=$(lsof -ti:"$port" 2>/dev/null)
+    local pids=$(get_port_pids "$port")
     if [ -n "$pids" ]; then
         echo "Stopping process(es) on port $port: $pids"
         echo "$pids" | xargs kill 2>/dev/null || true
         sleep 2
         # Force kill if still running
-        local remaining=$(lsof -ti:"$port" 2>/dev/null)
+        local remaining=$(get_port_pids "$port")
         if [ -n "$remaining" ]; then
             echo "Force killing: $remaining"
             echo "$remaining" | xargs kill -9 2>/dev/null || true
@@ -103,7 +115,7 @@ start_server() {
     sleep 1
     if ps -p "$PID" > /dev/null 2>&1; then
         echo "Server started (PID: $PID)"
-        echo "  URL: http://localhost:3000"
+        echo "  URL: http://localhost:$PORT"
         echo ""
         echo "Use './scripts/dev.sh logs' to view logs"
         echo "Use './scripts/dev.sh stop' to stop"
@@ -160,7 +172,7 @@ show_status() {
     PID=$(cat "$PID_FILE")
     if ps -p "$PID" > /dev/null 2>&1; then
         echo "Server running (PID: $PID)"
-        echo "  URL: http://localhost:3000"
+        echo "  URL: http://localhost:$PORT"
         echo "  DB: $DB_PATH"
     else
         echo "Server not running (stale PID file)"
