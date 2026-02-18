@@ -203,7 +203,8 @@ func TestRewriteResponse(t *testing.T) {
 				Body: io.NopCloser(strings.NewReader(tt.body)),
 			}
 
-			err := p.rewriteResponse(resp, tt.port)
+			originalPath := "/port/" + strconv.Itoa(tt.port) + "/"
+			err := p.rewriteResponse(resp, tt.port, originalPath)
 			if err != nil {
 				t.Fatalf("rewriteResponse() error = %v", err)
 			}
@@ -211,7 +212,7 @@ func TestRewriteResponse(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			result := string(body)
 			prefix := "/port/" + strconv.Itoa(tt.port)
-			hasBase := strings.Contains(result, `<base href="`+prefix+`/">`)
+			hasBase := strings.Contains(result, `<base href="`+originalPath+`">`)
 			hasRewrite := strings.Contains(result, prefix+"/")
 
 			if tt.wantBase && !hasBase {
@@ -245,7 +246,7 @@ func TestRewriteHTMLGzipped(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(buf.String())),
 	}
 
-	err := p.rewriteHTML(resp, 5500, "/port/5500")
+	err := p.rewriteHTML(resp, 5500, "/port/5500", "/port/5500/")
 	if err != nil {
 		t.Fatalf("rewriteHTML() error = %v", err)
 	}
@@ -260,6 +261,33 @@ func TestRewriteHTMLGzipped(t *testing.T) {
 
 	if !strings.Contains(result, "/port/5500/css/style.css") {
 		t.Errorf("expected rewritten URL, got: %s", result)
+	}
+}
+
+func TestRewriteResponseSubdirectory(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/docs/ - base tag should be /port/5500/docs/
+	// This ensures relative paths like "deps/bootstrap.css" resolve to /port/5500/docs/deps/...
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/docs/")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should be the full subdirectory path
+	if !strings.Contains(result, `<base href="/port/5500/docs/">`) {
+		t.Errorf("expected base tag with subdirectory path, got: %s", result)
 	}
 }
 
@@ -287,7 +315,7 @@ func TestRewriteResponseRedirect(t *testing.T) {
 				Body: io.NopCloser(strings.NewReader("")),
 			}
 
-			err := p.rewriteResponse(resp, 5500)
+			err := p.rewriteResponse(resp, 5500, "/port/5500/")
 			if err != nil {
 				t.Fatalf("rewriteResponse() error = %v", err)
 			}

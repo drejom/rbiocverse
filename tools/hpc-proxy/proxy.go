@@ -158,9 +158,11 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	}
 
 	// Optionally modify response for redirect and HTML rewriting
+	// Pass the original path so base tag can be set correctly for subdirectories
+	originalPath := r.URL.Path
 	if p.baseRewrite {
 		proxy.ModifyResponse = func(resp *http.Response) error {
-			return p.rewriteResponse(resp, targetPort)
+			return p.rewriteResponse(resp, targetPort, originalPath)
 		}
 	}
 
@@ -175,7 +177,8 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 
 // rewriteResponse modifies responses to fix absolute URLs for path-based routing
 // This includes both HTML content and redirect Location headers
-func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int) error {
+// originalPath is the full request path (e.g., /port/5500/docs/) used to compute the base tag
+func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPath string) error {
 	prefix := fmt.Sprintf("/port/%d", targetPort)
 
 	// Rewrite Location header for redirects (301, 302, 303, 307, 308)
@@ -196,11 +199,27 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int) error {
 		return nil
 	}
 
-	return p.rewriteHTML(resp, targetPort, prefix)
+	// Compute base path for relative URL resolution
+	// For /port/5500/docs/index.html -> base is /port/5500/docs/
+	// For /port/5500/docs/ -> base is /port/5500/docs/
+	// For /port/5500/ -> base is /port/5500/
+	basePath := originalPath
+	if !strings.HasSuffix(basePath, "/") {
+		// If path doesn't end with /, get the directory part
+		// e.g., /port/5500/docs/index.html -> /port/5500/docs/
+		lastSlash := strings.LastIndex(basePath, "/")
+		if lastSlash > 0 {
+			basePath = basePath[:lastSlash+1]
+		}
+	}
+
+	return p.rewriteHTML(resp, targetPort, prefix, basePath)
 }
 
 // rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
-func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string) error {
+// prefix is the port prefix (e.g., /port/5500) for rewriting absolute paths
+// basePath is the full directory path (e.g., /port/5500/docs/) for the base tag
+func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string, basePath string) error {
 
 	// Handle compressed responses
 	encoding := resp.Header.Get("Content-Encoding")
@@ -251,8 +270,9 @@ func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string) 
 		return attrPrefix + prefix + path
 	})
 
-	// Also inject base tag for relative URLs (belt and suspenders)
-	baseTag := fmt.Sprintf(`<base href="%s/">`, prefix)
+	// Inject base tag for relative URLs using the full path (not just prefix)
+	// This ensures relative paths like "deps/..." resolve correctly in subdirectories
+	baseTag := fmt.Sprintf(`<base href="%s">`, basePath)
 	if headPattern.MatchString(bodyStr) {
 		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
 	} else {
