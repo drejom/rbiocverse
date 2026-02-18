@@ -157,12 +157,12 @@ func TestAbsPathPatternRewriting(t *testing.T) {
 	}
 }
 
-func TestRewriteHTML(t *testing.T) {
+func TestRewriteResponse(t *testing.T) {
 	p := NewProxy(0, true, false)
 
 	tests := []struct {
 		name        string
-		html        string
+		body        string
 		contentType string
 		port        int
 		wantBase    bool
@@ -170,7 +170,7 @@ func TestRewriteHTML(t *testing.T) {
 	}{
 		{
 			name:        "rewrites HTML with absolute paths",
-			html:        `<html><head></head><body><link href="/css/style.css"></body></html>`,
+			body:        `<html><head></head><body><link href="/css/style.css"></body></html>`,
 			contentType: "text/html",
 			port:        5500,
 			wantBase:    true,
@@ -178,7 +178,7 @@ func TestRewriteHTML(t *testing.T) {
 		},
 		{
 			name:        "ignores non-HTML",
-			html:        `{"href": "/api/data"}`,
+			body:        `{"href": "/api/data"}`,
 			contentType: "application/json",
 			port:        5500,
 			wantBase:    false,
@@ -186,7 +186,7 @@ func TestRewriteHTML(t *testing.T) {
 		},
 		{
 			name:        "handles HTML with charset",
-			html:        `<html><head></head><body><a href="/foo">link</a></body></html>`,
+			body:        `<html><head></head><body><a href="/foo">link</a></body></html>`,
 			contentType: "text/html; charset=utf-8",
 			port:        5500,
 			wantBase:    true,
@@ -200,19 +200,19 @@ func TestRewriteHTML(t *testing.T) {
 				Header: http.Header{
 					"Content-Type": []string{tt.contentType},
 				},
-				Body: io.NopCloser(strings.NewReader(tt.html)),
+				Body: io.NopCloser(strings.NewReader(tt.body)),
 			}
 
-			err := p.rewriteHTML(resp, tt.port)
+			originalPath := "/port/" + strconv.Itoa(tt.port) + "/"
+			err := p.rewriteResponse(resp, tt.port, originalPath)
 			if err != nil {
-				t.Fatalf("rewriteHTML() error = %v", err)
+				t.Fatalf("rewriteResponse() error = %v", err)
 			}
 
 			body, _ := io.ReadAll(resp.Body)
 			result := string(body)
-
 			prefix := "/port/" + strconv.Itoa(tt.port)
-			hasBase := strings.Contains(result, `<base href="`+prefix+`/">`)
+			hasBase := strings.Contains(result, `<base href="`+originalPath+`">`)
 			hasRewrite := strings.Contains(result, prefix+"/")
 
 			if tt.wantBase && !hasBase {
@@ -246,7 +246,7 @@ func TestRewriteHTMLGzipped(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(buf.String())),
 	}
 
-	err := p.rewriteHTML(resp, 5500)
+	err := p.rewriteHTML(resp, "/port/5500", "/port/5500/")
 	if err != nil {
 		t.Fatalf("rewriteHTML() error = %v", err)
 	}
@@ -261,6 +261,181 @@ func TestRewriteHTMLGzipped(t *testing.T) {
 
 	if !strings.Contains(result, "/port/5500/css/style.css") {
 		t.Errorf("expected rewritten URL, got: %s", result)
+	}
+}
+
+func TestRewriteResponseSubdirectory(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/docs/ - base tag should be /port/5500/docs/
+	// This ensures relative paths like "deps/bootstrap.css" resolve to /port/5500/docs/deps/...
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/docs/")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should be the full subdirectory path
+	if !strings.Contains(result, `<base href="/port/5500/docs/">`) {
+		t.Errorf("expected base tag with subdirectory path, got: %s", result)
+	}
+}
+
+func TestRewriteResponseRootFile(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/index.html - base tag should be /port/5500/
+	html := `<html><head></head><body><link href="style.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/index.html")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should be the parent directory path
+	expectedBase := `<base href="/port/5500/">`
+	if !strings.Contains(result, expectedBase) {
+		t.Errorf("expected base tag '%s', got: %s", expectedBase, result)
+	}
+}
+
+func TestRewriteResponseFilePath(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/docs/index.html - base tag should strip the filename
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/docs/index.html")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should strip the filename and use the directory path
+	if !strings.Contains(result, `<base href="/port/5500/docs/">`) {
+		t.Errorf("expected base tag with docs directory path, got: %s", result)
+	}
+}
+
+func TestRewriteResponsePortRootNoSlash(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500 (no trailing slash) - should normalize to /port/5500/
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should normalize port root to include trailing slash
+	if !strings.Contains(result, `<base href="/port/5500/">`) {
+		t.Errorf("expected base tag with normalized port root path, got: %s", result)
+	}
+}
+
+func TestRewriteResponseExistingBaseTag(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// HTML already has a base tag - should not inject another
+	// Use relative href to avoid the absPathPattern rewriting it
+	html := `<html><head><base href="./"></head><body></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Should preserve original base tag and not inject a new one
+	if !strings.Contains(result, `<base href="./">`) {
+		t.Errorf("expected original base tag to be preserved, got: %s", result)
+	}
+	// Count base tags - should only be one
+	baseCount := strings.Count(result, "<base ")
+	if baseCount != 1 {
+		t.Errorf("expected exactly 1 base tag, found %d in: %s", baseCount, result)
+	}
+}
+
+func TestRewriteResponseRedirect(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	tests := []struct {
+		name         string
+		location     string
+		wantLocation string
+	}{
+		{"absolute path", "/data/", "/port/5500/data/"},
+		{"already prefixed", "/port/5500/data/", "/port/5500/data/"},
+		{"full URL", "http://example.com/path", "http://example.com/path"},
+		{"relative path", "subdir/", "subdir/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &http.Response{
+				StatusCode: 301,
+				Header: http.Header{
+					"Location": []string{tt.location},
+				},
+				Body: io.NopCloser(strings.NewReader("")),
+			}
+
+			err := p.rewriteResponse(resp, 5500, "/port/5500/")
+			if err != nil {
+				t.Fatalf("rewriteResponse() error = %v", err)
+			}
+
+			got := resp.Header.Get("Location")
+			if got != tt.wantLocation {
+				t.Errorf("Location = %q, want %q", got, tt.wantLocation)
+			}
+		})
 	}
 }
 
