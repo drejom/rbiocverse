@@ -61,7 +61,7 @@ get_port_pids() {
     if command -v lsof >/dev/null 2>&1; then
         lsof -ti:"$port" 2>/dev/null || true
     elif command -v ss >/dev/null 2>&1; then
-        ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}' | sort -u || true
+        ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p"$" {gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}' | sort -u || true
     else
         echo ""
     fi
