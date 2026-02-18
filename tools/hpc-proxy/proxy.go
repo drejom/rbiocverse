@@ -20,6 +20,8 @@ import (
 var (
 	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
 	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
+	// Match href="/..." and src="/..." (absolute paths, not protocol-relative //...)
+	absPathPattern = regexp.MustCompile(`((?:href|src|action)=["'])(/[^/"'][^"']*)`)
 )
 
 // Proxy handles HTTP/WebSocket reverse proxying with path-based routing
@@ -157,7 +159,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	// Optionally modify response for base tag injection (HTTP only, not WebSocket)
 	if p.baseRewrite {
 		proxy.ModifyResponse = func(resp *http.Response) error {
-			return p.injectBaseTag(resp, targetPort)
+			return p.rewriteHTML(resp, targetPort)
 		}
 	}
 
@@ -170,8 +172,8 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	proxy.ServeHTTP(w, r)
 }
 
-// injectBaseTag modifies HTML responses to inject a <base> tag
-func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
+// rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
+func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int) error {
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") {
 		return nil
@@ -201,16 +203,17 @@ func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
 		return err
 	}
 
-	// Inject base tag after <head>
-	baseTag := fmt.Sprintf(`<base href="/port/%d/">`, targetPort)
 	bodyStr := string(body)
+	prefix := fmt.Sprintf("/port/%d", targetPort)
 
-	// Try to inject after <head> tag
+	// Rewrite absolute paths: href="/foo" -> href="/port/5500/foo"
+	// This handles CSS, JS, links, images, forms with absolute paths
+	bodyStr = absPathPattern.ReplaceAllString(bodyStr, "${1}"+prefix+"${2}")
+
+	// Also inject base tag for relative URLs (belt and suspenders)
+	baseTag := fmt.Sprintf(`<base href="%s/">`, prefix)
 	if headPattern.MatchString(bodyStr) {
 		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
-	} else {
-		// Fallback: inject at start of document
-		bodyStr = baseTag + "\n" + bodyStr
 	}
 
 	// Update response (always return uncompressed for simplicity)
