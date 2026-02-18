@@ -13,6 +13,38 @@ const ideIcons: Record<string, string> = {
   jupyter: 'devicon-jupyter-plain',
 };
 
+/**
+ * Format estimated start time in human-friendly way
+ * Shows relative time like "in 2h 30m" or "today at 4:30 PM"
+ */
+function formatEstimatedStart(isoTime: string): string {
+  const startDate = new Date(isoTime);
+  const now = new Date();
+  const diffMs = startDate.getTime() - now.getTime();
+
+  if (diffMs < 0) {
+    return 'soon';
+  }
+
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const remainingMins = diffMins % 60;
+
+  if (diffHours < 1) {
+    return `in ${diffMins}m`;
+  } else if (diffHours < 24) {
+    return remainingMins > 0 ? `in ${diffHours}h ${remainingMins}m` : `in ${diffHours}h`;
+  } else {
+    // Show date/time for longer waits
+    return startDate.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+}
+
 interface CountdownInfo {
   remaining: number;
   total: number;
@@ -129,7 +161,7 @@ export function PendingSession({ hpc, ide, status, ides, onStop, stopping }: Pen
         <>
           <div className="cluster-info">Waiting for resources...</div>
           {status.estimatedStartTime && (
-            <div className="estimated-start">Est: {status.estimatedStartTime}</div>
+            <div className="estimated-start">Est: {formatEstimatedStart(status.estimatedStartTime)}</div>
           )}
           <div className="btn-group btn-group-sm">
             <button className="btn btn-danger btn-sm" onClick={() => onStop(hpc, ide)}>
