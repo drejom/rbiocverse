@@ -23,6 +23,55 @@ const ideIcons: Record<string, string> = {
 };
 
 /**
+ * Get effective status for an IDE by merging polling and context data.
+ * Context (SSE) takes priority only for active states (pending/running)
+ * since those are the states where SSE is more immediate than polling.
+ * For idle states, we defer to polling to avoid context-cleared state
+ * incorrectly hiding a running job.
+ * DRY helper to avoid duplicating this logic throughout the component.
+ */
+function getEffectiveStatus(
+  pollingStatus: ExtendedIdeStatus | undefined,
+  contextStatus: import('../contexts/SessionStateContext').SessionState | null
+): ExtendedIdeStatus | undefined {
+  if (!pollingStatus && !contextStatus) return undefined;
+
+  // Determine when to prefer context status over polling
+  // Only prefer context for active states (pending/running) since SSE is more immediate
+  const preferContextStatus =
+    !!contextStatus &&
+    (contextStatus.status === 'running' || contextStatus.status === 'pending');
+
+  if (pollingStatus) {
+    return {
+      ...pollingStatus,
+      // Context status takes priority only for active states (pending/running)
+      status: preferContextStatus ? contextStatus.status : pollingStatus.status,
+      // Always use context estimatedStartTime if available (SSE-only field)
+      estimatedStartTime: contextStatus?.estimatedStartTime ?? pollingStatus.estimatedStartTime,
+    };
+  }
+
+  // Only context available (from SSE, polling hasn't caught up yet)
+  if (contextStatus) {
+    return {
+      status: contextStatus.status,
+      jobId: contextStatus.jobId,
+      node: contextStatus.node,
+      cpus: contextStatus.cpus,
+      memory: contextStatus.memory,
+      estimatedStartTime: contextStatus.estimatedStartTime,
+      gpu: contextStatus.gpu,
+      releaseVersion: contextStatus.releaseVersion,
+      timeLeftSeconds: contextStatus.timeLeftSeconds,
+      timeLimitSeconds: contextStatus.timeLimitSeconds,
+    } as ExtendedIdeStatus;
+  }
+
+  return undefined;
+}
+
+/**
  * Format estimated start time in human-friendly way
  */
 function formatEstimatedStart(isoTime: string): string {
@@ -144,10 +193,8 @@ export function MainPanel({
     const idle: string[] = [];
 
     for (const ide of ideList) {
-      const pollingStatus = ideStatuses?.[ide];
-      const contextStatus = getSession(cluster, ide);
-      // Context takes priority (SSE updates are more immediate)
-      const status = contextStatus?.status || pollingStatus?.status;
+      const effective = getEffectiveStatus(ideStatuses?.[ide], getSession(cluster, ide));
+      const status = effective?.status;
 
       if (status === 'running') {
         running.push(ide);
@@ -169,30 +216,11 @@ export function MainPanel({
   }, [releases, selectedRelease]);
 
   // Get current session status for selected tab
-  // Check both polling data (ideStatuses) and context (from SSE updates)
-  // Context takes priority since SSE is more immediate than polling
-  const pollingStatus = ideStatuses?.[selectedIdeTab];
-  const contextStatus = getSession(cluster, selectedIdeTab);
-
-  // Merge: use context status if it's more recent (pending/running from SSE)
-  // Fall back to polling data for other fields
-  const currentStatus = pollingStatus ? {
-    ...pollingStatus,
-    // Context status takes priority when set (SSE updates are faster)
-    status: contextStatus?.status || pollingStatus.status,
-    estimatedStartTime: contextStatus?.estimatedStartTime || pollingStatus.estimatedStartTime,
-  } : contextStatus ? {
-    status: contextStatus.status,
-    jobId: contextStatus.jobId,
-    node: contextStatus.node,
-    cpus: contextStatus.cpus,
-    memory: contextStatus.memory,
-    estimatedStartTime: contextStatus.estimatedStartTime,
-    gpu: contextStatus.gpu,
-    releaseVersion: contextStatus.releaseVersion,
-    timeLeftSeconds: contextStatus.timeLeftSeconds,
-    timeLimitSeconds: contextStatus.timeLimitSeconds,
-  } as ExtendedIdeStatus : undefined;
+  // Uses helper to merge polling and context (SSE) data
+  const currentStatus = getEffectiveStatus(
+    ideStatuses?.[selectedIdeTab],
+    getSession(cluster, selectedIdeTab)
+  );
 
   const isRunning = currentStatus?.status === 'running';
   const isPending = currentStatus?.status === 'pending';
@@ -246,13 +274,10 @@ export function MainPanel({
         />
         <div className="ide-tabs">
           {ideList.map((ide) => {
-            const pollingStatus = ideStatuses?.[ide];
-            const contextStatus = getSession(cluster, ide);
-            // Use context status (from SSE) if available, fallback to polling
-            const effectiveStatus = contextStatus?.status || pollingStatus?.status;
+            const effective = getEffectiveStatus(ideStatuses?.[ide], getSession(cluster, ide));
             const isActive = ide === selectedIdeTab;
-            const ideRunning = effectiveStatus === 'running';
-            const idePending = effectiveStatus === 'pending';
+            const ideRunning = effective?.status === 'running';
+            const idePending = effective?.status === 'pending';
             const isAvailable = availableIdesForRelease.includes(ide);
             const isDisabled = !isAvailable && !ideRunning && !idePending;
 

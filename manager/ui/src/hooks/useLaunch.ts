@@ -126,13 +126,17 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
         const data: SseMessage = JSON.parse(event.data);
 
         switch (data.type) {
-          case 'progress':
-            updateLaunchModal({
+          case 'progress': {
+            const updates: Partial<LaunchModalState> = {
               message: data.message || undefined,
-              progress: data.progress,
               step: data.step || undefined,
-            });
+            };
+            if (typeof data.progress === 'number') {
+              updates.progress = data.progress;
+            }
+            updateLaunchModal(updates);
             break;
+          }
 
           case 'pending':
           case 'pending-timeout':
@@ -236,13 +240,17 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
         const data: SseMessage = JSON.parse(event.data);
 
         switch (data.type) {
-          case 'progress':
-            updateLaunchModal({
+          case 'progress': {
+            const updates: Partial<LaunchModalState> = {
               message: data.message || undefined,
-              progress: data.progress,
               step: data.step || undefined,
-            });
+            };
+            if (typeof data.progress === 'number') {
+              updates.progress = data.progress;
+            }
+            updateLaunchModal(updates);
             break;
+          }
 
           case 'complete':
             closeEventSource();
@@ -309,12 +317,15 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `Server returned ${res.status}`);
       }
+
+      // Clear session from context immediately so UI updates without waiting for poll
+      updateSession(hpc, ide, { status: 'idle' });
     } catch (e) {
       console.error('Stop error:', e);
     }
 
     resetModal();
-  }, [launchModal, ides, closeEventSource, resetModal, updateLaunchModal]);
+  }, [launchModal, ides, closeEventSource, resetModal, updateLaunchModal, updateSession]);
 
   return {
     launchModal,

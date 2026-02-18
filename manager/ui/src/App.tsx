@@ -259,11 +259,19 @@ function Launcher() {
 }
 
 /**
+ * Login page wrapper - only polls cluster status when showing login
+ * This avoids duplicate polling when authenticated (Launcher has its own hook)
+ */
+function LoginWrapper() {
+  const { health, history } = useClusterStatus();
+  return <Login clusterHealth={health} clusterHistory={history} />;
+}
+
+/**
  * App wrapper - handles authentication flow
  */
 function AppContent() {
   const { isAuthenticated, needsSetup, loading } = useAuth();
-  const { health, history } = useClusterStatus();
 
   // Show loading while checking auth
   if (loading) {
@@ -277,9 +285,9 @@ function AppContent() {
     );
   }
 
-  // Not authenticated - show login
+  // Not authenticated - show login (with its own cluster status polling)
   if (!isAuthenticated) {
-    return <Login clusterHealth={health} clusterHistory={history} />;
+    return <LoginWrapper />;
   }
 
   // First login - show setup wizard
@@ -291,7 +299,7 @@ function AppContent() {
     );
   }
 
-  // Authenticated - show main launcher
+  // Authenticated - show main launcher (has its own cluster status polling)
   return <Launcher />;
 }
 

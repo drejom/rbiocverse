@@ -15,7 +15,7 @@ import { createContext, useContext, useState, useCallback, useMemo, type ReactNo
  * Merges data from SSE events and polling
  */
 export interface SessionState {
-  status: 'idle' | 'pending' | 'running' | 'starting';
+  status: 'idle' | 'pending' | 'running' | 'starting' | 'stopping' | 'error';
   jobId?: string;
   node?: string;
   cpus?: number | string;
@@ -125,6 +125,9 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
   const updateSessionsFromPoll = useCallback((hpc: string, ideStatuses: Record<string, Partial<SessionState>>) => {
     setSessions(prev => {
       const next = { ...prev };
+      const hpcPrefix = `${hpc}-`;
+
+      // First, handle IDEs that are in the poll data
       for (const [ide, status] of Object.entries(ideStatuses)) {
         const key = buildKey(hpc, ide);
         const existing = prev[key];
@@ -147,6 +150,20 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
           jobId: status.jobId ?? existing?.jobId,
         };
       }
+
+      // Clear zombie sessions: reset any sessions for this HPC that are no longer in poll data
+      // But preserve pending sessions that may not have appeared in poll yet (SSE race)
+      for (const key of Object.keys(prev)) {
+        if (key.startsWith(hpcPrefix)) {
+          const ide = key.slice(hpcPrefix.length);
+          const existing = prev[key];
+          // If IDE not in poll data and not pending, reset to idle
+          if (!(ide in ideStatuses) && existing?.status !== 'pending') {
+            next[key] = defaultSession;
+          }
+        }
+      }
+
       return next;
     });
   }, []);

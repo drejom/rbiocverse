@@ -175,7 +175,7 @@ export function useClusterStatus(): UseClusterStatusReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [updateSessionsFromPoll]);
 
   // Initial fetch
   useEffect(() => {
