@@ -203,12 +203,14 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 	// For /port/5500/docs/index.html -> base is /port/5500/docs/
 	// For /port/5500/docs/ -> base is /port/5500/docs/
 	// For /port/5500/ -> base is /port/5500/
+	// For /index.html -> base is /
 	basePath := originalPath
 	if !strings.HasSuffix(basePath, "/") {
 		// If path doesn't end with /, get the directory part
 		// e.g., /port/5500/docs/index.html -> /port/5500/docs/
+		// e.g., /index.html -> /
 		lastSlash := strings.LastIndex(basePath, "/")
-		if lastSlash > 0 {
+		if lastSlash >= 0 {
 			basePath = basePath[:lastSlash+1]
 		}
 	}

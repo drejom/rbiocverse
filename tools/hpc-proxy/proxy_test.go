@@ -291,6 +291,33 @@ func TestRewriteResponseSubdirectory(t *testing.T) {
 	}
 }
 
+func TestRewriteResponseRootFile(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/index.html - base tag should be /port/5500/
+	html := `<html><head></head><body><link href="style.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/index.html")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should be the parent directory path
+	expectedBase := `<base href="/port/5500/">`
+	if !strings.Contains(result, expectedBase) {
+		t.Errorf("expected base tag '%s', got: %s", expectedBase, result)
+	}
+}
+
 func TestRewriteResponseRedirect(t *testing.T) {
 	p := NewProxy(0, true, false)
 
