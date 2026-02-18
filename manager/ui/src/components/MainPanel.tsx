@@ -24,8 +24,7 @@ const ideIcons: Record<string, string> = {
 
 /**
  * Get effective status for an IDE by merging polling and context data.
- * Context (SSE) takes priority only for active states (pending/running)
- * since those are the states where SSE is more immediate than polling.
+ * Context (SSE) takes priority for non-idle states since SSE is more immediate.
  * For idle states, we defer to polling to avoid context-cleared state
  * incorrectly hiding a running job.
  * DRY helper to avoid duplicating this logic throughout the component.
@@ -36,16 +35,14 @@ function getEffectiveStatus(
 ): ExtendedIdeStatus | undefined {
   if (!pollingStatus && !contextStatus) return undefined;
 
-  // Determine when to prefer context status over polling
-  // Only prefer context for active states (pending/running) since SSE is more immediate
+  // Prefer context for any non-idle state (SSE is more immediate than polling)
   const preferContextStatus =
-    !!contextStatus &&
-    (contextStatus.status === 'running' || contextStatus.status === 'pending');
+    !!contextStatus && contextStatus.status !== 'idle';
 
   if (pollingStatus) {
     return {
       ...pollingStatus,
-      // Context status takes priority only for active states (pending/running)
+      // Context status takes priority for non-idle states
       status: preferContextStatus ? contextStatus.status : pollingStatus.status,
       // Always use context estimatedStartTime if available (SSE-only field)
       estimatedStartTime: contextStatus?.estimatedStartTime ?? pollingStatus.estimatedStartTime,
@@ -395,22 +392,22 @@ export function MainPanel({
             <div className="session-stats-inline">
               <span className="stat-inline">
                 <Cpu size={14} />
-                {currentStatus.cpus || formValues.cpus || '?'}
+                {currentStatus.cpus ?? '?'}
               </span>
               <span className="stat-inline">
                 <MemoryStick size={14} />
-                {currentStatus.memory || formValues.mem || '?'}
+                {currentStatus.memory ?? '?'}
               </span>
-              {(currentStatus.releaseVersion || selectedRelease) && (
+              {currentStatus.releaseVersion && (
                 <span className="stat-inline">
                   <Package size={14} />
-                  Bioc {currentStatus.releaseVersion || selectedRelease}
+                  Bioc {currentStatus.releaseVersion}
                 </span>
               )}
-              {(currentStatus.gpu || selectedGpu) && (
+              {currentStatus.gpu && (
                 <span className="stat-inline">
                   <Zap size={14} />
-                  {(currentStatus.gpu || selectedGpu).toUpperCase()}
+                  {currentStatus.gpu.toUpperCase()}
                 </span>
               )}
             </div>

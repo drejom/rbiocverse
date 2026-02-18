@@ -116,10 +116,11 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback((hpc: string, ide: string) => {
     const key = buildKey(hpc, ide);
-    setSessions(prev => ({
-      ...prev,
-      [key]: defaultSession,
-    }));
+    setSessions(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }, []);
 
   const updateSessionsFromPoll = useCallback((hpc: string, ideStatuses: Record<string, Partial<SessionState>>) => {

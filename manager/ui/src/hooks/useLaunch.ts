@@ -143,11 +143,16 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
             // Job is pending - update session state with estimatedStartTime
             closeEventSource();
 
-            // KEY FIX: Store estimatedStartTime in shared context immediately
+            // KEY FIX: Store estimatedStartTime and launch params in shared context immediately
+            // This ensures pending card shows correct resources even if form values change
             updateSession(hpc, ide, {
               status: 'pending',
               jobId: data.jobId,
               estimatedStartTime: data.startTime || null,
+              cpus: options.cpus,
+              memory: options.mem,
+              gpu: options.gpu || null,
+              releaseVersion: options.releaseVersion || null,
             });
 
             // Show pending state briefly in modal, then close
