@@ -45,7 +45,8 @@ describe('HpcService', () => {
 
   describe('getJobInfo', () => {
     it('should parse job info from squeue output', async () => {
-      sshExecStub.resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
 
       const jobInfo = await hpcService.getJobInfo('vscode');
 
@@ -71,7 +72,8 @@ describe('HpcService', () => {
     });
 
     it('should handle null node for pending jobs', async () => {
-      sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|PENDING|(null)|INVALID|12:00:00|4|40000M|N/A');
 
       const jobInfo = await hpcService.getJobInfo();
 
@@ -90,12 +92,13 @@ describe('HpcService', () => {
       expect(jobInfo).to.be.null;
     });
 
-    it('should handle start time with spaces', async () => {
-      sshExecStub.resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29 10:00:00 EST');
+    it('should handle start time with timezone', async () => {
+      // Uses pipe delimiter - startTime is a single field
+      sshExecStub.resolves('12345|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00-05:00');
 
       const jobInfo = await hpcService.getJobInfo();
 
-      expect(jobInfo.startTime).to.equal('2025-12-29 10:00:00 EST');
+      expect(jobInfo.startTime).to.equal('2025-12-29T10:00:00-05:00');
     });
   });
 
@@ -253,8 +256,9 @@ describe('HpcService', () => {
       this.timeout(15000); // Increase timeout for polling test
 
       // First call: pending, second call: running with node
-      sshExecStub.onFirstCall().resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
-      sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.onFirstCall().resolves('12345|PENDING|(null)|INVALID|12:00:00|4|40000M|N/A');
+      sshExecStub.onSecondCall().resolves('12345|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
 
       const result = await hpcService.waitForNode('12345');
 
@@ -263,7 +267,8 @@ describe('HpcService', () => {
     });
 
     it('should return immediately if job already running', async () => {
-      sshExecStub.resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
 
       const result = await hpcService.waitForNode('12345');
 
@@ -285,7 +290,8 @@ describe('HpcService', () => {
     it('should timeout after max attempts', async function() {
       this.timeout(15000); // Increase timeout for polling test
 
-      sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|PENDING|(null)|INVALID|12:00:00|4|40000M|N/A');
 
       try {
         // Pass options object with maxAttempts: 2
@@ -299,8 +305,9 @@ describe('HpcService', () => {
     it('should continue polling if node is null', async function() {
       this.timeout(15000); // Increase timeout for polling test
 
-      sshExecStub.onFirstCall().resolves('12345 RUNNING (null) 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
-      sshExecStub.onSecondCall().resolves('12345 RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.onFirstCall().resolves('12345|RUNNING|(null)|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
+      sshExecStub.onSecondCall().resolves('12345|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
 
       const result = await hpcService.waitForNode('12345');
 
@@ -310,7 +317,8 @@ describe('HpcService', () => {
     it('should return pending status when returnPendingOnTimeout is true', async function() {
       this.timeout(15000);
 
-      sshExecStub.resolves('12345 PENDING (null) INVALID 12:00:00 4 40000M N/A');
+      // Uses pipe delimiter: %i|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|PENDING|(null)|INVALID|12:00:00|4|40000M|N/A');
 
       const result = await hpcService.waitForNode('12345', 'vscode', {
         maxAttempts: 1,
@@ -350,9 +358,10 @@ describe('HpcService', () => {
 
   describe('getAllJobs', () => {
     it('should return all job info for multiple IDEs', async () => {
+      // Uses pipe delimiter: %i|%j|%T|%N|%L|%l|%C|%m|%S (note: includes %j for job name)
       sshExecStub.resolves(
-        '12345 hpc-vscode RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00\n' +
-        '12346 hpc-rstudio PENDING (null) INVALID 8:00:00 2 20000M N/A'
+        '12345|hpc-vscode|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00\n' +
+        '12346|hpc-rstudio|PENDING|(null)|INVALID|8:00:00|2|20000M|N/A'
       );
 
       const jobs = await hpcService.getAllJobs();
@@ -384,7 +393,8 @@ describe('HpcService', () => {
     });
 
     it('should return null for IDEs with no jobs', async () => {
-      sshExecStub.resolves('12345 hpc-vscode RUNNING node01 11:30:00 12:00:00 4 40000M 2025-12-29T10:00:00');
+      // Uses pipe delimiter: %i|%j|%T|%N|%L|%l|%C|%m|%S
+      sshExecStub.resolves('12345|hpc-vscode|RUNNING|node01|11:30:00|12:00:00|4|40000M|2025-12-29T10:00:00');
 
       const jobs = await hpcService.getAllJobs();
 

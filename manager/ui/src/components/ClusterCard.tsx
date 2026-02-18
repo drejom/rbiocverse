@@ -202,9 +202,15 @@ export function ClusterCard({
         setStopAllError(`Failed to stop ${data.failed.length} job(s): ${data.failed.join(', ')}`);
       }
 
-      // Clear all sessions for this cluster from context
-      for (const ide of Object.keys(ideStatuses)) {
-        clearSession(hpc, ide);
+      // Only clear sessions for successfully cancelled jobs
+      // Map cancelled jobIds back to their IDEs using ideStatuses
+      if (data.cancelled && data.cancelled.length > 0) {
+        const cancelledJobIds = new Set(data.cancelled);
+        for (const [ide, status] of Object.entries(ideStatuses)) {
+          if (status.jobId && cancelledJobIds.has(status.jobId)) {
+            clearSession(hpc, ide);
+          }
+        }
       }
 
       // Trigger a status refresh
