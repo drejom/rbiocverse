@@ -20,6 +20,9 @@ import (
 var (
 	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
 	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
+	// Match href="/..." and src="/..." (absolute paths starting with single /)
+	// Captures: $1 = attribute prefix (e.g., href="), $2 = the path (e.g., /foo/bar)
+	absPathPattern = regexp.MustCompile(`((?:href|src|action)=["'])(/[^"']*)`)
 )
 
 // Proxy handles HTTP/WebSocket reverse proxying with path-based routing
@@ -157,7 +160,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	// Optionally modify response for base tag injection (HTTP only, not WebSocket)
 	if p.baseRewrite {
 		proxy.ModifyResponse = func(resp *http.Response) error {
-			return p.injectBaseTag(resp, targetPort)
+			return p.rewriteHTML(resp, targetPort)
 		}
 	}
 
@@ -170,8 +173,8 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	proxy.ServeHTTP(w, r)
 }
 
-// injectBaseTag modifies HTML responses to inject a <base> tag
-func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
+// rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
+func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int) error {
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") {
 		return nil
@@ -201,15 +204,38 @@ func (p *Proxy) injectBaseTag(resp *http.Response, targetPort int) error {
 		return err
 	}
 
-	// Inject base tag after <head>
-	baseTag := fmt.Sprintf(`<base href="/port/%d/">`, targetPort)
 	bodyStr := string(body)
+	prefix := fmt.Sprintf("/port/%d", targetPort)
 
-	// Try to inject after <head> tag
+	// Rewrite absolute paths: href="/foo" -> href="/port/5500/foo"
+	// This handles CSS, JS, links, images, forms with absolute paths
+	// Skip protocol-relative URLs (//...) and already-rewritten URLs (/port/...)
+	bodyStr = absPathPattern.ReplaceAllStringFunc(bodyStr, func(match string) string {
+		// Extract the path part (after the attribute prefix)
+		parts := absPathPattern.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match
+		}
+		attrPrefix := parts[1] // e.g., href="
+		path := parts[2]       // e.g., /foo/bar
+
+		// Skip protocol-relative URLs (start with //)
+		if strings.HasPrefix(path, "//") {
+			return match
+		}
+		// Skip already-rewritten URLs
+		if strings.HasPrefix(path, "/port/") {
+			return match
+		}
+		return attrPrefix + prefix + path
+	})
+
+	// Also inject base tag for relative URLs (belt and suspenders)
+	baseTag := fmt.Sprintf(`<base href="%s/">`, prefix)
 	if headPattern.MatchString(bodyStr) {
 		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
 	} else {
-		// Fallback: inject at start of document
+		// Fallback: if there's no <head>, inject the base tag at the start of the document
 		bodyStr = baseTag + "\n" + bodyStr
 	}
 

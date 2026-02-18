@@ -459,7 +459,7 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 # Note: hpc-proxy runs in background; SLURM cleans it up when job ends
 mkdir -p $HOME/.hpc-proxy
 ${this.cluster.singularityBin} exec ${releasePaths.singularityImage} \\
-  /usr/local/bin/hpc-proxy --port 0 --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
+  /usr/local/bin/hpc-proxy --port 0 --base-rewrite --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
 
 # Wait for proxy to write port file (up to 5 seconds)
 for ((i=0; i<10; i++)); do
