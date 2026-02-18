@@ -912,7 +912,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
           // If pending, return immediately with startTime (don't wait 30 seconds)
           if (jobInfo.state === 'PENDING') {
-            return { running: false, startTime: jobInfo.startTime ?? undefined };
+            return { running: false, startTime: jobInfo.startTime || undefined };
           }
 
           // Brief wait before retry
@@ -923,7 +923,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
         // Still not running after quick check - return pending
         const jobInfo = await hpcService.getJobInfo(ide);
-        return { running: false, startTime: jobInfo?.startTime ?? undefined };
+        return { running: false, startTime: jobInfo?.startTime || undefined };
       };
 
       // Helper to handle pending job - update state and send response
