@@ -604,7 +604,31 @@ class StateManager {
     log.state('Updating session', { sessionKey, fields: Object.keys(updates) });
     Object.assign(session, updates);
     await this.save();
+
+    // If session went pending, reschedule polling to run sooner
+    if (updates.status === 'pending') {
+      this.triggerFastPoll();
+    }
+
     return session;
+  }
+
+  /**
+   * Trigger faster polling when session state changes to pending
+   * Cancels current timer and reschedules based on new state
+   */
+  private triggerFastPoll(): void {
+    if (this.pollingStopped || !this.hpcServiceFactory) return;
+
+    // Cancel existing timer
+    if (this.jobPollTimer) {
+      clearTimeout(this.jobPollTimer);
+      this.jobPollTimer = null;
+    }
+
+    // Reschedule with new interval (will be FREQUENT for pending sessions)
+    this.scheduleJobPoll();
+    log.state('Rescheduled polling for pending session');
   }
 
   /**
