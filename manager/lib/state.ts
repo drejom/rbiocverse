@@ -35,6 +35,7 @@ interface JobInfo {
   state: string;
   node?: string;
   timeLeftSeconds?: number;
+  startTime?: string | null;  // For pending jobs: SLURM's estimated start time
 }
 
 type HpcServiceFactory = (hpc: string) => HpcService;
@@ -171,6 +172,7 @@ function createIdleSession(ide: string): Session {
     node: null,
     tunnelProcess: null,
     startedAt: null,
+    estimatedStartTime: null,
     cpus: null,
     memory: null,
     walltime: null,
@@ -953,10 +955,17 @@ class StateManager {
       if (jobInfo.state === 'RUNNING' && session.status !== 'running') {
         session.status = 'running';
         session.node = jobInfo.node || null;
+        session.estimatedStartTime = null;  // Clear estimate once running
         significantChange = true;
-      } else if (jobInfo.state === 'PENDING' && session.status !== 'pending') {
-        session.status = 'pending';
-        significantChange = true;
+      } else if (jobInfo.state === 'PENDING') {
+        if (session.status !== 'pending') {
+          session.status = 'pending';
+          significantChange = true;
+        }
+        // Update estimated start time from SLURM (may arrive after a few polls)
+        if (jobInfo.startTime && jobInfo.startTime !== session.estimatedStartTime) {
+          session.estimatedStartTime = jobInfo.startTime;
+        }
       }
 
       // Update time remaining (not a significant change for backoff purposes)

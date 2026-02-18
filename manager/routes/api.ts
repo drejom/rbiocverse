@@ -64,6 +64,7 @@ interface Session {
   walltime?: string;
   startedAt?: string;
   submittedAt?: string;
+  estimatedStartTime?: string | null;  // SLURM forecast for pending jobs
   releaseVersion?: string;
   gpu?: string | null;
   account?: string | null;
@@ -313,6 +314,7 @@ function createApiRouter(stateManager: StateManager): Router {
         memory: session.memory,
         walltime: session.walltime,
         startedAt: session.startedAt,
+        estimatedStartTime: session.estimatedStartTime,  // SLURM forecast for pending jobs
         releaseVersion: session.releaseVersion,  // Bioconductor release for floating menu
         gpu: session.gpu,                        // GPU type for floating menu
       };
