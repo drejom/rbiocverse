@@ -55,14 +55,21 @@ export NODE_ENV=development
 # Default port
 PORT="${PORT:-3000}"
 
-# Kill any process holding the port
+# Kill any process holding the port (graceful then force)
 kill_port() {
     local port=$1
     local pids=$(lsof -ti:"$port" 2>/dev/null)
     if [ -n "$pids" ]; then
-        echo "Killing process(es) on port $port: $pids"
-        echo "$pids" | xargs kill -9 2>/dev/null || true
-        sleep 1
+        echo "Stopping process(es) on port $port: $pids"
+        echo "$pids" | xargs kill 2>/dev/null || true
+        sleep 2
+        # Force kill if still running
+        local remaining=$(lsof -ti:"$port" 2>/dev/null)
+        if [ -n "$remaining" ]; then
+            echo "Force killing: $remaining"
+            echo "$remaining" | xargs kill -9 2>/dev/null || true
+            sleep 1
+        fi
     fi
 }
 
