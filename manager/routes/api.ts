@@ -471,6 +471,8 @@ function createApiRouter(stateManager: StateManager): Router {
             ...job,
             releaseVersion: session?.releaseVersion || null,
             gpu: session?.gpu || null,
+            // Use session's estimatedStartTime if available, fallback to SLURM's startTime
+            estimatedStartTime: session?.estimatedStartTime || job.startTime || null,
           };
         }
         return enriched;
@@ -889,28 +891,57 @@ function createApiRouter(stateManager: StateManager): Router {
         jobGpu = session.gpu || gpu || null;
       }
 
-      // Helper to wait for node assignment (avoids duplication)
-      const handleWaitForNode = async (currentJobId: string): Promise<{ success: boolean; node?: string }> => {
-        const waitResult = await hpcService.waitForNode(currentJobId, ide, {
-          maxAttempts: 6,
-          returnPendingOnTimeout: true,
-        });
+      // Helper to check job status - quick check, don't block for long
+      // If job is pending, immediately return with startTime so UI can show it
+      const checkJobStatus = async (currentJobId: string): Promise<{
+        running: boolean;
+        node?: string;
+        startTime?: string;
+      }> => {
+        // Quick check - 2 attempts max (~5 seconds total)
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const jobInfo = await hpcService.getJobInfo(ide);
 
-        if (waitResult.pending) {
-          await stateManager.updateSession(user, hpc, ide, { status: 'pending', jobId: currentJobId });
-          stateManager.releaseLock(lockName);
+          if (!jobInfo || jobInfo.jobId !== currentJobId) {
+            throw new Error('Job disappeared from queue');
+          }
 
-          res.write(`data: ${JSON.stringify({
-            type: 'pending-timeout',
-            jobId: currentJobId,
-            message: 'Job queued, check back soon',
-          })}\n\n`);
-          res.end();
-          return { success: false };
+          if (jobInfo.state === 'RUNNING' && jobInfo.node) {
+            return { running: true, node: jobInfo.node };
+          }
+
+          // If pending, return immediately with startTime (don't wait 30 seconds)
+          if (jobInfo.state === 'PENDING') {
+            return { running: false, startTime: jobInfo.startTime };
+          }
+
+          // Brief wait before retry
+          if (attempt < 1) {
+            await new Promise(resolve => setTimeout(resolve, 2500));
+          }
         }
 
-        sendProgress('starting', `Running on ${waitResult.node}`, { node: waitResult.node });
-        return { success: true, node: waitResult.node };
+        // Still not running after quick check - return pending
+        const jobInfo = await hpcService.getJobInfo(ide);
+        return { running: false, startTime: jobInfo?.startTime };
+      };
+
+      // Helper to handle pending job - update state and send response
+      const handlePendingJob = async (currentJobId: string, startTime?: string) => {
+        await stateManager.updateSession(user, hpc, ide, {
+          status: 'pending',
+          jobId: currentJobId,
+          estimatedStartTime: startTime || null,
+        });
+        stateManager.releaseLock(lockName);
+
+        res.write(`data: ${JSON.stringify({
+          type: 'pending',
+          jobId: currentJobId,
+          startTime: startTime || null,
+          message: startTime ? `Estimated start: ${startTime}` : 'Waiting for resources...',
+        })}\n\n`);
+        res.end();
       };
 
       if (!jobInfo) {
@@ -934,15 +965,18 @@ function createApiRouter(stateManager: StateManager): Router {
         sendProgress('submitted', `Job ${jobId} submitted`, { jobId });
         log.job(`Submitted`, { hpc, ide, jobId });
 
-        // Wait for node assignment
-        sendProgress('waiting', 'Waiting for resources...');
-        log.job('Waiting for node assignment...', { hpc, ide, jobId });
+        // Quick check for node assignment (don't block for 30 seconds)
+        sendProgress('waiting', 'Checking job status...');
+        log.job('Checking job status...', { hpc, ide, jobId });
 
-        const waitResult = await handleWaitForNode(jobId);
-        if (!waitResult.success) {
+        const statusResult = await checkJobStatus(jobId);
+        if (!statusResult.running) {
+          // Job is pending - send pending status with startTime and close stream
+          log.job('Job pending, returning to UI', { hpc, ide, jobId, startTime: statusResult.startTime });
+          await handlePendingJob(jobId, statusResult.startTime);
           return;
         }
-        node = waitResult.node!;
+        node = statusResult.node!;
       } else {
         // Found existing job - connect to it
         jobId = jobInfo.jobId;
@@ -953,16 +987,19 @@ function createApiRouter(stateManager: StateManager): Router {
           sendProgress('starting', `Connecting to running job on ${node}`, { jobId, node });
           log.job(`Found running job`, { hpc, ide, jobId, node });
         } else {
-          // Job is pending - wait for node
+          // Job is pending - quick check then return to UI
           sendProgress('submitted', `Found job ${jobId}`, { jobId });
-          sendProgress('waiting', 'Waiting for resources...');
+          sendProgress('waiting', 'Checking job status...');
           log.job(`Found pending job`, { hpc, ide, jobId });
 
-          const waitResult = await handleWaitForNode(jobId);
-          if (!waitResult.success) {
+          const statusResult = await checkJobStatus(jobId);
+          if (!statusResult.running) {
+            // Still pending - send status with startTime and close stream
+            log.job('Job still pending, returning to UI', { hpc, ide, jobId, startTime: statusResult.startTime });
+            await handlePendingJob(jobId, statusResult.startTime);
             return;
           }
-          node = waitResult.node!;
+          node = statusResult.node!;
         }
       }
       log.job(`Running on node`, { hpc, ide, node });

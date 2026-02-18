@@ -987,8 +987,10 @@ class StateManager {
           significantChange = true;
         }
         // Update estimated start time from SLURM (may arrive after a few polls)
+        log.debugFor('state', 'Pending job startTime', { sessionKey, startTime: jobInfo.startTime, current: session.estimatedStartTime });
         if (jobInfo.startTime && jobInfo.startTime !== session.estimatedStartTime) {
           session.estimatedStartTime = jobInfo.startTime;
+          log.state('Updated estimatedStartTime', { sessionKey, startTime: jobInfo.startTime });
         }
       }
 

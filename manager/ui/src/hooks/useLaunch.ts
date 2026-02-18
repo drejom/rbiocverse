@@ -28,11 +28,13 @@ interface LaunchOptions {
 }
 
 interface SseMessage {
-  type: 'progress' | 'pending-timeout' | 'complete' | 'error';
+  type: 'progress' | 'pending' | 'pending-timeout' | 'complete' | 'error';
   message?: string;
   progress?: number;
   step?: string;
   redirectUrl?: string;
+  startTime?: string;  // SLURM estimated start time for pending jobs
+  jobId?: string;
 }
 
 interface UseLaunchReturn {
@@ -144,10 +146,13 @@ export function useLaunch(
             }));
             break;
 
+          case 'pending':
           case 'pending-timeout':
+            // Job is pending - close stream and let polling take over
+            // The startTime (if available) will be fetched via status polling
             closeEventSource();
             resetState();
-            onRefresh?.();
+            onRefresh?.();  // Trigger immediate status refresh to show pending card
             break;
 
           case 'complete':

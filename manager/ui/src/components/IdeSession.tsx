@@ -160,9 +160,11 @@ export function PendingSession({ hpc, ide, status, ides, onStop, stopping }: Pen
       ) : (
         <>
           <div className="cluster-info">Waiting for resources...</div>
-          {status.estimatedStartTime && (
-            <div className="estimated-start">Est: {formatEstimatedStart(status.estimatedStartTime)}</div>
-          )}
+          <div className="estimated-start">
+            {status.estimatedStartTime
+              ? `Est: ${formatEstimatedStart(status.estimatedStartTime)}`
+              : 'Waiting for start time...'}
+          </div>
           <div className="btn-group btn-group-sm">
             <button className="btn btn-danger btn-sm" onClick={() => onStop(hpc, ide)}>
               <X className="icon-sm" /> Cancel
