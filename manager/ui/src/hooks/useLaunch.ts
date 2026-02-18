@@ -148,11 +148,37 @@ export function useLaunch(
 
           case 'pending':
           case 'pending-timeout':
-            // Job is pending - close stream and let polling take over
-            // The startTime (if available) will be fetched via status polling
+            // Job is pending - show brief message, then check if it started running
             closeEventSource();
-            resetState();
-            onRefresh?.();  // Trigger immediate status refresh to show pending card
+            setLaunchState((prev) => ({
+              ...prev,
+              step: 'pending',
+              progress: 100,
+              message: 'Job queued - waiting for resources',
+              pending: true,
+            }));
+            // After delay, check status - if running, auto-connect; otherwise show pending card
+            setTimeout(async () => {
+              try {
+                const statusRes = await fetch('/api/cluster-status');
+                const statusData = await statusRes.json();
+                const ideStatus = statusData[hpc]?.[ide];
+
+                if (ideStatus?.status === 'running') {
+                  // Job started! Auto-connect to it
+                  resetState();
+                  connectRef.current?.(hpc, ide);
+                } else {
+                  // Still pending - show pending card
+                  resetState();
+                  onRefresh?.();
+                }
+              } catch {
+                // On error, just show pending card
+                resetState();
+                onRefresh?.();
+              }
+            }, 2000);
             break;
 
           case 'complete':

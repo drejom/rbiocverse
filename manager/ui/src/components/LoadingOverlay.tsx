@@ -16,6 +16,7 @@ const STEP_ESTIMATES: StepEstimates = {
   waiting: 70,
   starting: 75,
   establishing: 100,
+  pending: 100,  // Job queued, transitioning to pending card
 };
 
 interface LoadingOverlayProps {

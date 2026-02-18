@@ -210,17 +210,17 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 	// For /port/5500 -> base is /port/5500/ (treat as directory)
 	// For /index.html -> base is /
 	basePath := originalPath
+	// If path has a file extension, get the directory part
+	// e.g., /port/5500/docs/index.html -> /port/5500/docs
+	// e.g., /index.html -> /
+	if path.Ext(basePath) != "" {
+		basePath = path.Dir(basePath)
+	}
+	// Ensure trailing slash for consistent base href
+	// e.g., /port/5500/docs -> /port/5500/docs/
+	// e.g., / -> / (already correct)
 	if !strings.HasSuffix(basePath, "/") {
-		// Use path.Ext to check for file extension, path.Dir to get directory
-		if path.Ext(basePath) != "" {
-			// Has extension -> it's a file, get directory part
-			// e.g., /port/5500/docs/index.html -> /port/5500/docs/
-			basePath = path.Dir(basePath) + "/"
-		} else {
-			// No extension -> treat as directory, append slash
-			// e.g., /port/5500 -> /port/5500/
-			basePath = basePath + "/"
-		}
+		basePath += "/"
 	}
 
 	return p.rewriteHTML(resp, prefix, basePath)
