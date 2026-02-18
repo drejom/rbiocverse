@@ -106,14 +106,49 @@ func TestAbsPathPatternRewriting(t *testing.T) {
 			port:  5500,
 			want:  `<a href='/port/5500/foo'>link</a>`,
 		},
+		{
+			name:  "already rewritten /port/ prefix",
+			input: `<a href="/port/5500/foo">link</a>`,
+			port:  5500,
+			want:  `<a href="/port/5500/foo">link</a>`,
+		},
+		{
+			name:  "self-closing img tag",
+			input: `<img src="/image.png"/>`,
+			port:  5500,
+			want:  `<img src="/port/5500/image.png"/>`,
+		},
+		{
+			name:  "root path",
+			input: `<a href="/">home</a>`,
+			port:  5500,
+			want:  `<a href="/port/5500/">home</a>`,
+		},
+		{
+			name:  "path with query and fragment",
+			input: `<a href="/api?param=value#anchor">link</a>`,
+			port:  5500,
+			want:  `<a href="/port/5500/api?param=value#anchor">link</a>`,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prefix := "/port/" + string(rune('0'+tt.port/1000)) + string(rune('0'+(tt.port%1000)/100)) + string(rune('0'+(tt.port%100)/10)) + string(rune('0'+tt.port%10))
-			// Use the actual prefix format
-			prefix = "/port/" + itoa(tt.port)
-			result := absPathPattern.ReplaceAllString(tt.input, "${1}"+prefix+"${2}")
+			prefix := "/port/" + itoa(tt.port)
+			// Use the same logic as rewriteHTML to handle filtering
+			result := absPathPattern.ReplaceAllStringFunc(tt.input, func(match string) string {
+				parts := absPathPattern.FindStringSubmatch(match)
+				if len(parts) < 3 {
+					return match
+				}
+				attrPrefix := parts[1]
+				path := parts[2]
+				// Skip protocol-relative URLs and already-rewritten URLs
+				if strings.HasPrefix(path, "//") || strings.HasPrefix(path, "/port/") {
+					return match
+				}
+				return attrPrefix + prefix + path
+			})
 			if result != tt.want {
 				t.Errorf("rewrite(%q) = %q, want %q", tt.input, result, tt.want)
 			}
@@ -276,7 +311,7 @@ func TestProxyServeHTTP(t *testing.T) {
 		t.Errorf("expected rewritten URL in response, got: %s", body)
 	}
 
-	_ = port // used to start the proxy
+	_ = port // silence unused variable warning - port is needed to confirm Start() succeeded
 }
 
 func TestProxyInvalidRoute(t *testing.T) {

@@ -1,5 +1,4 @@
 const { expect } = require('chai');
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -8,11 +7,10 @@ const os = require('os');
 const testDbPath = path.join(os.tmpdir(), `test-sessions-${process.pid}.db`);
 process.env.DB_PATH = testDbPath;
 
-const { initializeDb, closeDb, resetDb } = require('../../lib/db');
+const { initializeDb, closeDb } = require('../../lib/db');
 const {
   getActiveSession,
   saveActiveSession,
-  deleteActiveSession,
   getAllActiveSessions,
   updateActiveSession,
   markDevServerUsed,
@@ -222,11 +220,12 @@ describe('Session DB Operations', () => {
     });
 
     it('should handle user with hyphen in name', () => {
-      // Note: current implementation may not handle this correctly
-      // This test documents the current behavior
       const parsed = parseSessionKey('user-name-gemini-vscode');
-      // The first hyphen splits user from the rest
-      expect(parsed).to.not.be.null;
+      expect(parsed).to.deep.equal({
+        user: 'user-name',
+        hpc: 'gemini',
+        ide: 'vscode',
+      });
     });
   });
 

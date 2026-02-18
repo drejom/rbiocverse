@@ -20,8 +20,9 @@ import (
 var (
 	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
 	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
-	// Match href="/..." and src="/..." (absolute paths, not protocol-relative //...)
-	absPathPattern = regexp.MustCompile(`((?:href|src|action)=["'])(/[^/"'][^"']*)`)
+	// Match href="/..." and src="/..." (absolute paths starting with single /)
+	// Captures: $1 = attribute prefix (e.g., href="), $2 = the path (e.g., /foo/bar)
+	absPathPattern = regexp.MustCompile(`((?:href|src|action)=["'])(/[^"']*)`)
 )
 
 // Proxy handles HTTP/WebSocket reverse proxying with path-based routing
@@ -208,12 +209,34 @@ func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int) error {
 
 	// Rewrite absolute paths: href="/foo" -> href="/port/5500/foo"
 	// This handles CSS, JS, links, images, forms with absolute paths
-	bodyStr = absPathPattern.ReplaceAllString(bodyStr, "${1}"+prefix+"${2}")
+	// Skip protocol-relative URLs (//...) and already-rewritten URLs (/port/...)
+	bodyStr = absPathPattern.ReplaceAllStringFunc(bodyStr, func(match string) string {
+		// Extract the path part (after the attribute prefix)
+		parts := absPathPattern.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match
+		}
+		attrPrefix := parts[1] // e.g., href="
+		path := parts[2]       // e.g., /foo/bar
+
+		// Skip protocol-relative URLs (start with //)
+		if strings.HasPrefix(path, "//") {
+			return match
+		}
+		// Skip already-rewritten URLs
+		if strings.HasPrefix(path, "/port/") {
+			return match
+		}
+		return attrPrefix + prefix + path
+	})
 
 	// Also inject base tag for relative URLs (belt and suspenders)
 	baseTag := fmt.Sprintf(`<base href="%s/">`, prefix)
 	if headPattern.MatchString(bodyStr) {
 		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
+	} else {
+		// Fallback: if there's no <head>, inject the base tag at the start of the document
+		bodyStr = baseTag + "\n" + bodyStr
 	}
 
 	// Update response (always return uncompressed for simplicity)
