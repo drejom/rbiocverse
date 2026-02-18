@@ -62,6 +62,9 @@ interface SessionStateContextValue {
   // Clear a session (resets to idle)
   clearSession: (hpc: string, ide: string) => void;
 
+  // Clear all sessions (used on logout to prevent stale data)
+  clearAllSessions: () => void;
+
   // Batch update sessions from polling (replaces all for a cluster)
   updateSessionsFromPoll: (hpc: string, ideStatuses: Record<string, Partial<SessionState>>) => void;
 
@@ -123,6 +126,11 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const clearAllSessions = useCallback(() => {
+    setSessions({});
+    setLaunchModalState(null);
+  }, []);
+
   const updateSessionsFromPoll = useCallback((hpc: string, ideStatuses: Record<string, Partial<SessionState>>) => {
     setSessions(prev => {
       const next = { ...prev };
@@ -135,15 +143,17 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
 
         // CRITICAL: Don't let stale poll data overwrite SSE-sourced pending status
         // If context has pending (from SSE) and poll says idle, keep pending until poll catches up
+        // BUT only preserve if we have a jobId to match (prevents indefinite stale pending)
         const shouldKeepExistingStatus = (
           existing?.status === 'pending' &&
-          status.status === 'idle'
+          status.status === 'idle' &&
+          !!existing?.jobId  // Only preserve if we have a jobId (from SSE launch)
         );
 
         next[key] = {
           ...(existing || defaultSession),
           ...status,
-          // Keep pending status if poll hasn't caught up yet
+          // Keep pending status if poll hasn't caught up yet (and we have a jobId)
           status: shouldKeepExistingStatus ? existing.status : (status.status || existing?.status || 'idle'),
           // Preserve estimatedStartTime from SSE if poll doesn't have it
           estimatedStartTime: status.estimatedStartTime ?? existing?.estimatedStartTime ?? null,
@@ -185,11 +195,12 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
     updateSession,
     getSession,
     clearSession,
+    clearAllSessions,
     updateSessionsFromPoll,
     launchModal,
     setLaunchModal,
     updateLaunchModal,
-  }), [sessions, updateSession, getSession, clearSession, updateSessionsFromPoll, launchModal, setLaunchModal, updateLaunchModal]);
+  }), [sessions, updateSession, getSession, clearSession, clearAllSessions, updateSessionsFromPoll, launchModal, setLaunchModal, updateLaunchModal]);
 
   return (
     <SessionStateContext.Provider value={value}>

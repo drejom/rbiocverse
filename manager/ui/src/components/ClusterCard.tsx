@@ -220,7 +220,7 @@ export function ClusterCard({
     } finally {
       setIsStoppingAll(false);
     }
-  }, [api, hpc, activeJobCount, ides, clearSession]);
+  }, [api, hpc, activeJobCount, ideStatuses, clearSession]);
 
   // Check if any IDEs are available to launch
   const canLaunch = useMemo(() => {
