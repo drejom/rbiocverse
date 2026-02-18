@@ -5,6 +5,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Play, Square } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { useSessionState } from '../contexts/SessionStateContext';
 import { HealthBars } from './HealthBar';
 import ReleaseSelector from './ReleaseSelector';
 import IdeSelector from './IdeSelector';
@@ -70,6 +71,7 @@ export function ClusterCard({
 }: ClusterCardProps) {
   const { ides, releases, defaultReleaseVersion, gpuConfig, partitionLimits, defaultPartitions } = config;
   const api = useApi();
+  const { clearSession } = useSessionState();
 
   // Local state for launch form
   const [selectedIde, setSelectedIde] = useState('vscode');
@@ -200,6 +202,17 @@ export function ClusterCard({
         setStopAllError(`Failed to stop ${data.failed.length} job(s): ${data.failed.join(', ')}`);
       }
 
+      // Only clear sessions for successfully cancelled jobs
+      // Map cancelled jobIds back to their IDEs using ideStatuses
+      if (data.cancelled && data.cancelled.length > 0) {
+        const cancelledJobIds = new Set(data.cancelled);
+        for (const [ide, status] of Object.entries(ideStatuses)) {
+          if (status.jobId && cancelledJobIds.has(status.jobId)) {
+            clearSession(hpc, ide);
+          }
+        }
+      }
+
       // Trigger a status refresh
       window.dispatchEvent(new CustomEvent('refresh-status'));
     } catch (e) {
@@ -207,7 +220,7 @@ export function ClusterCard({
     } finally {
       setIsStoppingAll(false);
     }
-  }, [api, hpc, activeJobCount]);
+  }, [api, hpc, activeJobCount, ides, clearSession]);
 
   // Check if any IDEs are available to launch
   const canLaunch = useMemo(() => {
