@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -134,7 +135,7 @@ func TestAbsPathPatternRewriting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prefix := "/port/" + itoa(tt.port)
+			prefix := "/port/" + strconv.Itoa(tt.port)
 			// Use the same logic as rewriteHTML to handle filtering
 			result := absPathPattern.ReplaceAllStringFunc(tt.input, func(match string) string {
 				parts := absPathPattern.FindStringSubmatch(match)
@@ -154,21 +155,6 @@ func TestAbsPathPatternRewriting(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Simple int to string for test (avoid fmt import overhead)
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }
 
 func TestRewriteHTML(t *testing.T) {
@@ -225,7 +211,7 @@ func TestRewriteHTML(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			result := string(body)
 
-			prefix := "/port/" + itoa(tt.port)
+			prefix := "/port/" + strconv.Itoa(tt.port)
 			hasBase := strings.Contains(result, `<base href="`+prefix+`/">`)
 			hasRewrite := strings.Contains(result, prefix+"/")
 
