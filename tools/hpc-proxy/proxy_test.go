@@ -246,7 +246,7 @@ func TestRewriteHTMLGzipped(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(buf.String())),
 	}
 
-	err := p.rewriteHTML(resp, 5500, "/port/5500", "/port/5500/")
+	err := p.rewriteHTML(resp, "/port/5500", "/port/5500/")
 	if err != nil {
 		t.Fatalf("rewriteHTML() error = %v", err)
 	}
@@ -315,6 +315,90 @@ func TestRewriteResponseRootFile(t *testing.T) {
 	expectedBase := `<base href="/port/5500/">`
 	if !strings.Contains(result, expectedBase) {
 		t.Errorf("expected base tag '%s', got: %s", expectedBase, result)
+	}
+}
+
+func TestRewriteResponseFilePath(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500/docs/index.html - base tag should strip the filename
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/docs/index.html")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should strip the filename and use the directory path
+	if !strings.Contains(result, `<base href="/port/5500/docs/">`) {
+		t.Errorf("expected base tag with docs directory path, got: %s", result)
+	}
+}
+
+func TestRewriteResponsePortRootNoSlash(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// Simulate request to /port/5500 (no trailing slash) - should normalize to /port/5500/
+	html := `<html><head></head><body><link href="deps/bootstrap.css"></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Base tag should normalize port root to include trailing slash
+	if !strings.Contains(result, `<base href="/port/5500/">`) {
+		t.Errorf("expected base tag with normalized port root path, got: %s", result)
+	}
+}
+
+func TestRewriteResponseExistingBaseTag(t *testing.T) {
+	p := NewProxy(0, true, false)
+
+	// HTML already has a base tag - should not inject another
+	// Use relative href to avoid the absPathPattern rewriting it
+	html := `<html><head><base href="./"></head><body></body></html>`
+	resp := &http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+		},
+		Body: io.NopCloser(strings.NewReader(html)),
+	}
+
+	err := p.rewriteResponse(resp, 5500, "/port/5500/")
+	if err != nil {
+		t.Fatalf("rewriteResponse() error = %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// Should preserve original base tag and not inject a new one
+	if !strings.Contains(result, `<base href="./">`) {
+		t.Errorf("expected original base tag to be preserved, got: %s", result)
+	}
+	// Count base tags - should only be one
+	baseCount := strings.Count(result, "<base ")
+	if baseCount != 1 {
+		t.Errorf("expected exactly 1 base tag, found %d in: %s", baseCount, result)
 	}
 }
 

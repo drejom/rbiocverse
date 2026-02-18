@@ -20,6 +20,8 @@ import (
 var (
 	routePattern = regexp.MustCompile(`^/port/(\d+)(/.*)?$`)
 	headPattern  = regexp.MustCompile(`(?i)(<head[^>]*>)`)
+	// Match existing base tag to avoid duplicates
+	baseTagPattern = regexp.MustCompile(`(?i)<base\s+[^>]*href=`)
 	// Match href="/..." and src="/..." (absolute paths starting with single /)
 	// Captures: $1 = attribute prefix (e.g., href="), $2 = the path (e.g., /foo/bar)
 	absPathPattern = regexp.MustCompile(`((?:href|src|action)=["'])(/[^"']*)`)
@@ -181,7 +183,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPath string) error {
 	prefix := fmt.Sprintf("/port/%d", targetPort)
 
-	// Rewrite Location header for redirects (301, 302, 303, 307, 308)
+	// Rewrite Location header for any response that has one (redirects, 201 Created, etc.)
 	if location := resp.Header.Get("Location"); location != "" {
 		// Only rewrite absolute paths (starting with /) that aren't already prefixed
 		if strings.HasPrefix(location, "/") && !strings.HasPrefix(location, "/port/") {
@@ -203,25 +205,35 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 	// For /port/5500/docs/index.html -> base is /port/5500/docs/
 	// For /port/5500/docs/ -> base is /port/5500/docs/
 	// For /port/5500/ -> base is /port/5500/
+	// For /port/5500 -> base is /port/5500/ (treat as directory)
 	// For /index.html -> base is /
 	basePath := originalPath
 	if !strings.HasSuffix(basePath, "/") {
-		// If path doesn't end with /, get the directory part
-		// e.g., /port/5500/docs/index.html -> /port/5500/docs/
-		// e.g., /index.html -> /
+		// Check if this looks like a file (has extension) or directory
+		// Files: /port/5500/index.html, /foo.css -> strip filename
+		// Directories: /port/5500, /docs -> append trailing slash
 		lastSlash := strings.LastIndex(basePath, "/")
-		if lastSlash >= 0 {
-			basePath = basePath[:lastSlash+1]
+		lastDot := strings.LastIndex(basePath, ".")
+		if lastDot > lastSlash {
+			// Has extension after last slash -> it's a file, get directory part
+			// e.g., /port/5500/docs/index.html -> /port/5500/docs/
+			if lastSlash >= 0 {
+				basePath = basePath[:lastSlash+1]
+			}
+		} else {
+			// No extension -> treat as directory, append slash
+			// e.g., /port/5500 -> /port/5500/
+			basePath = basePath + "/"
 		}
 	}
 
-	return p.rewriteHTML(resp, targetPort, prefix, basePath)
+	return p.rewriteHTML(resp, prefix, basePath)
 }
 
 // rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
 // prefix is the port prefix (e.g., /port/5500) for rewriting absolute paths
 // basePath is the full directory path (e.g., /port/5500/docs/) for the base tag
-func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string, basePath string) error {
+func (p *Proxy) rewriteHTML(resp *http.Response, prefix string, basePath string) error {
 
 	// Handle compressed responses
 	encoding := resp.Header.Get("Content-Encoding")
@@ -274,12 +286,15 @@ func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string, 
 
 	// Inject base tag for relative URLs using the full path (not just prefix)
 	// This ensures relative paths like "deps/..." resolve correctly in subdirectories
-	baseTag := fmt.Sprintf(`<base href="%s">`, basePath)
-	if headPattern.MatchString(bodyStr) {
-		bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
-	} else {
-		// Fallback: if there's no <head>, inject the base tag at the start of the document
-		bodyStr = baseTag + "\n" + bodyStr
+	// Skip if HTML already has a base tag to avoid invalid HTML with multiple base tags
+	if !baseTagPattern.MatchString(bodyStr) {
+		baseTag := fmt.Sprintf(`<base href="%s">`, basePath)
+		if headPattern.MatchString(bodyStr) {
+			bodyStr = headPattern.ReplaceAllString(bodyStr, "${1}\n"+baseTag)
+		} else {
+			// Fallback: if there's no <head>, inject the base tag at the start of the document
+			bodyStr = baseTag + "\n" + bodyStr
+		}
 	}
 
 	// Update response (always return uncompressed for simplicity)
