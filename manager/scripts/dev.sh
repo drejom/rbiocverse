@@ -52,6 +52,20 @@ export ENABLE_STATE_PERSISTENCE=true
 # Node environment
 export NODE_ENV=development
 
+# Default port
+PORT="${PORT:-3000}"
+
+# Kill any process holding the port
+kill_port() {
+    local port=$1
+    local pids=$(lsof -ti:"$port" 2>/dev/null)
+    if [ -n "$pids" ]; then
+        echo "Killing process(es) on port $port: $pids"
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        sleep 1
+    fi
+}
+
 start_server() {
     if [ -f "$PID_FILE" ]; then
         PID=$(cat "$PID_FILE")
@@ -62,6 +76,9 @@ start_server() {
         fi
         rm -f "$PID_FILE"
     fi
+
+    # Kill any stale process holding the port
+    kill_port "$PORT"
 
     echo "Starting development server (transpile-only mode)..."
     echo "  TEST_USERNAME: $TEST_USERNAME"
@@ -122,6 +139,9 @@ stop_server() {
     fi
 
     rm -f "$PID_FILE"
+
+    # Also kill any orphaned process holding the port
+    kill_port "$PORT"
 }
 
 show_status() {

@@ -157,10 +157,10 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 		req.Header.Set("X-Original-Path", r.URL.Path)
 	}
 
-	// Optionally modify response for base tag injection (HTTP only, not WebSocket)
+	// Optionally modify response for redirect and HTML rewriting
 	if p.baseRewrite {
 		proxy.ModifyResponse = func(resp *http.Response) error {
-			return p.rewriteHTML(resp, targetPort)
+			return p.rewriteResponse(resp, targetPort)
 		}
 	}
 
@@ -173,12 +173,34 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request, targetPort in
 	proxy.ServeHTTP(w, r)
 }
 
-// rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
-func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int) error {
+// rewriteResponse modifies responses to fix absolute URLs for path-based routing
+// This includes both HTML content and redirect Location headers
+func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int) error {
+	prefix := fmt.Sprintf("/port/%d", targetPort)
+
+	// Rewrite Location header for redirects (301, 302, 303, 307, 308)
+	if location := resp.Header.Get("Location"); location != "" {
+		// Only rewrite absolute paths (starting with /) that aren't already prefixed
+		if strings.HasPrefix(location, "/") && !strings.HasPrefix(location, "/port/") {
+			newLocation := prefix + location
+			resp.Header.Set("Location", newLocation)
+			if p.verbose {
+				log.Printf("Rewrote Location header: %s -> %s", location, newLocation)
+			}
+		}
+	}
+
+	// Only process HTML content for body rewriting
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") {
 		return nil
 	}
+
+	return p.rewriteHTML(resp, targetPort, prefix)
+}
+
+// rewriteHTML modifies HTML responses to rewrite absolute URLs for path-based routing
+func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int, prefix string) error {
 
 	// Handle compressed responses
 	encoding := resp.Header.Get("Content-Encoding")
@@ -205,7 +227,6 @@ func (p *Proxy) rewriteHTML(resp *http.Response, targetPort int) error {
 	}
 
 	bodyStr := string(body)
-	prefix := fmt.Sprintf("/port/%d", targetPort)
 
 	// Rewrite absolute paths: href="/foo" -> href="/port/5500/foo"
 	// This handles CSS, JS, links, images, forms with absolute paths
