@@ -264,7 +264,7 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
             window.location.href = data.redirectUrl || '/code/';
             break;
 
-          case 'error':
+          case 'error': {
             closeEventSource();
             const sshErr = isSshError(data.message);
             updateLaunchModal({
@@ -277,6 +277,7 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
               setTimeout(resetModal, ERROR_DISPLAY_MS);
             }
             break;
+          }
         }
       } catch (e) {
         log.error('Failed to parse SSE data', { error: e });

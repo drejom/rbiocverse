@@ -18,6 +18,7 @@ interface HeatmapOptions<T> {
 /**
  * Render a GitHub-style heatmap
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function renderHeatmap<T>(svgElement: SVGElement, options: HeatmapOptions<T>): void {
   const { dateMap, colorScale, getValue, getTooltipHtml, tooltipElement } = options;
 

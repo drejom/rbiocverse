@@ -40,11 +40,8 @@ export default [
       // TypeScript's compiler handles these — disable the JS versions
       'no-unused-vars': 'off',
       'no-undef': 'off',
-      // Pre-existing violations — downgrade to warning (not the focus of this PR)
+      // Pre-existing intentional patterns — downgrade to warning
       'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-refresh/only-export-components': 'warn',
-      'no-case-declarations': 'warn',
     },
   },
   {

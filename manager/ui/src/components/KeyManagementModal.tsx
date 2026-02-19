@@ -68,7 +68,7 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [user?.publicKey]);
+  }, [user]);
 
   // Handle generate key (no password needed - server-side encryption)
   const handleGenerateKey = async () => {
