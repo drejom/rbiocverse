@@ -313,6 +313,10 @@ class HpcService {
       if (!output) return null;
 
       const parts = output.split('|');
+      if (parts.length !== 8) {
+        log.warn(`Unexpected squeue output format: expected 8 fields, got ${parts.length}: "${output}"`);
+        return null;
+      }
       const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, startTime] = parts;
 
       return {

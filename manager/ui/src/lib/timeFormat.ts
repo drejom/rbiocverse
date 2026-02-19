@@ -8,8 +8,15 @@
  */
 export function formatEstimatedStart(isoTime: string): string {
   const startDate = new Date(isoTime);
+  const startTimeMs = startDate.getTime();
+
+  // Handle invalid date strings gracefully
+  if (Number.isNaN(startTimeMs)) {
+    return 'unknown';
+  }
+
   const now = new Date();
-  const diffMs = startDate.getTime() - now.getTime();
+  const diffMs = startTimeMs - now.getTime();
 
   if (diffMs < 0) {
     return 'soon';
