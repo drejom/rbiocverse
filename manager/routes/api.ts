@@ -22,7 +22,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters, ReleaseConfig } from '../config';
 import { log } from '../lib/logger';
 import { createClusterCache } from '../lib/cache';
-import type { JobInfo } from '../lib/state/types';
+import type { JobInfo, PollingInfo } from '../lib/state/types';
 import { sleep } from '../lib/time';
 
 // Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
@@ -36,16 +36,13 @@ interface StateManager {
   getSession(user: string, hpc: string, ide: string): Session | null;
   getSessionsForUser(user: string): Record<string, Session | null>;
   getOrCreateSession(user: string, hpc: string, ide: string): Promise<Session>;
-  updateSession(user: string, hpc: string, ide: string, updates: Partial<Session>): Promise<void>;
+  updateSession(user: string, hpc: string, ide: string, updates: Partial<Session>): Promise<Session>;
   clearSession(user: string, hpc: string, ide: string, options?: { endReason?: string }): Promise<void>;
-  getPollingInfo(): { lastPollTime: number | null; nextPollTime: number | null; currentInterval: number };
+  getPollingInfo(): PollingInfo;
   getClusterHealth(): Record<string, unknown>;
   acquireLock(name: string): void;
   releaseLock(name: string): void;
-  state: {
-    sessions: Record<string, Session | null>;
-  };
-  onSessionCleared?: (user: string, hpc: string, ide: string) => void;
+  onSessionCleared?: ((user: string, hpc: string, ide: string) => void) | null;
 }
 
 interface ActiveSession {
@@ -55,19 +52,19 @@ interface ActiveSession {
 }
 
 interface Session {
-  status: 'idle' | 'starting' | 'pending' | 'running';
+  status: string | null;
   ide?: string;
-  jobId?: string;
-  token?: string;
-  node?: string;
+  jobId?: string | null;
+  token?: string | null;
+  node?: string | null;
   error?: string | null;
-  cpus?: number;
-  memory?: string;
-  walltime?: string;
-  startedAt?: string;
-  submittedAt?: string;
+  cpus?: number | null;
+  memory?: string | null;
+  walltime?: string | null;
+  startedAt?: string | null;
+  submittedAt?: string | null;
   estimatedStartTime?: string | null;  // SLURM forecast for pending jobs
-  releaseVersion?: string;
+  releaseVersion?: string | null;
   gpu?: string | null;
   account?: string | null;
   tunnelProcess?: unknown;
@@ -452,9 +449,9 @@ function createApiRouter(stateManager: StateManager): Router {
         defaultTime: config.defaultTime,
       },
       polling: {
-        lastPollTime: pollingInfo.lastPollTime,
-        nextPollTime: pollingInfo.nextPollTime,
-        intervalMs: pollingInfo.currentInterval,
+        lastPollTime: pollingInfo.jobPolling.lastPollTime,
+        nextPollTime: pollingInfo.jobPolling.nextPollTime,
+        intervalMs: pollingInfo.jobPolling.currentInterval,
       },
     });
   });

@@ -17,9 +17,9 @@ import { config, ides } from './config';
 import HpcService from './services/hpc';
 import createApiRouter from './routes/api';
 import authRouter from './routes/auth';
-import helpRouter from './routes/help';
-import adminRouter from './routes/admin';
-import statsRouter from './routes/stats';
+import helpRouter, { setStateManager as helpSetStateManager } from './routes/help';
+import adminRouter, { setStateManager as adminSetStateManager } from './routes/admin';
+import statsRouter, { setStateManager as statsSetStateManager } from './routes/stats';
 import clientErrorsRouter from './routes/client-errors';
 import { HpcError } from './lib/errors';
 import { log } from './lib/logger';
@@ -101,22 +101,22 @@ function getSessionToken(ide: string): string | null {
 app.use('/api/auth', authRouter);
 
 // Mount help routes (inject stateManager for template processing)
-(helpRouter as unknown as { setStateManager: (sm: StateManager) => void }).setStateManager(stateManager);
+helpSetStateManager(stateManager);
 app.use('/api/help', helpRouter);
 
 // Mount admin routes (inject stateManager for cluster data)
-(adminRouter as unknown as { setStateManager: (sm: StateManager) => void }).setStateManager(stateManager);
+adminSetStateManager(stateManager);
 app.use('/api/admin', adminRouter);
 
 // Mount public stats API (no auth required, inject stateManager)
-(statsRouter as unknown as { setStateManager: (sm: StateManager) => void }).setStateManager(stateManager);
+statsSetStateManager(stateManager);
 app.use('/api/stats', statsRouter);
 
 // Mount client error reporting (for frontend error logging)
 app.use('/api/client-errors', clientErrorsRouter);
 
 // Mount API routes (general /api/* - must come after more specific routes)
-app.use('/api', createApiRouter(stateManager as unknown as Parameters<typeof createApiRouter>[0]));
+app.use('/api', createApiRouter(stateManager));
 
 // Serve static files from public directory (images, wrapper pages)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -653,7 +653,7 @@ stateManager.load().then(async () => {
 
   // Start background polling with HpcService factory
   // Cast to match the minimal interface required by StateManager
-  stateManager.startPolling(((hpc: string) => new HpcService(hpc)) as unknown as Parameters<typeof stateManager.startPolling>[0]);
+  stateManager.startPolling((hpc: string) => new HpcService(hpc));
 
   server = app.listen(PORT, () => {
     log.info(`HPC Code Server Manager listening on port ${PORT}`);

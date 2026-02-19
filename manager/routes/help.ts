@@ -8,6 +8,7 @@ import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { log } from '../lib/logger';
+import type { ClusterHealthState } from '../lib/state/types';
 
 const fsPromises = fs.promises;
 const router = express.Router();
@@ -20,17 +21,7 @@ const CONTENT_DIR = path.join(__dirname, '../content');
 
 // StateManager type (simplified for this module)
 interface StateManager {
-  getClusterHealth(): Record<string, {
-    current?: {
-      online?: boolean;
-      cpus?: Record<string, unknown>;
-      memory?: Record<string, unknown>;
-      nodes?: Record<string, unknown>;
-      gpus?: Record<string, unknown>;
-      runningJobs?: number;
-      pendingJobs?: number;
-    };
-  }>;
+  getClusterHealth(): Record<string, ClusterHealthState>;
 }
 
 // StateManager will be injected via setStateManager()

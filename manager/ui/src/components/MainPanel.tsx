@@ -69,16 +69,8 @@ function getEffectiveStatus(
   return undefined;
 }
 
-interface ExtendedIdeStatus extends IdeStatus {
-  node?: string;
-  cpus?: number | string;
-  memory?: string;
-  gpu?: string;
-  releaseVersion?: string;
-  timeLeftSeconds?: number;
-  timeLimitSeconds?: number;
-  startTime?: string;
-}
+// IdeStatus now includes all these fields directly
+type ExtendedIdeStatus = IdeStatus;
 
 interface MainPanelProps {
   cluster: ClusterName;

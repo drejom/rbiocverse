@@ -10,7 +10,8 @@ import * as path from 'path';
 import { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } from '../config';
 import { log } from '../lib/logger';
 import { withClusterQueue } from '../lib/ssh-queue';
-import type { JobInfo } from '../lib/state/types';
+import type { JobInfo, HpcService as IHpcService } from '../lib/state/types';
+import type { ClusterHealth, PartitionStats } from '../lib/db/healthSchema';
 import { sleep, MS_PER_MINUTE } from '../lib/time';
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
@@ -56,20 +57,6 @@ interface WaitForNodeResult {
 interface CancelJobsResult {
   cancelled: string[];
   failed: string[];
-}
-
-interface ClusterHealth {
-  online: boolean;
-  cpus?: { used: number; idle: number; total: number; percent: number };
-  memory?: { used: number; total: number; unit: string; percent: number };
-  nodes?: { idle: number; busy: number; down: number; total: number; percent?: number };
-  gpus?: Record<string, { idle: number; busy: number; total: number }> & { percent?: number } | null;
-  partitions?: Record<string, { cpus: { used: number; idle: number; total: number; percent: number } | null }> | null;
-  runningJobs?: number;
-  pendingJobs?: number;
-  fairshare?: number | null;
-  lastChecked: number;
-  error?: string;
 }
 
 interface HealthOptions {
@@ -157,7 +144,7 @@ echo "export IDE_PORT=$PORT"
   return Buffer.from(script).toString('base64');
 }
 
-class HpcService {
+class HpcService implements IHpcService {
   private clusterName: string;
   private cluster: typeof clusters[keyof typeof clusters];
   private username: string | null;
@@ -977,8 +964,17 @@ ${fairshareCmd}echo "done"
       log.warn('Failed to get cluster health', { cluster: this.clusterName, error: (e as Error).message });
       return {
         online: false,
-        error: (e as Error).message,
+        cpus: null,
+        memory: null,
+        nodes: null,
+        gpus: null,
+        partitions: null,
+        runningJobs: 0,
+        pendingJobs: 0,
+        fairshare: null,
         lastChecked: Date.now(),
+        consecutiveFailures: 0,
+        error: (e as Error).message,
       };
     }
   }
@@ -1020,12 +1016,12 @@ ${fairshareCmd}echo "done"
     }
 
     // Parse per-partition CPUs
-    const parseCpuString = (str: string): { used: number; idle: number; total: number; percent: number } | null => {
-      if (!str) return null;
+    const parseCpuString = (str: string): { used: number; idle: number; total: number; percent: number } | undefined => {
+      if (!str) return undefined;
       const parts = str.split('/');
-      if (parts.length !== 4) return null;
+      if (parts.length !== 4) return undefined;
       const nums = parts.map(p => Number(p.trim()));
-      if (!nums.every(Number.isFinite)) return null;
+      if (!nums.every(Number.isFinite)) return undefined;
       const [allocated, idle, , total] = nums;
       return {
         used: allocated,
@@ -1035,7 +1031,7 @@ ${fairshareCmd}echo "done"
       };
     };
 
-    const partitions: Record<string, { cpus: { used: number; idle: number; total: number; percent: number } | null }> = {};
+    const partitions: Record<string, PartitionStats> = {};
     if (sections.CPUS_GPU_A100?.[0]) {
       partitions['gpu-a100'] = { cpus: parseCpuString(sections.CPUS_GPU_A100[0]) };
     }
@@ -1162,8 +1158,10 @@ ${fairshareCmd}echo "done"
       partitions: Object.keys(partitions).length > 0 ? partitions : null,
       runningJobs,
       pendingJobs,
-      fairshare,
+      fairshare: fairshare !== null ? String(fairshare) : null,
       lastChecked: Date.now(),
+      consecutiveFailures: 0,
+      error: null,
     };
   }
 }
