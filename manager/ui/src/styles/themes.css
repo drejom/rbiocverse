@@ -53,6 +53,9 @@
 
   /* Overlay */
   --overlay-bg: rgba(0, 0, 0, 0.7);
+
+  /* Elevated surface (e.g. heatmap empty cells, stat rows) */
+  --bg-elevated: #2e2e4e;
 }
 
 /* Light theme overrides - Polished, warm aesthetic */
@@ -102,6 +105,9 @@
   --blur-panel: blur(24px);
 
   --overlay-bg: rgba(26, 31, 54, 0.4);
+
+  /* Elevated surface (e.g. heatmap empty cells, stat rows) */
+  --bg-elevated: #d8dde7;
 }
 
 /* Apply theme variables */
