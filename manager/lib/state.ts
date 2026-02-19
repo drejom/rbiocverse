@@ -30,10 +30,8 @@ import {
 } from './state/types';
 
 import type {
-  HpcService,
   JobInfo,
   HpcServiceFactory,
-  ParsedSessionKey,
   ActiveSession,
   ClusterHealthState,
   AppState,
@@ -41,7 +39,6 @@ import type {
   PollingInfo,
   ClearSessionOptions,
   Session,
-  ClusterHealth,
   HealthHistoryEntry,
 } from './state/types';
 
