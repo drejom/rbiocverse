@@ -14,7 +14,6 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -41,6 +40,7 @@ import { initializeDb } from '../lib/db';
 import { checkAndMigrate } from '../lib/db/migrate';
 import { setSessionKey, getSessionKey, clearSessionKey } from '../lib/auth/session-keys';
 import { isAdmin, getPrimaryAdmin } from '../lib/auth/admin';
+import { authenticate, type AuthResult } from '../lib/auth/ldap';
 
 // Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
 const param = (req: Request, name: string): string => req.params[name] as string;
@@ -76,34 +76,6 @@ interface SshTestResult {
 // Database-backed user operations (replaced user-store.js)
 const getUser = (username: string): User | null => dbUsers.getUser(username) as User | null;
 const setUser = (username: string, user: User): void => dbUsers.setUser(username, user);
-
-// Test credentials (for development - will be replaced by LDAP)
-// Must be set via environment variables - no defaults for security
-const TEST_USERNAME = process.env.TEST_USERNAME;
-const TEST_PASSWORD = process.env.TEST_PASSWORD;
-
-/**
- * Verify password against test credentials
- * TODO(#65): Replace with LDAP password verification
- * @param username
- * @param password
- * @returns boolean
- */
-function verifyPassword(username: string, password: string): boolean {
-  if (!TEST_USERNAME || !TEST_PASSWORD) return false;
-
-  const expectedUserBuffer = Buffer.from(TEST_USERNAME);
-  const providedUserBuffer = Buffer.from(username);
-  const expectedPassBuffer = Buffer.from(TEST_PASSWORD);
-  const providedPassBuffer = Buffer.from(password);
-
-  const usernameValid = expectedUserBuffer.length === providedUserBuffer.length &&
-    crypto.timingSafeEqual(expectedUserBuffer, providedUserBuffer);
-  const passwordValid = expectedPassBuffer.length === providedPassBuffer.length &&
-    crypto.timingSafeEqual(expectedPassBuffer, providedPassBuffer);
-
-  return usernameValid && passwordValid;
-}
 
 /**
  * Get user's private key for SSH connections
@@ -266,19 +238,17 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 
   try {
-    // Development: Verify against test credentials (env vars)
-    // TODO(#65): Replace with LDAP/AD authentication
-    if (!TEST_USERNAME || !TEST_PASSWORD) {
-      log.error('TEST_USERNAME and TEST_PASSWORD must be set in environment');
-      return res.status(500).json({ error: 'Authentication not configured' });
-    }
-
-    if (!verifyPassword(username, password)) {
-      await errorLogger.logWarning({
-        user: username,
-        action: 'login',
-        error: 'Invalid credentials',
+    let authResult: AuthResult;
+    try {
+      authResult = await authenticate(username, password);
+    } catch (err) {
+      log.error('Authentication service error', {
+        error: err instanceof Error ? err.message : String(err),
       });
+      return res.status(500).json({ error: 'Authentication service unavailable' });
+    }
+    if (!authResult.success) {
+      await errorLogger.logWarning({ user: username, action: 'login', error: 'Invalid credentials' });
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
@@ -296,7 +266,7 @@ router.post('/login', async (req: Request, res: Response) => {
         // SSH works - no need to generate keys
         user = {
           username,
-          fullName: username, // Will be replaced by LDAP lookup
+          fullName: authResult.fullName ?? username,
           publicKey: null, // No managed key needed
           privateKey: null,
           setupComplete: true,
@@ -309,7 +279,7 @@ router.post('/login', async (req: Request, res: Response) => {
         const { publicKey, privateKeyPem } = await generateSshKeypair(username);
         user = {
           username,
-          fullName: username, // Will be replaced by LDAP lookup
+          fullName: authResult.fullName ?? username,
           publicKey,
           privateKey: await encryptWithServerKey(privateKeyPem),
           setupComplete: false,
@@ -333,6 +303,11 @@ router.post('/login', async (req: Request, res: Response) => {
           // Decryption failed - password may have changed, need to regenerate
           log.warn('Failed to decrypt private key, user needs to regenerate', { username });
         }
+      }
+      // Keep fullName current with AD (covers display name changes)
+      if (authResult.fullName && authResult.fullName !== user.fullName) {
+        user.fullName = authResult.fullName;
+        setUser(username, user);
       }
     }
 
