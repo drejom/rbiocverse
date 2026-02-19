@@ -9,7 +9,6 @@ import { createPortal } from 'react-dom';
 import { X, Search, LucideIcon } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { ParsedWidget } from './help-widgets';
 import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive, MenuItem } from '../lib/menuUtils';
 import log from '../lib/logger';
 import type { ClusterHealth, ClusterHistoryPoint } from '../types';
@@ -26,6 +25,14 @@ DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     data.forceKeepAttr = true;
   }
 });
+
+/** Single source of truth for the widget placeholder shape */
+export interface ParsedWidget {
+  id: string;
+  name: string;
+  props: Record<string, string>;
+  fullMatch: string;
+}
 
 type IconEntry = LucideIcon | (() => React.ReactElement);
 
@@ -45,8 +52,7 @@ interface SearchResult {
 
 interface MarkdownContentProps {
   html: string;
-  contentRef: React.RefObject<HTMLDivElement>;
-  onLinkClick: (e: MouseEvent) => void;
+  onLinkClick: React.MouseEventHandler<HTMLDivElement>;
   purifyAddAttr?: string[];
 }
 
@@ -55,7 +61,7 @@ interface MarkdownContentProps {
  * Only re-renders when the html string changes - this is critical to prevent
  * portal targets from being destroyed on health/history updates.
  */
-const MarkdownContentInner = forwardRef<HTMLDivElement, MarkdownContentProps>(
+const MarkdownContentInner = forwardRef<HTMLDivElement | null, MarkdownContentProps>(
   function MarkdownContentInner({ html, onLinkClick, purifyAddAttr = ['target'] }, ref) {
     const sanitizedHtml = DOMPurify.sanitize(marked.parse(html || '') as string, {
       ADD_ATTR: purifyAddAttr,
@@ -65,7 +71,7 @@ const MarkdownContentInner = forwardRef<HTMLDivElement, MarkdownContentProps>(
       <div
         ref={ref}
         dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-        onClick={onLinkClick as unknown as React.MouseEventHandler<HTMLDivElement>}
+        onClick={onLinkClick}
       />
     );
   }
@@ -74,19 +80,19 @@ const MarkdownContentInner = forwardRef<HTMLDivElement, MarkdownContentProps>(
 const MarkdownContentMemo = memo(MarkdownContentInner, (prev, next) => prev.html === next.html);
 
 // Public wrapper that accepts the ref via the contentRef prop (avoids forwardRef in the public interface)
-interface MarkdownContentPublicProps {
+export interface MarkdownContentPublicProps {
   html: string;
-  contentRef: React.RefObject<HTMLDivElement>;
-  onLinkClick: (e: MouseEvent) => void;
+  contentRef: React.RefObject<HTMLDivElement | null>;
+  /** Optional: link clicks are handled by ContentPanel internally */
+  onLinkClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 function MarkdownContent({ html, contentRef, onLinkClick }: MarkdownContentPublicProps) {
   return (
     <MarkdownContentMemo
-      ref={contentRef as React.RefObject<HTMLDivElement>}
+      ref={contentRef}
       html={html}
-      contentRef={contentRef}
-      onLinkClick={onLinkClick}
+      onLinkClick={onLinkClick ?? (() => undefined)}
     />
   );
 }
@@ -98,14 +104,14 @@ interface MountPoint {
   element: Element;
 }
 
-interface WidgetPortalsProps {
+export interface WidgetPortalsProps {
   widgets: ParsedWidget[];
   health?: Record<string, ClusterHealth | null>;
   history?: Record<string, ClusterHistoryPoint[]>;
   extraProps?: Record<string, unknown>;
   widgetModule: WidgetModule;
   contentKey: string;
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -144,13 +150,13 @@ function WidgetPortals({ widgets, health, history, extraProps, widgetModule, con
         }
         return createPortal(
           <Component
-            key={widget.id}
             {...widget.props}
             health={health}
             history={history}
             {...extraProps}
           />,
-          element
+          element,
+          widget.id
         );
       })}
     </>
@@ -161,6 +167,8 @@ function WidgetPortals({ widgets, health, history, extraProps, widgetModule, con
 
 interface ContentPanelProps {
   panelClass: string;
+  /** CSS class prefix for nav rows/items (e.g. "help" or "admin") */
+  navClassPrefix: string;
   headerIcon: React.ReactNode;
   title: string;
   isOpen: boolean;
@@ -180,7 +188,8 @@ interface ContentPanelProps {
   renderContent?: (opts: {
     content: string;
     widgets: ParsedWidget[];
-    contentRef: React.RefObject<HTMLDivElement>;
+    activeSection: string;
+    contentRef: React.RefObject<HTMLDivElement | null>;
     MarkdownContent: React.ComponentType<MarkdownContentPublicProps>;
     WidgetPortals: React.ComponentType<Omit<WidgetPortalsProps, 'widgetModule' | 'containerRef' | 'contentKey'>>;
   }) => React.ReactNode;
@@ -188,6 +197,7 @@ interface ContentPanelProps {
 
 function ContentPanel({
   panelClass,
+  navClassPrefix,
   headerIcon,
   title,
   isOpen,
@@ -214,7 +224,7 @@ function ContentPanel({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch menu structure when panel opens
   useEffect(() => {
@@ -290,6 +300,7 @@ function ContentPanel({
     try {
       const headers = getAuthHeader ? getAuthHeader() : {};
       const res = await fetch(`${searchEndpoint}?q=${encodeURIComponent(searchQuery)}`, { headers });
+      if (!res.ok) throw new Error(`Search failed: ${res.status}`);
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch (err) {
@@ -310,8 +321,6 @@ function ContentPanel({
     if (!iconName) return null;
     const Icon = iconMap[iconName];
     if (!Icon) return null;
-    // Discriminate between LucideIcon (has displayName / render property) and plain function returning ReactElement
-    // We detect devicon-prefixed names or check if calling Icon() returns a ReactElement (no size prop)
     if (iconName.startsWith('devicon-')) {
       return (Icon as () => React.ReactElement)();
     }
@@ -341,15 +350,13 @@ function ContentPanel({
     ? menuStructure.find(m => m.id === expandedGroup)?.children || []
     : [];
 
-  const getAllSections = () => getAllLeafSections(menuStructure);
-
   // Build the link click handler for the markdown content
-  const handleLinkClick = useCallback((e: MouseEvent) => {
+  const handleLinkClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     const link = target.closest('a');
     if (link) {
       const href = link.getAttribute('href');
-      const allSections = getAllSections();
+      const allSections = getAllLeafSections(menuStructure);
 
       const patternMatch = href?.match(linkPattern);
       if (patternMatch) {
@@ -368,18 +375,14 @@ function ContentPanel({
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkPattern, menuStructure]);
 
   // MarkdownContent wrapper with purifyAddAttr and handleLinkClick bound from ContentPanel scope.
-  // The onLinkClick prop accepted in the public interface is intentionally ignored here -
-  // link interception is always handled by ContentPanel's handleLinkClick.
   const BoundMarkdownContent = useCallback(
     ({ html, contentRef: ref }: MarkdownContentPublicProps) => (
       <MarkdownContentMemo
-        ref={ref as React.RefObject<HTMLDivElement>}
+        ref={ref}
         html={html}
-        contentRef={ref}
         onLinkClick={handleLinkClick}
         purifyAddAttr={purifyAddAttr}
       />
@@ -397,7 +400,7 @@ function ContentPanel({
         extraProps={ep}
         widgetModule={widgetModule}
         contentKey={activeSection}
-        containerRef={contentRef as React.RefObject<HTMLDivElement>}
+        containerRef={contentRef}
       />
     ),
     [widgetModule, activeSection]
@@ -407,8 +410,7 @@ function ContentPanel({
     <>
       <BoundMarkdownContent
         html={content}
-        contentRef={contentRef as React.RefObject<HTMLDivElement>}
-        onLinkClick={handleLinkClick}
+        contentRef={contentRef}
       />
       <BoundWidgetPortals
         widgets={widgets}
@@ -461,11 +463,11 @@ function ContentPanel({
 
         {/* Navigation - Top Row */}
         <div className={`${panelClass}-nav`}>
-          <div className={`${panelClass.replace('-panel', '')}-nav-row`}>
+          <div className={`${navClassPrefix}-nav-row`}>
             {menuStructure.map(item => (
               <button
                 key={item.id as string}
-                className={`${panelClass.replace('-panel', '')}-nav-item ${isTopLevelActive(item) ? 'active' : ''}`}
+                className={`${navClassPrefix}-nav-item ${isTopLevelActive(item) ? 'active' : ''}`}
                 onClick={() => handleTopLevelClick(item)}
               >
                 {getIcon(item.icon as string | undefined)}
@@ -476,11 +478,11 @@ function ContentPanel({
 
           {/* Second Row - Children of expanded group */}
           {expandedChildren.length > 0 && (
-            <div className={`${panelClass.replace('-panel', '')}-nav-row ${panelClass.replace('-panel', '')}-nav-row-children`}>
+            <div className={`${navClassPrefix}-nav-row ${navClassPrefix}-nav-row-children`}>
               {expandedChildren.map(child => (
                 <button
                   key={child.id as string}
-                  className={`${panelClass.replace('-panel', '')}-nav-item ${activeSection === child.id ? 'active' : ''}`}
+                  className={`${navClassPrefix}-nav-item ${activeSection === child.id ? 'active' : ''}`}
                   onClick={() => {
                     setActiveSection(child.id as string);
                     setSearchQuery('');
@@ -508,7 +510,7 @@ function ContentPanel({
                 </p>
                 {searchResults.map((result, i) => (
                   <div
-                    key={i}
+                    key={`${result.sectionId}-${i}`}
                     style={{
                       padding: 12,
                       marginBottom: 8,
@@ -551,7 +553,8 @@ function ContentPanel({
               ? renderContent({
                   content,
                   widgets,
-                  contentRef: contentRef as React.RefObject<HTMLDivElement>,
+                  activeSection,
+                  contentRef,
                   MarkdownContent: BoundMarkdownContent,
                   WidgetPortals: BoundWidgetPortals,
                 })
@@ -564,5 +567,5 @@ function ContentPanel({
 }
 
 export default memo(ContentPanel);
-export type { ContentPanelProps, WidgetModule, MarkdownContentPublicProps, WidgetPortalsProps };
+export type { ContentPanelProps, WidgetModule };
 export { MarkdownContent, WidgetPortals };

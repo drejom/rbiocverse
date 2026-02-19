@@ -28,6 +28,8 @@ import { DateRangeSelector } from './DateRangeSelector';
 import { ExportButton } from './ExportButton';
 
 import type { ClusterHealth, ClusterHistoryPoint } from '../../types';
+import type { ParsedWidget } from '../ContentPanel';
+export type { ParsedWidget };
 
 export interface AdminWidgetProps {
   health?: Record<string, ClusterHealth | null>;
@@ -43,13 +45,6 @@ export interface AdminWidgetProps {
   days?: number;
   data?: unknown[];
   [key: string]: unknown;
-}
-
-export interface ParsedWidget {
-  id: string;
-  name: string;
-  props: Record<string, string>;
-  fullMatch: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

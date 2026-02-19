@@ -158,6 +158,7 @@ function HelpPanel({ isOpen, onClose, health, history }: HelpPanelProps) {
   return (
     <ContentPanel
       panelClass="help-panel"
+      navClassPrefix="help"
       headerIcon={<HelpCircle size={20} style={{ marginRight: 8 }} />}
       title="Help"
       isOpen={isOpen}
@@ -172,13 +173,12 @@ function HelpPanel({ isOpen, onClose, health, history }: HelpPanelProps) {
       iconMap={iconMap}
       widgetModule={widgetModule}
       purifyAddAttr={['target']}
-      renderContent={({ content, widgets, contentRef, MarkdownContent, WidgetPortals }) => (
+      renderContent={({ content, widgets, activeSection, contentRef, MarkdownContent, WidgetPortals }) => (
         <div className="help-content-wrapper">
-          <FloatingToc containerRef={contentRef} contentKey={content} />
+          <FloatingToc containerRef={contentRef} contentKey={activeSection} />
           <MarkdownContent
             html={content}
             contentRef={contentRef}
-            onLinkClick={(_e: MouseEvent) => { /* handled by ContentPanel */ }}
           />
           <WidgetPortals
             widgets={widgets}

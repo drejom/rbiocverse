@@ -81,6 +81,7 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
   return (
     <ContentPanel
       panelClass="admin-panel"
+      navClassPrefix="admin"
       headerIcon={<LayoutDashboard size={20} style={{ marginRight: 8 }} />}
       title="Admin Panel"
       isOpen={isOpen}
@@ -99,7 +100,8 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
       extraWidgetProps={{
         partitions,
         onRefreshPartitions: handleRefreshPartitions,
-        isRefreshingPartitions,
+        isRefreshing: isRefreshingPartitions,
+        getAuthHeader,
       }}
     />
   );
