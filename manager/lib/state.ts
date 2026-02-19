@@ -12,7 +12,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
-import { LockError } from './errors';
+import { LockError, errorDetails, errorMessage } from './errors';
 import { log } from './logger';
 import { clusters, config } from '../config';
 import { MS_PER_MINUTE, MS_PER_HOUR } from './time';
@@ -164,7 +164,7 @@ class StateManager {
         checkAndMigrate();
         log.state('SQLite database initialized');
       } catch (err) {
-        log.error('Failed to initialize SQLite database', { error: (err as Error).message });
+        log.error('Failed to initialize SQLite database', errorDetails(err));
         // Fall back to JSON persistence
         this.useSqlite = false;
       }
@@ -207,7 +207,7 @@ class StateManager {
           activeSession: this.state.activeSession,
         });
       } catch (err) {
-        log.error('Failed to load from SQLite', { error: (err as Error).message });
+        log.error('Failed to load from SQLite', errorDetails(err));
       }
     }
 
@@ -252,7 +252,7 @@ class StateManager {
       } catch (e) {
         const nodeErr = e as NodeJS.ErrnoException;
         if (nodeErr.code !== 'ENOENT') {
-          log.error('Failed to load state from JSON', { error: (e as Error).message });
+          log.error('Failed to load state from JSON', errorDetails(e));
         }
       }
     }
@@ -282,7 +282,7 @@ class StateManager {
           .run('activeSession', JSON.stringify(this.state.activeSession));
 
       } catch (err) {
-        log.error('Failed to save to SQLite', { error: (err as Error).message });
+        log.error('Failed to save to SQLite', errorDetails(err));
       }
     }
 
@@ -322,7 +322,7 @@ class StateManager {
 
       await fs.writeFile(this.stateFile, JSON.stringify(cleanState, null, 2));
     } catch (e) {
-      log.error('Failed to save state', { error: (e as Error).message });
+      log.error('Failed to save state', errorDetails(e));
     }
   }
 
@@ -369,7 +369,7 @@ class StateManager {
       const hpcService = this.hpcServiceFactory(hpc);
       return await hpcService.checkJobExists(jobId);
     } catch (e) {
-      log.warn('Failed to check job existence, assuming exists', { hpc, jobId, error: (e as Error).message });
+      log.warn('Failed to check job existence, assuming exists', { hpc, jobId, ...errorDetails(e) });
       return true; // Safe fallback
     }
   }
@@ -507,7 +507,7 @@ class StateManager {
         // Also delete from active_sessions table
         dbSessions.deleteActiveSession(sessionKey, { archive: false }); // Already archived above
       } catch (err) {
-        log.error('Failed to archive session to history', { sessionKey, error: (err as Error).message });
+        log.error('Failed to archive session to history', { sessionKey, ...errorDetails(err) });
       }
     }
 
@@ -654,7 +654,7 @@ class StateManager {
       log.state('User account fetched', { user: effectiveUser, account });
       return account;
     } catch (e) {
-      log.warn('Failed to fetch user account', { user: effectiveUser, error: (e as Error).message });
+      log.warn('Failed to fetch user account', { user: effectiveUser, ...errorDetails(e) });
       return null;
     }
   }
@@ -750,7 +750,7 @@ class StateManager {
         log.debugFor('state', `No job changes for ${this.consecutiveUnchangedPolls} polls`);
       }
     } catch (e) {
-      log.error('Job poll cycle failed', { error: (e as Error).message });
+      log.error('Job poll cycle failed', errorDetails(e));
     } finally {
       this.scheduleJobPoll();
     }
@@ -765,7 +765,7 @@ class StateManager {
     try {
       await this.refreshClusterHealth();
     } catch (e) {
-      log.error('Health poll cycle failed', { error: (e as Error).message });
+      log.error('Health poll cycle failed', errorDetails(e));
     }
 
     // Schedule next poll if not stopped
@@ -794,8 +794,8 @@ class StateManager {
           const jobs = await hpcService.getAllJobs();
           return { hpc, jobs, error: null };
         } catch (e) {
-          log.warn('Failed to fetch jobs from cluster', { hpc, error: (e as Error).message });
-          return { hpc, jobs: {} as Record<string, JobInfo | null>, error: (e as Error).message };
+          log.warn('Failed to fetch jobs from cluster', { hpc, ...errorDetails(e) });
+          return { hpc, jobs: {} as Record<string, JobInfo | null>, error: errorMessage(e) };
         }
       })
     );
@@ -1005,7 +1005,7 @@ class StateManager {
               dbHealth.addHealthSnapshot(hpc, health);
             }
           } catch (err) {
-            log.error('Failed to save cluster health to SQLite', { hpc, error: (err as Error).message });
+            log.error('Failed to save cluster health to SQLite', { hpc, ...errorDetails(err) });
           }
         }
 
@@ -1062,9 +1062,9 @@ class StateManager {
         // Escalate logging if failures persist
         const failures = this.state.clusterHealth![hpc].consecutiveFailures;
         if (failures >= 5) {
-          log.error('Cluster health check failing persistently', { hpc, failures, error: (e as Error).message });
+          log.error('Cluster health check failing persistently', { hpc, failures, ...errorDetails(e) });
         } else {
-          log.warn('Failed to refresh cluster health', { hpc, failures, error: (e as Error).message });
+          log.warn('Failed to refresh cluster health', { hpc, failures, ...errorDetails(e) });
         }
       }
     });
@@ -1117,7 +1117,7 @@ class StateManager {
         const nodeErr = e as NodeJS.ErrnoException;
         if (nodeErr.code !== 'ENOENT') {
           // Log unexpected errors (not just missing file)
-          log.warn('Failed to read archive file, using fresh archive', { archiveFile, hpc, date, error: (e as Error).message });
+          log.warn('Failed to read archive file, using fresh archive', { archiveFile, hpc, date, ...errorDetails(e) });
         }
       }
 
@@ -1206,7 +1206,7 @@ class StateManager {
           }
         }
       } catch (err) {
-        log.error('Failed to get cluster history from SQLite', { error: (err as Error).message });
+        log.error('Failed to get cluster history from SQLite', errorDetails(err));
       }
     }
 
@@ -1229,7 +1229,7 @@ class StateManager {
     try {
       return dbHealth.getAllHealthHistory(options);
     } catch (err) {
-      log.error('Failed to get cluster history from SQLite', { error: (err as Error).message });
+      log.error('Failed to get cluster history from SQLite', errorDetails(err));
       return {};
     }
   }

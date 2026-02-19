@@ -8,6 +8,7 @@
  */
 
 import { log } from '../lib/logger';
+import { errorDetails } from '../lib/errors';
 import { errorLogger, ErrorEntry } from './ErrorLogger';
 
 interface AdminNotifierConfig {
@@ -189,7 +190,7 @@ class AdminNotifier {
       this.lastDigestTime = new Date();
       return true;
     } catch (err) {
-      log.error('Failed to send admin email:', { error: (err as Error).message });
+      log.error('Failed to send admin email:', errorDetails(err));
       return false;
     }
   }

@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { log } from '../lib/logger';
+import { errorDetails } from '../lib/errors';
 
 // Default error log path (can be overridden via ERROR_LOG_FILE env var)
 const ERROR_LOG_FILE = process.env.ERROR_LOG_FILE || '/data/logs/errors.json';
@@ -77,7 +78,7 @@ class ErrorLogger {
         await fs.mkdir(dir, { recursive: true });
         this.initialized = true;
       } catch (err) {
-        log.warn('Failed to create error log directory:', { error: (err as Error).message });
+        log.warn('Failed to create error log directory:', errorDetails(err));
       }
     })();
 
@@ -181,7 +182,7 @@ class ErrorLogger {
       await fs.rename(tempFile, this.logFile);
     } catch (err) {
       // Don't throw - error logging should never break the app
-      log.error('Failed to persist error log:', { error: (err as Error).message });
+      log.error('Failed to persist error log:', errorDetails(err));
     }
   }
 
@@ -208,7 +209,7 @@ class ErrorLogger {
       if (nodeErr.code === 'ENOENT') {
         return [];
       }
-      log.error('Failed to read error log:', { error: (err as Error).message });
+      log.error('Failed to read error log:', errorDetails(err));
       return [];
     }
   }
@@ -265,7 +266,7 @@ class ErrorLogger {
     } catch (err) {
       const nodeErr = err as NodeJS.ErrnoException;
       if (nodeErr.code !== 'ENOENT') {
-        log.error('Failed to cleanup error log:', { error: (err as Error).message });
+        log.error('Failed to cleanup error log:', errorDetails(err));
       }
     }
   }

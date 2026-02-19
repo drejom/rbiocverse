@@ -100,6 +100,24 @@ class NotFoundError extends HpcError {
   }
 }
 
+/**
+ * Extract safe log details from an unknown catch value.
+ * Use in log.error/log.warn calls: log.error('msg', errorDetails(err))
+ */
+function errorDetails(err: unknown): { error: string; stack?: string } | { detail: string } {
+  return err instanceof Error
+    ? { error: err.message, stack: err.stack }
+    : { detail: String(err) };
+}
+
+/**
+ * Extract a plain error message string from an unknown catch value.
+ * Use when a string is needed (e.g. API responses, results arrays).
+ */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export {
   HpcError,
   ValidationError,
@@ -108,6 +126,8 @@ export {
   TunnelError,
   LockError,
   NotFoundError,
+  errorDetails,
+  errorMessage,
 };
 
 // CommonJS compatibility for existing require() calls
@@ -119,4 +139,6 @@ module.exports = {
   TunnelError,
   LockError,
   NotFoundError,
+  errorDetails,
+  errorMessage,
 };

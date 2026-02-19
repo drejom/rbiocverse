@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDb, needsMigration } from '../db';
 import { log } from '../logger';
+import { errorDetails, errorMessage } from '../errors';
 import * as users from './users';
 import * as sessions from './sessions';
 import * as health from './health';
@@ -58,8 +59,8 @@ function runMigration(): MigrationResults {
       fs.renameSync(usersFile, usersFile + '.migrated');
       log.info('Renamed users.json to users.json.migrated');
     } catch (err) {
-      log.error('Failed to migrate users.json', { error: (err as Error).message });
-      results.errors.push(`users.json: ${(err as Error).message}`);
+      log.error('Failed to migrate users.json', errorDetails(err));
+      results.errors.push(`users.json: ${errorMessage(err)}`);
     }
   }
 
@@ -90,8 +91,8 @@ function runMigration(): MigrationResults {
       fs.renameSync(stateFile, stateFile + '.migrated');
       log.info('Renamed state.json to state.json.migrated');
     } catch (err) {
-      log.error('Failed to migrate state.json', { error: (err as Error).message });
-      results.errors.push(`state.json: ${(err as Error).message}`);
+      log.error('Failed to migrate state.json', errorDetails(err));
+      results.errors.push(`state.json: ${errorMessage(err)}`);
     }
   }
 
@@ -111,14 +112,14 @@ function runMigration(): MigrationResults {
           // Rename to .migrated
           fs.renameSync(filePath, filePath + '.migrated');
         } catch (fileErr) {
-          log.warn('Failed to migrate health history file', { file, error: (fileErr as Error).message });
-          results.errors.push(`${file}: ${(fileErr as Error).message}`);
+          log.warn('Failed to migrate health history file', { file, ...errorDetails(fileErr) });
+          results.errors.push(`${file}: ${errorMessage(fileErr)}`);
         }
       }
       log.info('Migrated health history files', { count: files.length });
     } catch (err) {
-      log.error('Failed to read health-history directory', { error: (err as Error).message });
-      results.errors.push(`health-history: ${(err as Error).message}`);
+      log.error('Failed to read health-history directory', errorDetails(err));
+      results.errors.push(`health-history: ${errorMessage(err)}`);
     }
   }
 

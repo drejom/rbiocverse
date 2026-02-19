@@ -21,7 +21,7 @@ import helpRouter, { setStateManager as helpSetStateManager } from './routes/hel
 import adminRouter, { setStateManager as adminSetStateManager } from './routes/admin';
 import statsRouter, { setStateManager as statsSetStateManager } from './routes/stats';
 import clientErrorsRouter from './routes/client-errors';
-import { HpcError } from './lib/errors';
+import { HpcError, errorDetails } from './lib/errors';
 import { log } from './lib/logger';
 import { getCookieToken, isVscodeRootPath } from './lib/proxy-helpers';
 import * as partitionService from './lib/partitions';
@@ -740,7 +740,7 @@ stateManager.load().then(async () => {
             await stateManager.clearSession(user, hpc, ide, { endReason: 'timeout' });
             log.info(`Idle session ${sessionKey} cancelled successfully`);
           } catch (err) {
-            log.error(`Failed to cancel idle session ${sessionKey}`, { error: (err as Error).message });
+            log.error(`Failed to cancel idle session ${sessionKey}`, errorDetails(err));
           }
         }
       }
