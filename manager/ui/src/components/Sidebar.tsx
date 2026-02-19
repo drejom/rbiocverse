@@ -68,9 +68,15 @@ interface ClusterNavItemProps {
   onClick: () => void;
 }
 
+const CLUSTER_LOCATIONS: Record<ClusterName, string> = {
+  gemini: 'Phoenix, AZ',
+  apollo: 'Rivergrade, CA',
+};
+
 function ClusterNavItem({ cluster, health, history, isActive, hasRunning, selectedGpu, onClick }: ClusterNavItemProps) {
   const displayName = cluster.charAt(0).toUpperCase() + cluster.slice(1);
   const initial = cluster.charAt(0).toUpperCase();
+  const location = CLUSTER_LOCATIONS[cluster];
 
   // Extract health percentages - types now include fairshare and gpus
   const fairsharePercent = typeof health?.fairshare === 'number' ? Math.round(health.fairshare * 100) : 0;
@@ -124,6 +130,7 @@ function ClusterNavItem({ cluster, health, history, isActive, hasRunning, select
       <div className="nav-icon">{initial}</div>
       <div className="nav-content">
         <div className="nav-name">{displayName}</div>
+        <div className="nav-location">{location}</div>
       </div>
       <div className="nav-health">
         <MiniHealthBar icon={Gauge} percent={fairsharePercent} title="Priority" isFairshare />

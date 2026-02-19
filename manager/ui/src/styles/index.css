@@ -1163,8 +1163,15 @@ h1 {
 .nav-name {
   font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 1px;
   color: var(--text-primary);
+}
+
+.nav-location {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
 .nav-health {
