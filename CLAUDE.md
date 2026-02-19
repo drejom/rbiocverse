@@ -80,11 +80,11 @@ Run the full CI-equivalent check sequence from `manager/`:
 
 ```bash
 cd manager
-npm run typecheck          # backend types
-cd ui && npm run typecheck # frontend types; cd back to manager/
-npm run lint
-cd ui && npm run lint
-npm run build              # frontend build
+npm run typecheck              # backend types
+(cd ui && npm run typecheck)   # frontend types
+npm run lint                   # backend lint
+(cd ui && npm run lint)        # frontend lint
+(cd ui && npm run build)       # frontend build
 npm test
 ```
 

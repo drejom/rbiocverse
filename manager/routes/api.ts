@@ -1318,7 +1318,7 @@ function createApiRouter(stateManager: StateManager): Router {
     // Invalidate cache and wait for SLURM to process
     if (result.cancelled.length > 0) {
       invalidateStatusCache(hpc);
-      await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
+      await sleep(SLURM_CANCEL_DELAY_MS);
     }
 
     log.job('Batch stop completed', { user, hpc, count: result.cancelled.length, failed: result.failed.length });
