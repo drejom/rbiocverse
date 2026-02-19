@@ -162,6 +162,51 @@ async function startTunnelWithPortDiscovery(
 }
 
 /**
+ * Ensure a tunnel is running for an existing (reconnect) session.
+ * Used when reconnecting to a session that already has a running job.
+ * Returns ok:true if tunnel is running (or was already running),
+ * ok:false with message on failure.
+ */
+async function ensureTunnelStarted(
+  session: Session,
+  hpc: string,
+  ide: string,
+  user: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (session.tunnelProcess) return { ok: true };
+  try {
+    session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
+      if (session.status === 'running') {
+        session.status = 'idle';
+      }
+      session.tunnelProcess = null;
+    }, user);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: (error as Error).message };
+  }
+}
+
+/**
+ * Build the onExit callback for a new-launch tunnel.
+ * Refetches session via stateManager to avoid stale local reference.
+ */
+function makeTunnelOnExit(
+  stateManager: StateManager,
+  user: string,
+  hpc: string,
+  ide: string,
+): (code: number | null) => void {
+  return (code) => {
+    log.tunnel('Exit callback', { hpc, ide, code });
+    const currentSession = stateManager.getSession(user, hpc, ide);
+    if (currentSession?.status === 'running') {
+      stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
+    }
+  };
+}
+
+/**
  * Verify a session's job still exists in SLURM
  * Returns true if job exists and matches, false if stale (job gone)
  * @param session - Session object with jobId
@@ -548,18 +593,10 @@ function createApiRouter(stateManager: StateManager): Router {
           // Fall through to fresh launch flow below
         } else {
           // Job exists - safe to reconnect
-          if (!session.tunnelProcess) {
-            try {
-              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
-                if (session.status === 'running') {
-                  session.status = 'idle';
-                }
-                session.tunnelProcess = null;
-              }, user);
-            } catch (error) {
-              stateManager.releaseLock(lockName);
-              return res.status(500).json({ error: (error as Error).message });
-            }
+          const reconnect = await ensureTunnelStarted(session, hpc, ide, user);
+          if (!reconnect.ok) {
+            stateManager.releaseLock(lockName);
+            return res.status(500).json({ error: reconnect.message });
           }
 
           await stateManager.setActiveSession(user, hpc, ide);
@@ -629,14 +666,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
       // Start tunnel - it will verify IDE is responding before returning
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
-        // Tunnel exit callback - refetch session since local ref may be stale
-        log.tunnel(`Exit callback`, { hpc, ide, code });
-        const currentSession = stateManager.getSession(user, hpc, ide);
-        if (currentSession?.status === 'running') {
-          stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
-        }
-      }, user);
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, makeTunnelOnExit(stateManager, user, hpc, ide), user);
 
       await stateManager.updateSession(user, hpc, ide, {
         status: 'running',
@@ -809,18 +839,10 @@ function createApiRouter(stateManager: StateManager): Router {
           }
 
           // Ensure tunnel is running for this session
-          if (!session.tunnelProcess) {
-            try {
-              session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
-                if (session.status === 'running') {
-                  session.status = 'idle';
-                }
-                session.tunnelProcess = null;
-              }, user);
-            } catch (error) {
-              stateManager.releaseLock(lockName);
-              return sendError((error as Error).message);
-            }
+          const reconnect = await ensureTunnelStarted(session, hpc, ide, user);
+          if (!reconnect.ok) {
+            stateManager.releaseLock(lockName);
+            return sendError(reconnect.message);
           }
 
           await stateManager.setActiveSession(user, hpc, ide);
@@ -999,14 +1021,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
       // Start tunnel and wait for it to establish
       // Uses port discovery to handle dynamic ports from multi-user scenarios
-      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, (code) => {
-        // Tunnel exit callback - refetch session since local ref may be stale
-        log.tunnel(`Exit callback`, { hpc, ide, code });
-        const currentSession = stateManager.getSession(user, hpc, ide);
-        if (currentSession?.status === 'running') {
-          stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
-        }
-      }, user);
+      const tunnelProcess = await startTunnelWithPortDiscovery(hpc, node, ide, makeTunnelOnExit(stateManager, user, hpc, ide), user);
 
       log.state('Saving session with releaseVersion', {
         user, hpc, ide, jobId, node,
@@ -1088,16 +1103,13 @@ function createApiRouter(stateManager: StateManager): Router {
     }
 
     // Start tunnel to the requested HPC/IDE
-    try {
-      if (!session.tunnelProcess) {
-        session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
-          if (session.status === 'running') {
-            session.status = 'idle';
-          }
-          session.tunnelProcess = null;
-        }, user);
-      }
+    const switched = await ensureTunnelStarted(session, hpc, ide, user);
+    if (!switched.ok) {
+      log.error('Switch error', { hpc, ide, error: switched.message });
+      return res.status(500).json({ error: switched.message });
+    }
 
+    try {
       await stateManager.setActiveSession(user, hpc, ide);
       log.api(`Switched to ${hpc} ${ide}`, { hpc, ide });
       res.json({ status: 'switched', hpc, ide });
