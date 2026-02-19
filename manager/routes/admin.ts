@@ -19,6 +19,7 @@ import * as dbSessions from '../lib/db/sessions';
 import * as partitions from '../lib/partitions';
 import asyncHandler from '../lib/asyncHandler';
 import ContentManager from '../lib/content';
+import type { ClusterHealthState } from '../lib/state/types';
 import { schemas, validate, parseQueryInt, parseQueryParams, queryString } from '../lib/validation';
 
 // Helper to safely get string from req.params (always string in Express, but TS types are broad)
@@ -49,10 +50,8 @@ interface AuthenticatedRequest extends Request {
 
 // StateManager type (simplified for this module)
 interface StateManager {
-  state: {
-    sessions: Record<string, { status?: string } | null>;
-  };
-  getClusterHealth(): Record<string, unknown>;
+  getAllSessions(): Record<string, { status?: string | null } | null>;
+  getClusterHealth(): Record<string, ClusterHealthState>;
   getClusterHistory(): Record<string, unknown>;
 }
 
@@ -432,10 +431,10 @@ router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) =>
   // Session stats from state manager (if available)
   let sessionStats: { activeSessions: number; pendingSessions: number } | null = null;
   if (stateManager) {
-    const state = stateManager.state;
+    const sessions = stateManager.getAllSessions();
     sessionStats = {
-      activeSessions: Object.values(state.sessions).filter(s => s?.status === 'running').length,
-      pendingSessions: Object.values(state.sessions).filter(s => s?.status === 'pending').length,
+      activeSessions: Object.values(sessions).filter(s => s?.status === 'running').length,
+      pendingSessions: Object.values(sessions).filter(s => s?.status === 'pending').length,
     };
   }
 

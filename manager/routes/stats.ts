@@ -15,6 +15,7 @@ import asyncHandler from '../lib/asyncHandler';
 import * as analytics from '../lib/db/analytics';
 import * as partitions from '../lib/partitions';
 import { parseQueryInt } from '../lib/validation';
+import type { ClusterHealthState } from '../lib/state/types';
 
 const router = express.Router();
 
@@ -23,18 +24,7 @@ const param = (req: Request, name: string): string => req.params[name] as string
 
 // StateManager type (simplified for this module)
 interface StateManager {
-  getClusterHealth(): Record<string, {
-    current?: {
-      online?: boolean;
-      cpus?: { percent?: number | null; used?: number | null; total?: number | null };
-      memory?: { percent?: number | null };
-      nodes?: { percent?: number | null; idle?: number | null; busy?: number | null; down?: number | null };
-      gpus?: unknown;
-      runningJobs?: number;
-      pendingJobs?: number;
-      lastChecked?: string | null;
-    };
-  }>;
+  getClusterHealth(): Record<string, ClusterHealthState>;
 }
 
 // StateManager injected via setStateManager()
