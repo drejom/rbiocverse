@@ -164,8 +164,12 @@ async function startTunnelWithPortDiscovery(
 /**
  * Ensure a tunnel is running for an existing (reconnect) session.
  * Used when reconnecting to a session that already has a running job.
- * Returns ok:true if tunnel is running (or was already running),
- * ok:false with message on failure.
+ * @param session - The session to reconnect
+ * @param stateManager - State manager for persisting session updates
+ * @param hpc - HPC cluster name
+ * @param ide - IDE type
+ * @param user - Username for SSH connection
+ * @returns ok:true if tunnel is running (or was already running), ok:false with message on failure
  */
 async function ensureTunnelStarted(
   session: Session,
@@ -193,6 +197,11 @@ async function ensureTunnelStarted(
 /**
  * Build the onExit callback for a new-launch tunnel.
  * Refetches session via stateManager to avoid stale local reference.
+ * @param stateManager - State manager instance for refetching and updating session
+ * @param user - Username for session lookup
+ * @param hpc - HPC cluster name
+ * @param ide - IDE type
+ * @returns Callback that handles tunnel exit by updating session state via stateManager
  */
 function makeTunnelOnExit(
   stateManager: StateManager,
@@ -204,7 +213,12 @@ function makeTunnelOnExit(
     log.tunnel('Exit callback', { hpc, ide, code });
     const currentSession = stateManager.getSession(user, hpc, ide);
     if (currentSession?.status === 'running') {
-      stateManager.updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null });
+      stateManager
+        .updateSession(user, hpc, ide, { status: 'idle', tunnelProcess: null })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error('Failed to update session on tunnel exit', { error: message, user, hpc, ide });
+        });
     }
   };
 }
