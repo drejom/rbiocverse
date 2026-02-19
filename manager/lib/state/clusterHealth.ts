@@ -70,22 +70,28 @@ export class ClusterHealthPoller {
    * Get cluster health data for API responses
    */
   getClusterHealth(): Record<string, ClusterHealthState> {
-    const clusterHealth = this.state.clusterHealth || {};
+    const stateClusterHealth = this.state.clusterHealth || {};
 
-    if (this.useSqlite) {
-      try {
-        const dbHistory = dbHealth.getAllHealthHistory({ days: 1 });
-        for (const hpc of Object.keys(clusterHealth)) {
-          if (clusterHealth[hpc]) {
-            clusterHealth[hpc].history = dbHistory[hpc] || [];
-          }
-        }
-      } catch (err) {
-        log.error('Failed to get cluster history from SQLite', errorDetails(err));
-      }
+    if (!this.useSqlite) {
+      return stateClusterHealth;
     }
 
-    return clusterHealth;
+    // Build a new object with SQLite history merged in (don't mutate shared state)
+    const result: Record<string, ClusterHealthState> = {};
+    try {
+      const dbHistory = dbHealth.getAllHealthHistory({ days: 1 });
+      for (const hpc of Object.keys(stateClusterHealth)) {
+        const clusterData = stateClusterHealth[hpc];
+        if (clusterData) {
+          result[hpc] = { ...clusterData, history: dbHistory[hpc] || [] };
+        }
+      }
+    } catch (err) {
+      log.error('Failed to get cluster history from SQLite', errorDetails(err));
+      return stateClusterHealth;
+    }
+
+    return result;
   }
 
   /**
@@ -188,8 +194,12 @@ export class ClusterHealthPoller {
             const ROLLOVER_MIN_INTERVAL_MS = MS_PER_HOUR;
             const lastRolloverAt = this.state.clusterHealth![hpc].lastRolloverAt || 0;
             if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
-              await this.rolloverHealthHistory(hpc);
-              this.state.clusterHealth![hpc].lastRolloverAt = now;
+              try {
+                await this.rolloverHealthHistory(hpc);
+                this.state.clusterHealth![hpc].lastRolloverAt = now;
+              } catch (rolloverErr) {
+                log.error('Failed to rollover health history', { hpc, ...errorDetails(rolloverErr) });
+              }
             }
           }
         }
