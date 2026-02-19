@@ -19,6 +19,16 @@ function domainToBaseDn(domain: string): string {
   return domain.split('.').map(part => `DC=${part}`).join(',');
 }
 
+/** Escape special characters in LDAP filter values per RFC4515 */
+function escapeLdapFilter(value: string): string {
+  return value
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\0/g, '\\00');
+}
+
 export async function authenticate(username: string, password: string): Promise<AuthResult> {
   const ldapUrlEnv = process.env.LDAP_URL;
   const ldapDomain = process.env.LDAP_DOMAIN;
@@ -53,39 +63,54 @@ export async function authenticate(username: string, password: string): Promise<
 
   // Production mode: try each DC in sequence (comma-separated LDAP_URL)
   const ldapUrls = ldapUrlEnv.split(',').map(u => u.trim()).filter(Boolean);
+  if (ldapUrls.length === 0) {
+    throw new Error('LDAP_URL is set but contains no valid server addresses');
+  }
+
   const baseDn = domainToBaseDn(ldapDomain);
   const upn = `${username}@${ldapDomain}`;
 
   for (const url of ldapUrls) {
     const client = new Client({ url, connectTimeout: 5000, timeout: 5000 });
     try {
-      await client.bind(upn, password);
+      // Step 1: bind — distinguishes wrong password from unreachable DC
+      try {
+        await client.bind(upn, password);
+      } catch (bindErr) {
+        if (bindErr instanceof InvalidCredentialsError) {
+          // Wrong password — same answer from all DCs, stop immediately
+          return { success: false };
+        }
+        // DC unreachable — try next
+        log.warn('LDAP DC unreachable, trying next', {
+          url,
+          error: bindErr instanceof Error ? bindErr.message : String(bindErr),
+        });
+        continue;
+      }
 
-      // Bind succeeded — search for displayName using user's own credentials
-      const { searchEntries } = await client.search(baseDn, {
-        scope: 'sub',
-        filter: `(userPrincipalName=${upn})`,
-        attributes: ['displayName', 'cn'],
-      });
-
-      const entry = searchEntries[0];
-      const displayName = Array.isArray(entry?.displayName) ? entry.displayName[0] : entry?.displayName;
-      const cn = Array.isArray(entry?.cn) ? entry.cn[0] : entry?.cn;
-      const fullName = (displayName as string) || (cn as string) || username;
+      // Step 2: search — best-effort; failure falls back to username as fullName
+      let fullName = username;
+      try {
+        const { searchEntries } = await client.search(baseDn, {
+          scope: 'sub',
+          filter: `(userPrincipalName=${escapeLdapFilter(upn)})`,
+          attributes: ['displayName', 'cn'],
+        });
+        const entry = searchEntries[0];
+        const displayName = Array.isArray(entry?.displayName) ? entry.displayName[0] : entry?.displayName;
+        const cn = Array.isArray(entry?.cn) ? entry.cn[0] : entry?.cn;
+        fullName = (displayName as string) || (cn as string) || username;
+      } catch (searchErr) {
+        log.warn('LDAP search failed, using username as fullName', {
+          username,
+          error: searchErr instanceof Error ? searchErr.message : String(searchErr),
+        });
+      }
 
       log.debug('LDAP auth success', { username, fullName, dc: url });
       return { success: true, fullName };
 
-    } catch (err) {
-      if (err instanceof InvalidCredentialsError) {
-        // Wrong password — same answer from all DCs, no point trying others
-        return { success: false };
-      }
-      // DC unreachable — try next
-      log.warn('LDAP DC unreachable, trying next', {
-        url,
-        error: err instanceof Error ? err.message : String(err),
-      });
     } finally {
       await client.unbind().catch(() => {});
     }

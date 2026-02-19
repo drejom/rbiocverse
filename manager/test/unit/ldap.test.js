@@ -114,6 +114,30 @@ describe('LDAP authenticate()', () => {
       expect(thrown.message).to.include('LDAP_DOMAIN is not configured');
     });
 
+    it('throws when LDAP_URL contains only whitespace/commas', async () => {
+      process.env.LDAP_URL = ' , , ';
+      let thrown = null;
+      try {
+        await authenticate('alice', 'password');
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).to.be.instanceOf(Error);
+      expect(thrown.message).to.include('no valid server addresses');
+    });
+
+    it('returns success (fallback to username) when search throws after successful bind', async () => {
+      const mockClient = {
+        bind: sinon.stub().resolves(),
+        search: sinon.stub().rejects(new Error('Insufficient access')),
+        unbind: sinon.stub().resolves(),
+      };
+      sinon.stub(ldapts, 'Client').callsFake(() => mockClient);
+
+      const result = await authenticate('alice', 'password');
+      expect(result).to.deep.equal({ success: true, fullName: 'alice' });
+    });
+
     it('returns success with displayName from search result', async () => {
       const mockClient = makeMockClient({
         searchEntries: [{ displayName: 'Display Name' }],
