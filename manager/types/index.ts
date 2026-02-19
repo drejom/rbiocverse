@@ -100,16 +100,6 @@ export interface ClearSessionOptions {
 // HPC Types
 // ============================================================================
 
-export interface JobInfo {
-  jobId: string;
-  node?: string;
-  state: string;
-  partition?: string;
-  name?: string;
-  timeUsed?: string;
-  timeLimit?: string;
-}
-
 export interface JobSubmitOptions {
   partition?: string;
   time?: string;
