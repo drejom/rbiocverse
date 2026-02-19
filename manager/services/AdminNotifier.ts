@@ -1,12 +1,13 @@
 /**
  * AdminNotifier Service
- * Email notifications for admin error digest
+ * Email notifications for admin error digest.
  *
- * Note: Full email implementation requires SMTP configuration.
- * This service is designed to be ready for SMTP integration
- * but currently just logs what would be sent.
+ * Enable by setting SMTP_HOST (and ADMIN_EMAIL). SMTP_USER/SMTP_PASS are
+ * optional — omit for unauthenticated relay (e.g. localhost postfix).
+ * When SMTP_HOST is not set, notifications are logged only.
  */
 
+import nodemailer, { Transporter } from 'nodemailer';
 import { log } from '../lib/logger';
 import { errorDetails } from '../lib/errors';
 import { errorLogger, ErrorEntry } from './ErrorLogger';
@@ -39,6 +40,7 @@ class AdminNotifier {
   private smtpPass: string | undefined;
   private fromAddress: string;
   private lastDigestTime: Date | null = null;
+  private transporter: Transporter | null = null;
 
   constructor(config: AdminNotifierConfig = {}) {
     this.adminEmail = config.adminEmail || process.env.ADMIN_EMAIL;
@@ -47,13 +49,34 @@ class AdminNotifier {
     this.smtpUser = config.smtpUser || process.env.SMTP_USER;
     this.smtpPass = config.smtpPass || process.env.SMTP_PASS;
     this.fromAddress = config.fromAddress || process.env.SMTP_FROM || 'rbiocverse@localhost';
+
+    if (this.isConfigured()) {
+      this.transporter = this.createTransporter();
+    }
   }
 
   /**
-   * Check if email is configured
+   * Check if email is configured.
+   * Only SMTP_HOST and ADMIN_EMAIL are required; auth is optional (supports unauthenticated relay).
    */
   isConfigured(): boolean {
-    return !!(this.adminEmail && this.smtpHost && this.smtpUser && this.smtpPass);
+    return !!(this.adminEmail && this.smtpHost);
+  }
+
+  /**
+   * Build a nodemailer transporter.
+   * Uses auth when SMTP_USER is set; plain relay otherwise (e.g. localhost:25).
+   */
+  private createTransporter(): Transporter {
+    const options = {
+      host: this.smtpHost!,
+      port: this.smtpPort,
+      secure: this.smtpPort === 465,
+      auth: this.smtpUser
+        ? { user: this.smtpUser, pass: this.smtpPass || '' }
+        : undefined,
+    };
+    return nodemailer.createTransport(options);
   }
 
   /**
@@ -109,12 +132,10 @@ class AdminNotifier {
 
   /**
    * Send daily error digest
-   * Should be called by a cron job or scheduled task
    */
   async sendDailyDigest(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000)): Promise<boolean> {
     const summary = await errorLogger.getSummary(since);
 
-    // Don't send if no errors
     if (summary.total === 0) {
       log.info('No errors to report in daily digest');
       return true;
@@ -150,7 +171,7 @@ class AdminNotifier {
   }
 
   /**
-   * Send an email
+   * Send an email. Falls back to log-only when SMTP_HOST is not configured.
    */
   async sendEmail(subject: string, body: string): Promise<boolean> {
     if (!this.adminEmail) {
@@ -158,39 +179,27 @@ class AdminNotifier {
       return false;
     }
 
-    if (!this.isConfigured()) {
-      // Log what would be sent when SMTP is not configured
-      log.info('Admin notification (SMTP not configured):', {
+    if (!this.isConfigured() || !this.transporter) {
+      log.info('Admin notification (SMTP not configured, set SMTP_HOST to enable)', {
         to: this.adminEmail,
         subject,
         bodyLength: body.length,
       });
-      log.debug('Email body would be:', body);
       return false;
     }
 
-    // TODO(#64): Implement actual email sending with nodemailer
-    // This is a placeholder for when SMTP is configured
     try {
-      // const transporter = nodemailer.createTransport({
-      //   host: this.smtpHost,
-      //   port: this.smtpPort,
-      //   secure: this.smtpPort === 465,
-      //   auth: { user: this.smtpUser, pass: this.smtpPass },
-      // });
-      //
-      // await transporter.sendMail({
-      //   from: this.fromAddress,
-      //   to: this.adminEmail,
-      //   subject,
-      //   text: body,
-      // });
-
-      log.info('Admin email sent (simulated):', { to: this.adminEmail, subject });
+      await this.transporter.sendMail({
+        from: this.fromAddress,
+        to: this.adminEmail,
+        subject,
+        text: body,
+      });
+      log.info('Admin email sent', { to: this.adminEmail, subject });
       this.lastDigestTime = new Date();
       return true;
     } catch (err) {
-      log.error('Failed to send admin email:', errorDetails(err));
+      log.error('Failed to send admin email', { to: this.adminEmail, subject, ...errorDetails(err) });
       return false;
     }
   }
