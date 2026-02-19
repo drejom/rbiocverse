@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -210,17 +209,23 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 	// For /port/5500 -> base is /port/5500/ (treat as directory)
 	// For /index.html -> base is /
 	basePath := originalPath
-	// If path has a file extension, get the directory part
-	// e.g., /port/5500/docs/index.html -> /port/5500/docs
-	// e.g., /index.html -> /
-	if path.Ext(basePath) != "" {
-		basePath = path.Dir(basePath)
-	}
-	// Ensure trailing slash for consistent base href
-	// e.g., /port/5500/docs -> /port/5500/docs/
-	// e.g., / -> / (already correct)
 	if !strings.HasSuffix(basePath, "/") {
-		basePath += "/"
+		// Check if this looks like a file (has extension) or directory
+		// Files: /port/5500/index.html, /foo.css -> strip filename
+		// Directories: /port/5500, /docs -> append trailing slash
+		lastSlash := strings.LastIndex(basePath, "/")
+		lastDot := strings.LastIndex(basePath, ".")
+		if lastDot > lastSlash {
+			// Has extension after last slash -> it's a file, get directory part
+			// e.g., /port/5500/docs/index.html -> /port/5500/docs/
+			if lastSlash >= 0 {
+				basePath = basePath[:lastSlash+1]
+			}
+		} else {
+			// No extension -> treat as directory, append slash
+			// e.g., /port/5500 -> /port/5500/
+			basePath = basePath + "/"
+		}
 	}
 
 	return p.rewriteHTML(resp, prefix, basePath)
@@ -230,6 +235,7 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 // prefix is the port prefix (e.g., /port/5500) for rewriting absolute paths
 // basePath is the full directory path (e.g., /port/5500/docs/) for the base tag
 func (p *Proxy) rewriteHTML(resp *http.Response, prefix string, basePath string) error {
+
 
 	// Handle compressed responses
 	encoding := resp.Header.Get("Content-Encoding")

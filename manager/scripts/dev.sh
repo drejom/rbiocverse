@@ -85,6 +85,7 @@ kill_port() {
     fi
 }
 
+
 start_server() {
     if [ -f "$PID_FILE" ]; then
         PID=$(cat "$PID_FILE")
