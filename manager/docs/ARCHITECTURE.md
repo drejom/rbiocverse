@@ -401,12 +401,13 @@ releases: {
     paths: {
       gemini: {
         singularityImage: '/packages/singularity/shared_cache/rbioc/rbiocverse_3.22.sif',
-        rLibsSite: '/packages/.../rlibs/bioc-3.22',
-        pythonEnv: '/packages/.../python/bioc-3.22',
+        rLibsSite: '/packages/singularity/shared_cache/rbioc/rlibs/bioc-3.22',
+        pythonEnv: '/packages/singularity/shared_cache/rbioc/python/bioc-3.22',
       },
       apollo: {
         singularityImage: '/opt/singularity-images/rbioc/rbiocverse_3.22.sif',
-        ...
+        rLibsSite: '/opt/singularity-images/rbioc/rlibs/bioc-3.22',
+        pythonEnv: '/opt/singularity-images/rbioc/python/bioc-3.22',
       }
     }
   },
