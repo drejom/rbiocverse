@@ -23,6 +23,7 @@ import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimi
 import { log } from '../lib/logger';
 import { createClusterCache } from '../lib/cache';
 import type { JobInfo } from '../lib/state/types';
+import { sleep } from '../lib/time';
 
 // Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
 const param = (req: Request, name: string): string => req.params[name] as string;
@@ -906,7 +907,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
           // Brief wait before retry
           if (attempt < 1) {
-            await new Promise(resolve => setTimeout(resolve, 2500));
+            await sleep(2500);
           }
         }
 
@@ -1163,7 +1164,7 @@ function createApiRouter(stateManager: StateManager): Router {
       invalidateStatusCache(hpc);
       try {
         // Small delay to let SLURM process the cancellation
-        await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
+        await sleep(SLURM_CANCEL_DELAY_MS);
         clusterStatus = await fetchClusterStatus(stateManager);
       } catch (e) {
         log.error('Failed to refresh cluster status after cancel', { error: (e as Error).message });
@@ -1247,7 +1248,7 @@ function createApiRouter(stateManager: StateManager): Router {
       // Invalidate cache and fetch fresh status
       if (jobCancelled) {
         invalidateStatusCache(hpc);
-        await new Promise(resolve => setTimeout(resolve, SLURM_CANCEL_DELAY_MS));
+        await sleep(SLURM_CANCEL_DELAY_MS);
       }
 
       sendComplete({

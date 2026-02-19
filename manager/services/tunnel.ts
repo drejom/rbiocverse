@@ -9,6 +9,7 @@ import * as http from 'http';
 import findProcess from 'find-process';
 import { config, clusters, ides } from '../config';
 import { log } from '../lib/logger';
+import { sleep } from '../lib/time';
 
 interface TunnelStartOptions {
   remotePort?: number;
@@ -138,7 +139,7 @@ class TunnelService {
 
       // Give OS time to release the port after process termination
       if (released) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await sleep(500);
       }
 
       return true;
@@ -218,7 +219,7 @@ class TunnelService {
         log.tunnel(`IDE ready`, { hpc: hpcName, ide, port, attempts: i + 1 });
         return true;
       }
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await sleep(2000);
     }
     log.tunnel(`IDE not ready after ${maxAttempts} attempts`, { hpc: hpcName, ide, port });
     return false;
@@ -257,7 +258,7 @@ class TunnelService {
 
     // Brief delay for OS to release the port after tunnel termination
     if (stoppedTunnel) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await sleep(100);
     }
 
     // Force-release ports if still in use (handles orphaned processes from crashes)
@@ -358,7 +359,7 @@ class TunnelService {
 
     // Wait for tunnel to establish (check local port becomes available)
     for (let i = 0; i < 30; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await sleep(1000);
 
       // Check if tunnel process died
       if (tunnel.exitCode !== null) {
