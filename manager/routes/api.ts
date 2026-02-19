@@ -169,18 +169,21 @@ async function startTunnelWithPortDiscovery(
  */
 async function ensureTunnelStarted(
   session: Session,
+  stateManager: StateManager,
   hpc: string,
   ide: string,
   user: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (session.tunnelProcess) return { ok: true };
   try {
-    session.tunnelProcess = await startTunnelWithPortDiscovery(hpc, session.node!, ide, (_code) => {
-      if (session.status === 'running') {
-        session.status = 'idle';
-      }
-      session.tunnelProcess = null;
-    }, user);
+    const tunnelProcess = await startTunnelWithPortDiscovery(
+      hpc,
+      session.node!,
+      ide,
+      makeTunnelOnExit(stateManager, user, hpc, ide),
+      user,
+    );
+    await stateManager.updateSession(user, hpc, ide, { tunnelProcess });
     return { ok: true };
   } catch (error) {
     return { ok: false, message: (error as Error).message };
@@ -593,7 +596,7 @@ function createApiRouter(stateManager: StateManager): Router {
           // Fall through to fresh launch flow below
         } else {
           // Job exists - safe to reconnect
-          const reconnect = await ensureTunnelStarted(session, hpc, ide, user);
+          const reconnect = await ensureTunnelStarted(session, stateManager, hpc, ide, user);
           if (!reconnect.ok) {
             stateManager.releaseLock(lockName);
             return res.status(500).json({ error: reconnect.message });
@@ -839,7 +842,7 @@ function createApiRouter(stateManager: StateManager): Router {
           }
 
           // Ensure tunnel is running for this session
-          const reconnect = await ensureTunnelStarted(session, hpc, ide, user);
+          const reconnect = await ensureTunnelStarted(session, stateManager, hpc, ide, user);
           if (!reconnect.ok) {
             stateManager.releaseLock(lockName);
             return sendError(reconnect.message);
@@ -1103,7 +1106,7 @@ function createApiRouter(stateManager: StateManager): Router {
     }
 
     // Start tunnel to the requested HPC/IDE
-    const switched = await ensureTunnelStarted(session, hpc, ide, user);
+    const switched = await ensureTunnelStarted(session, stateManager, hpc, ide, user);
     if (!switched.ok) {
       log.error('Switch error', { hpc, ide, error: switched.message });
       return res.status(500).json({ error: switched.message });
