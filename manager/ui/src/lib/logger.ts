@@ -172,17 +172,22 @@ const log = {
    * Error level logging - always reports to backend
    */
   error(message: string, meta: LogMeta = {}): void {
-    const error = meta.error instanceof Error ? meta.error : null;
-    const cleanMeta = { ...meta };
+    const { error: errorCandidate, ...restMeta } = meta;
+    const error = errorCandidate instanceof Error ? errorCandidate : null;
+
+    const logMeta: LogMeta = { ...restMeta };
     if (error) {
-      cleanMeta.errorMessage = error.message;
-      delete cleanMeta.error;
+      logMeta.errorMessage = error.message;
+    } else if (errorCandidate !== undefined) {
+      // Non-Error thrown value — capture as string and preserve original
+      logMeta.errorMessage = String(errorCandidate);
+      logMeta.error = errorCandidate;
     }
 
-    console.error(formatMessage('error', message, cleanMeta));
+    console.error(formatMessage('error', message, logMeta));
 
     // Always report errors to backend
-    const entry = createErrorEntry('error', message, cleanMeta, error);
+    const entry = createErrorEntry('error', message, logMeta, error);
     reportToBackend(entry);
   },
 
