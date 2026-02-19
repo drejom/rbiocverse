@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "_versionNote": "App version comes from ../package.json (see vite.config.js)",
-  "repository": "https://github.com/drejom/omhq-hpc-code-server-stack",
+  "repository": "https://github.com/drejom/rbiocverse",
   "type": "module",
   "scripts": {
     "dev": "vite",

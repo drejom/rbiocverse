@@ -313,7 +313,7 @@ subtle interaction with our proxy setup.
 
 ### Key Paths
 ```
-Container:        /packages/singularity/shared_cache/rbioc/vscode-rbioc_3.22.sif
+Container:        /packages/singularity/shared_cache/rbioc/rbiocverse_3.22.sif
 XDG_RUNTIME_DIR:  ~/.vscode-slurm/xdg-runtime
 XDG_DATA_HOME:    ~/.vscode-slurm/xdg-data
 Keyring file:     ~/.vscode-slurm/xdg-data/keyrings/login.keyring

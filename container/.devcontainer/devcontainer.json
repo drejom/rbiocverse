@@ -1,6 +1,6 @@
 {
   "name": "R/Bioconductor",
-  "image": "ghcr.io/drejom/vscode-rbioc:latest",
+  "image": "ghcr.io/drejom/rbiocverse:latest",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": false,
