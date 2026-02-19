@@ -566,7 +566,12 @@ function ContentPanel({
                 ))}
               </div>
             )
-          ) : loading ? (
+          ) : (loading && !content) ? (
+            // Only show the full-replacement spinner on initial load (content is empty).
+            // On subsequent navigations content still holds the previous section's html,
+            // so we fall through to render it — old content stays visible while the new
+            // section fetches, then swaps in place. This prevents the title-flash caused
+            // by blank spinner → new content on every page change.
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
               <div className="spinner" style={{ marginBottom: 12 }} />
               <p>Loading...</p>
