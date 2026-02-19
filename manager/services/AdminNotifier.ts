@@ -68,19 +68,14 @@ class AdminNotifier {
    * Uses auth when SMTP_USER is set; plain relay otherwise (e.g. localhost:25).
    */
   private createTransporter(): Transporter {
-    const options: nodemailer.TransportOptions & {
-      host: string;
-      port: number;
-      secure: boolean;
-      auth?: { user: string; pass: string | undefined };
-    } = {
+    const options = {
       host: this.smtpHost!,
       port: this.smtpPort,
       secure: this.smtpPort === 465,
+      auth: this.smtpUser
+        ? { user: this.smtpUser, pass: this.smtpPass || '' }
+        : undefined,
     };
-    if (this.smtpUser) {
-      options.auth = { user: this.smtpUser, pass: this.smtpPass };
-    }
     return nodemailer.createTransport(options);
   }
 
@@ -204,7 +199,7 @@ class AdminNotifier {
       this.lastDigestTime = new Date();
       return true;
     } catch (err) {
-      log.error('Failed to send admin email', errorDetails(err));
+      log.error('Failed to send admin email', { to: this.adminEmail, subject, ...errorDetails(err) });
       return false;
     }
   }
