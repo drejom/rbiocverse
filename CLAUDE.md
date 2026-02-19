@@ -76,11 +76,19 @@ npm run dev     # Vite dev server with HMR
 
 ### Tests
 
+Run the full CI-equivalent check sequence from `manager/`:
+
 ```bash
 cd manager
+npm run typecheck          # backend types
+cd ui && npm run typecheck # frontend types; cd back to manager/
+npm run lint
+cd ui && npm run lint
+npm run build              # frontend build
 npm test
-npm run test:coverage
 ```
+
+> CI runs these steps in order (see `.github/workflows/test.yml`). Always run `typecheck` + `lint` + frontend `build` before pushing, not just `npm test`.
 
 ### Playwright Browser Tests
 
