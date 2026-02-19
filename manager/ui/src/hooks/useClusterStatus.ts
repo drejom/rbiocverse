@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ClusterStatus, ClusterConfig, ClusterHealth, ClusterHistoryPoint } from '../types';
+import log from '../lib/logger';
 import { useSessionState, type SessionState } from '../contexts/SessionStateContext';
 
 const POLL_INTERVAL_MS = 2000;
@@ -170,7 +171,7 @@ export function useClusterStatus(): UseClusterStatusReturn {
       setLastUpdate(new Date());
       setError(null);
     } catch (e) {
-      console.error('Status fetch error:', e);
+      log.error('Status fetch error', { error: e });
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);

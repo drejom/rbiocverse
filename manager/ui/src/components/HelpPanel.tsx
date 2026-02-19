@@ -10,6 +10,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders, ParsedWidget } from './help-widgets';
 import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive, MenuItem } from '../lib/menuUtils';
+import log from '../lib/logger';
 import type { ClusterHealth, ClusterHistoryPoint } from '../types';
 
 // Configure marked for safe HTML output
@@ -232,7 +233,7 @@ function WidgetPortals({ widgets, containerRef, contentKey, health, history }: W
       {mountPoints.map(({ widget, element }) => {
         const Component = widgetRegistry[widget.name];
         if (!Component) {
-          console.warn(`Unknown help widget: ${widget.name}`);
+          log.warn('Unknown help widget', { name: widget.name });
           return null;
         }
         return createPortal(
@@ -278,7 +279,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }: HelpPanelProp
         }
       })
       .catch(err => {
-        console.error('Failed to load help index:', err);
+        log.error('Failed to load help index', { error: err });
       });
   }, []);
 
@@ -317,7 +318,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }: HelpPanelProp
         setLoading(false);
       })
       .catch(err => {
-        console.error('Failed to load help section:', err);
+        log.error('Failed to load help section', { error: err });
         setContent('Failed to load content.');
         setWidgets([]);
         setLoading(false);
@@ -336,7 +337,7 @@ function HelpPanel({ isOpen, onClose, health = {}, history = {} }: HelpPanelProp
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch (err) {
-      console.error('Search failed:', err);
+      log.error('Search failed', { error: err });
     }
   }, [searchQuery]);
 

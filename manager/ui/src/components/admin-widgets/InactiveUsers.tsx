@@ -3,6 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { UserMinus } from 'lucide-react';
+import log from '../../lib/logger';
 
 interface InactiveUserData {
   user: string;
@@ -44,7 +45,7 @@ export function InactiveUsers({ getAuthHeader }: InactiveUsersProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch inactive users:', err);
+      log.error('Failed to fetch inactive users', { error: err });
     } finally {
       setLoading(false);
     }

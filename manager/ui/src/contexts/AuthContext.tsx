@@ -29,6 +29,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User, AuthResult, SshTestResult } from '../types';
+import log from '../lib/logger';
 
 interface ImportKeyResult extends AuthResult {
   keyType?: string;
@@ -138,7 +139,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return false;
       }
     } catch (err) {
-      console.error('Session check failed:', err);
+      log.error('Session check failed', { error: err });
       return false;
     }
   }, [token, logout]);
@@ -211,7 +212,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       return false;
     } catch (err) {
-      console.error('Complete setup failed:', err);
+      log.error('Complete setup failed', { error: err });
       return false;
     }
   }, [token]);
@@ -240,7 +241,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { success: false, error: data.error || 'Failed to generate key' };
     } catch (err) {
-      console.error('Generate key failed:', err);
+      log.error('Generate key failed', { error: err });
       return { success: false, error: 'Network error' };
     }
   }, [token]);
@@ -272,7 +273,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         sshTestResult: data.sshTestResult as SshTestResult,
       };
     } catch (err) {
-      console.error('Remove key failed:', err);
+      log.error('Remove key failed', { error: err });
       return { success: false, error: 'Network error' };
     }
   }, [token]);
@@ -301,7 +302,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { success: false, error: data.error || 'Failed to regenerate key' };
     } catch (err) {
-      console.error('Regenerate key failed:', err);
+      log.error('Regenerate key failed', { error: err });
       return { success: false, error: 'Network error' };
     }
   }, [token]);
@@ -335,7 +336,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         sshTestResult: data.sshTestResult as SshTestResult,
       };
     } catch (err) {
-      console.error('Import key failed:', err);
+      log.error('Import key failed', { error: err });
       return { success: false, error: 'Network error' };
     }
   }, [token]);

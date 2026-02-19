@@ -21,6 +21,8 @@ export default [
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z]' }],
+      'no-console': 'error',
     },
   },
+
 ]

@@ -3,6 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { DateRangeSelector } from './DateRangeSelector';
+import log from '../../lib/logger';
 
 interface QueueStats {
   p50: number | null;
@@ -37,7 +38,7 @@ export function QueueWaitTime({ getAuthHeader }: QueueWaitTimeProps) {
       const json = await res.json();
       setData(json.data || null);
     } catch (err) {
-      console.error('Failed to fetch queue wait times:', err);
+      log.error('Failed to fetch queue wait times', { error: err });
     } finally {
       setLoading(false);
     }

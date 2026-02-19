@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { renderHeatmap, HeatmapLegend } from './heatmapUtils';
+import log from '../../lib/logger';
 
 interface HeatmapData {
   date: string;
@@ -50,7 +51,7 @@ export function ClusterHeatmap({ getAuthHeader, hpc = 'gemini', data: externalDa
         const json = await res.json();
         setData(json.data || []);
       } catch (err) {
-        console.error('Failed to fetch cluster heatmap:', err);
+        log.error('Failed to fetch cluster heatmap', { error: err });
       } finally {
         setLoading(false);
       }

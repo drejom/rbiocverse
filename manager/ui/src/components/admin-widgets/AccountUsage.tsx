@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { DateRangeSelector } from './DateRangeSelector';
 import { ExportButton } from './ExportButton';
+import log from '../../lib/logger';
 
 interface AccountData {
   account: string;
@@ -47,7 +48,7 @@ export function AccountUsage({ getAuthHeader }: AccountUsageProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch account usage:', err);
+      log.error('Failed to fetch account usage', { error: err });
     } finally {
       setLoading(false);
     }

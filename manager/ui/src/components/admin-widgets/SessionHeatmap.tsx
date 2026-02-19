@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { renderHeatmap, HeatmapLegend } from './heatmapUtils';
+import log from '../../lib/logger';
 
 interface HeatmapData {
   date: string;
@@ -32,7 +33,7 @@ export function SessionHeatmap({ getAuthHeader }: SessionHeatmapProps) {
         const json = await res.json();
         setData(json.data || []);
       } catch (err) {
-        console.error('Failed to fetch session heatmap:', err);
+        log.error('Failed to fetch session heatmap', { error: err });
       } finally {
         setLoading(false);
       }

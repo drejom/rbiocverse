@@ -3,6 +3,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
+import log from '../../lib/logger';
 
 interface GrowthData {
   month: string;
@@ -39,7 +40,7 @@ export function GrowthTrend({ getAuthHeader }: GrowthTrendProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch growth trend:', err);
+      log.error('Failed to fetch growth trend', { error: err });
     } finally {
       setLoading(false);
     }

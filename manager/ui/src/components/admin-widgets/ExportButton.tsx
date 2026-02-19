@@ -3,6 +3,7 @@
  */
 import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
+import log from '../../lib/logger';
 
 interface ExportButtonProps {
   type?: 'raw' | 'summary';
@@ -33,7 +34,7 @@ export function ExportButton({ type = 'raw', days = 30, getAuthHeader }: ExportB
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Export failed:', err);
+      log.error('Export failed', { error: err });
     } finally {
       setLoading(false);
     }

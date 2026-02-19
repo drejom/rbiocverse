@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import { Users, Key, Activity, Server, CheckCircle } from 'lucide-react';
+import log from '../../lib/logger';
 
 interface Stats {
   stats?: {
@@ -35,7 +36,7 @@ export function UsageReport({ getAuthHeader }: UsageReportProps) {
         setLoading(false);
       })
       .catch(err => {
-        console.error('Failed to load usage report:', err);
+        log.error('Failed to load usage report', { error: err });
         setLoading(false);
       });
   }, [getAuthHeader]);

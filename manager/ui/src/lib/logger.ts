@@ -14,7 +14,7 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 interface LogMeta {
   action?: string;
   component?: string;
-  error?: Error;
+  error?: unknown;
   errorMessage?: string;
   [key: string]: unknown;
 }

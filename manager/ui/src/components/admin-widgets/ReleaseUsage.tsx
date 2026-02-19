@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { DateRangeSelector } from './DateRangeSelector';
+import log from '../../lib/logger';
 
 interface ReleaseData {
   version: string;
@@ -33,7 +34,7 @@ export function ReleaseUsage({ getAuthHeader }: ReleaseUsageProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch release usage:', err);
+      log.error('Failed to fetch release usage', { error: err });
     } finally {
       setLoading(false);
     }
