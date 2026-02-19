@@ -305,26 +305,30 @@ class HpcService {
     }
 
     try {
+      // Use pipe delimiter to handle empty fields (e.g., NodeList for pending jobs)
       const output = await this.sshExec(
-        `squeue --user=${config.hpcUser} --name=${ideConfig.jobName} --states=R,PD -h -O JobID,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
+        `squeue --user=${config.hpcUser} --name=${ideConfig.jobName} --states=R,PD -h -o '%i|%T|%N|%L|%l|%C|%m|%S' 2>/dev/null | head -1`
       );
 
       if (!output) return null;
 
-      const parts = output.split(/\s+/);
-      const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
-      const startTime = startTimeParts.join(' ');
+      const parts = output.split('|');
+      if (parts.length !== 8) {
+        log.warn(`Unexpected squeue output format: expected 8 fields, got ${parts.length}: "${output}"`);
+        return null;
+      }
+      const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, startTime] = parts;
 
       return {
         jobId,
         ide,
         state: jobState,
-        node: node === '(null)' ? null : node,
+        node: (!node || node === '(null)') ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
         timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
-        startTime: startTime === 'N/A' ? null : startTime,
+        startTime: (!startTime || startTime === 'N/A') ? null : startTime,
       };
     } catch {
       return null;
@@ -338,8 +342,9 @@ class HpcService {
     const effectiveUser = user || config.hpcUser;
     const jobNames = Object.values(ides).map(ide => ide.jobName).join(',');
 
+    // Use pipe delimiter to handle empty fields (e.g., NodeList for pending jobs)
     const output = await this.sshExec(
-      `squeue --user=${effectiveUser} --name=${jobNames} --states=R,PD -h -O JobID,Name,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null`
+      `squeue --user=${effectiveUser} --name=${jobNames} --states=R,PD -h -o '%i|%j|%T|%N|%L|%l|%C|%m|%S' 2>/dev/null`
     );
 
     const results: Record<string, JobInfo | null> = {};
@@ -351,9 +356,8 @@ class HpcService {
 
     const lines = output.trim().split('\n').filter(l => l.trim());
     for (const line of lines) {
-      const parts = line.split(/\s+/);
-      const [jobId, jobName, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
-      const startTime = startTimeParts.join(' ');
+      const parts = line.split('|');
+      const [jobId, jobName, jobState, node, timeLeft, timeLimit, cpus, memory, startTime] = parts;
 
       const ide = Object.keys(ides).find(k => ides[k].jobName === jobName);
       if (!ide) continue;
@@ -366,13 +370,13 @@ class HpcService {
         jobId,
         ide,
         state: jobState,
-        node: node === '(null)' ? null : node,
+        node: (!node || node === '(null)') ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
         timeLeftSeconds: parsedTimeLeft,
         timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
-        startTime: startTime === 'N/A' ? null : startTime,
+        startTime: (!startTime || startTime === 'N/A') ? null : startTime,
       };
     }
 
