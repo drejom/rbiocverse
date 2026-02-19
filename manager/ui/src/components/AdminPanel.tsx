@@ -3,7 +3,7 @@
  * Provides user management, cluster status, and reports
  */
 
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { LayoutDashboard, Server, Users, BarChart, Activity, LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import log from '../lib/logger';
@@ -21,6 +21,22 @@ const iconMap: Record<string, LucideIcon> = {
 };
 
 const widgetModule = { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders };
+
+// Module-level constants — avoid new references on every render.
+//
+// contentEndpoint: in ContentPanel's content-loading useEffect dep array; an inline
+// arrow function would cause the effect to re-run every 2s (poll cycle), reloading
+// content and showing the spinner on each poll.
+//
+// linkPattern: a regex *literal* creates a new RegExp object each render, making
+// handleLinkClick → BoundMarkdownContent unstable. BoundMarkdownContent is used as a
+// JSX component type, so a new reference causes React to unmount+remount
+// MarkdownContentMemo. That replaces the portal-target placeholder divs with fresh DOM
+// nodes while WidgetPortals still holds stale mount-point references to the old
+// (detached) nodes — widget content disappears and leaves empty border boxes.
+const PURIFY_ADD_ATTR = ['target', 'data-widget-id', 'data-widget-name'];
+const adminContentEndpoint = (id: string) => `/api/admin/content/${id}`;
+const ADMIN_LINK_PATTERN = /^\/(?:api\/)?admin(?:\/content)?\/(.+)$/;
 
 interface PartitionData {
   [cluster: string]: unknown;
@@ -78,6 +94,13 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
     }
   }, [isOpen, fetchPartitions]);
 
+  const extraWidgetProps = useMemo(() => ({
+    partitions,
+    onRefreshPartitions: handleRefreshPartitions,
+    isRefreshing: isRefreshingPartitions,
+    getAuthHeader,
+  }), [partitions, handleRefreshPartitions, isRefreshingPartitions, getAuthHeader]);
+
   return (
     <ContentPanel
       panelClass="admin-panel"
@@ -89,20 +112,15 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
       health={health}
       history={history}
       menuEndpoint="/api/admin/index"
-      contentEndpoint={(id) => `/api/admin/content/${id}`}
+      contentEndpoint={adminContentEndpoint}
       searchEndpoint="/api/admin/search"
       defaultSection="overview"
-      linkPattern={/^\/(?:api\/)?admin(?:\/content)?\/(.+)$/}
+      linkPattern={ADMIN_LINK_PATTERN}
       iconMap={iconMap}
       widgetModule={widgetModule}
       getAuthHeader={getAuthHeader}
-      purifyAddAttr={['target', 'data-widget-id', 'data-widget-name']}
-      extraWidgetProps={{
-        partitions,
-        onRefreshPartitions: handleRefreshPartitions,
-        isRefreshing: isRefreshingPartitions,
-        getAuthHeader,
-      }}
+      purifyAddAttr={PURIFY_ADD_ATTR}
+      extraWidgetProps={extraWidgetProps}
     />
   );
 }

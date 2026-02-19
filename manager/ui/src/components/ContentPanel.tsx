@@ -4,7 +4,7 @@
  * for HelpPanel and AdminPanel.
  */
 
-import React, { useState, useEffect, useCallback, useRef, memo, forwardRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, LucideIcon } from 'lucide-react';
 import { marked } from 'marked';
@@ -12,6 +12,9 @@ import DOMPurify from 'dompurify';
 import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive, MenuItem } from '../lib/menuUtils';
 import log from '../lib/logger';
 import type { ClusterHealth, ClusterHistoryPoint } from '../types';
+
+// Module-level default to avoid new array reference on every render
+const DEFAULT_PURIFY_ATTRS: string[] = ['target'];
 
 // Configure marked for safe HTML output (module-level, runs once)
 marked.setOptions({
@@ -121,22 +124,21 @@ export interface WidgetPortalsProps {
 function WidgetPortals({ widgets, health, history, extraProps, widgetModule, contentKey, containerRef }: WidgetPortalsProps) {
   const [mountPoints, setMountPoints] = useState<MountPoint[]>([]);
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (!containerRef.current || widgets.length === 0) {
-        setMountPoints([]);
-        return;
-      }
+  // useLayoutEffect (not useEffect) so mount-points are established synchronously after
+  // the DOM is committed but before paint — eliminates the visible empty-box flash that
+  // occurred when useEffect + setTimeout(0) let one painted frame through with no portals.
+  useLayoutEffect(() => {
+    if (!containerRef.current || widgets.length === 0) {
+      setMountPoints([]);
+      return;
+    }
 
-      const points = widgets.map(widget => {
-        const el = containerRef.current?.querySelector(`[data-widget-id="${widget.id}"]`);
-        return el ? { widget, element: el } : null;
-      }).filter((p): p is MountPoint => p !== null);
+    const points = widgets.map(widget => {
+      const el = containerRef.current?.querySelector(`[data-widget-id="${widget.id}"]`);
+      return el ? { widget, element: el } : null;
+    }).filter((p): p is MountPoint => p !== null);
 
-      setMountPoints(points);
-    }, 0);
-
-    return () => clearTimeout(timeoutId);
+    setMountPoints(points);
   }, [widgets, containerRef, contentKey]);
 
   return (
@@ -212,7 +214,7 @@ function ContentPanel({
   iconMap,
   widgetModule,
   getAuthHeader,
-  purifyAddAttr = ['target'],
+  purifyAddAttr = DEFAULT_PURIFY_ATTRS,
   extraWidgetProps,
   renderContent,
 }: ContentPanelProps) {
@@ -225,6 +227,16 @@ function ContentPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // Refs let us read the latest value inside stable useCallback functions without
+  // including them as deps (which would recreate the function every render/navigation
+  // and cause React to treat BoundMarkdownContent / BoundWidgetPortals as new component
+  // types, triggering unmount+remount and leaving empty widget boxes).
+  const purifyAddAttrRef = useRef(purifyAddAttr);
+  purifyAddAttrRef.current = purifyAddAttr;
+  const activeSectionRef = useRef(activeSection);
+  activeSectionRef.current = activeSection;
+  const widgetModuleRef = useRef(widgetModule);
+  widgetModuleRef.current = widgetModule;
 
   // Fetch menu structure when panel opens
   useEffect(() => {
@@ -378,19 +390,29 @@ function ContentPanel({
   }, [linkPattern, menuStructure]);
 
   // MarkdownContent wrapper with purifyAddAttr and handleLinkClick bound from ContentPanel scope.
+  // purifyAddAttr is read via ref so it never appears in deps — this keeps BoundMarkdownContent
+  // as a stable function reference across polls, preventing unmount/remount flashes.
   const BoundMarkdownContent = useCallback(
     ({ html, contentRef: ref }: MarkdownContentPublicProps) => (
       <MarkdownContentMemo
         ref={ref}
         html={html}
         onLinkClick={handleLinkClick}
-        purifyAddAttr={purifyAddAttr}
+        purifyAddAttr={purifyAddAttrRef.current}
       />
     ),
-    [handleLinkClick, purifyAddAttr]
+    [handleLinkClick]
   );
 
-  // WidgetPortals wrapper with bound widgetModule, containerRef, and contentKey
+  // BoundWidgetPortals is used as a JSX component type (<BoundWidgetPortals .../>).
+  // If its reference changes, React treats it as a NEW component, unmounting the old
+  // WidgetPortals instance (clearing mountPoints state) and mounting a fresh one.
+  // Before paint the portals are gone → user sees empty border boxes.
+  //
+  // Fix: read widgetModule and activeSection via refs so they never appear as deps.
+  // BoundWidgetPortals is now created once (empty deps []) and is permanently stable.
+  // WidgetPortals still receives the correct contentKey via activeSectionRef.current,
+  // and its own useLayoutEffect re-runs whenever contentKey or widgets changes.
   const BoundWidgetPortals = useCallback(
     ({ widgets: w, health: h, history: hist, extraProps: ep }: Omit<WidgetPortalsProps, 'widgetModule' | 'containerRef' | 'contentKey'>) => (
       <WidgetPortals
@@ -398,12 +420,13 @@ function ContentPanel({
         health={h}
         history={hist}
         extraProps={ep}
-        widgetModule={widgetModule}
-        contentKey={activeSection}
+        widgetModule={widgetModuleRef.current}
+        contentKey={activeSectionRef.current}
         containerRef={contentRef}
       />
     ),
-    [widgetModule, activeSection]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const defaultContentArea = (

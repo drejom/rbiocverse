@@ -25,6 +25,12 @@ const iconMap: Record<string, IconComponent> = {
 
 const widgetModule = { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders };
 
+// Module-level constants — avoid new references on every render.
+// See AdminPanel.tsx for detailed comments on why each one matters.
+const PURIFY_ADD_ATTR = ['target'];
+const helpContentEndpoint = (id: string) => `/api/help/${id}`;
+const HELP_LINK_PATTERN = /^\/(?:api\/)?help\/(.+)$/;
+
 interface TocItem {
   id: string;
   text: string;
@@ -166,13 +172,13 @@ function HelpPanel({ isOpen, onClose, health, history }: HelpPanelProps) {
       health={health}
       history={history}
       menuEndpoint="/api/help"
-      contentEndpoint={(id) => `/api/help/${id}`}
+      contentEndpoint={helpContentEndpoint}
       searchEndpoint="/api/help/search"
       defaultSection="quick-start"
-      linkPattern={/^\/(?:api\/)?help\/(.+)$/}
+      linkPattern={HELP_LINK_PATTERN}
       iconMap={iconMap}
       widgetModule={widgetModule}
-      purifyAddAttr={['target']}
+      purifyAddAttr={PURIFY_ADD_ATTR}
       renderContent={({ content, widgets, activeSection, contentRef, MarkdownContent, WidgetPortals }) => (
         <div className="help-content-wrapper">
           <FloatingToc containerRef={contentRef} contentKey={activeSection} />
