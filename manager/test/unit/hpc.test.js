@@ -512,7 +512,7 @@ describe('HpcService', () => {
       const port = await hpcService.getIdePort('vscode');
 
       expect(port).to.equal(8001);
-      expect(sshExecStub).to.have.been.calledWith('cat ~/.vscode-slurm/port 2>/dev/null');
+      expect(sshExecStub).to.have.been.calledWith('cat $HOME/.rbiocverse/vscode/port 2>/dev/null');
     });
 
     it('should return default port when port file is missing', async () => {
@@ -543,15 +543,15 @@ describe('HpcService', () => {
       sshExecStub.resolves('8001');
 
       await hpcService.getIdePort('vscode');
-      expect(sshExecStub).to.have.been.calledWith('cat ~/.vscode-slurm/port 2>/dev/null');
+      expect(sshExecStub).to.have.been.calledWith('cat $HOME/.rbiocverse/vscode/port 2>/dev/null');
 
       sshExecStub.resetHistory();
       await hpcService.getIdePort('rstudio');
-      expect(sshExecStub).to.have.been.calledWith('cat ~/.rstudio-slurm/port 2>/dev/null');
+      expect(sshExecStub).to.have.been.calledWith('cat $HOME/.rbiocverse/rstudio/port 2>/dev/null');
 
       sshExecStub.resetHistory();
       await hpcService.getIdePort('jupyter');
-      expect(sshExecStub).to.have.been.calledWith('cat ~/.jupyter-slurm/port 2>/dev/null');
+      expect(sshExecStub).to.have.been.calledWith('cat $HOME/.rbiocverse/jupyter/port 2>/dev/null');
     });
 
     it('should throw error for unknown IDE', async () => {
@@ -631,9 +631,9 @@ describe('HpcService', () => {
 
       const sshCommand = sshExecStub.firstCall.args[0];
       // Should create directory for proxy files
-      expect(sshCommand).to.include('mkdir -p $HOME/.hpc-proxy');
+      expect(sshCommand).to.include('mkdir -p $HOME/.rbiocverse/hpc-proxy');
       // Should create status marker on success
-      expect(sshCommand).to.include('.hpc-proxy/status');
+      expect(sshCommand).to.include('.rbiocverse/hpc-proxy/status');
     });
 
     it('should not include hpc-proxy for RStudio', async () => {
@@ -664,7 +664,7 @@ describe('HpcService', () => {
       const port = await hpcService.getProxyPort(null);
 
       expect(port).to.equal(34567);
-      expect(sshExecStub).to.have.been.calledWith('cat ~/.hpc-proxy/port 2>/dev/null');
+      expect(sshExecStub).to.have.been.calledWith('cat $HOME/.rbiocverse/hpc-proxy/port 2>/dev/null');
     });
 
     it('should return null when port file is missing', async () => {
