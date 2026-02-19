@@ -7,6 +7,8 @@ const {
   TunnelError,
   LockError,
   NotFoundError,
+  errorDetails,
+  errorMessage,
 } = require('../../lib/errors');
 
 describe('Custom Error Classes', () => {
@@ -126,5 +128,62 @@ describe('Custom Error Classes', () => {
       const err = new NotFoundError('No session for cluster', { cluster: 'apollo' });
       expect(err.details.cluster).to.equal('apollo');
     });
+  });
+});
+
+describe('errorDetails', () => {
+  it('should return { error, stack } for Error instances', () => {
+    const err = new Error('something broke');
+    const result = errorDetails(err);
+    expect(result).to.have.property('error', 'something broke');
+    expect(result).to.have.property('stack').that.is.a('string');
+    expect(result).to.not.have.property('detail');
+  });
+
+  it('should return { detail } for string throws', () => {
+    const result = errorDetails('oops');
+    expect(result).to.deep.equal({ detail: 'oops' });
+  });
+
+  it('should return { detail } for object throws', () => {
+    const result = errorDetails({ code: 42 });
+    expect(result).to.have.property('detail', '[object Object]');
+  });
+
+  it('should return { detail } for null', () => {
+    const result = errorDetails(null);
+    expect(result).to.deep.equal({ detail: 'null' });
+  });
+
+  it('should return { detail } for undefined', () => {
+    const result = errorDetails(undefined);
+    expect(result).to.deep.equal({ detail: 'undefined' });
+  });
+});
+
+describe('errorMessage', () => {
+  it('should return err.message for Error instances', () => {
+    const err = new Error('something broke');
+    expect(errorMessage(err)).to.equal('something broke');
+  });
+
+  it('should return String(err) for string throws', () => {
+    expect(errorMessage('oops')).to.equal('oops');
+  });
+
+  it('should return String(err) for number throws', () => {
+    expect(errorMessage(42)).to.equal('42');
+  });
+
+  it('should return "null" for null', () => {
+    expect(errorMessage(null)).to.equal('null');
+  });
+
+  it('should return "undefined" for undefined', () => {
+    expect(errorMessage(undefined)).to.equal('undefined');
+  });
+
+  it('should return empty string for Error with empty message', () => {
+    expect(errorMessage(new Error(''))).to.equal('');
   });
 });

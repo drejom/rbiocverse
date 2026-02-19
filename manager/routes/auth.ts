@@ -228,7 +228,7 @@ async function testSshConnection(cluster: string, username: string | null = null
     await hpcService.sshExec('echo "Connection successful"');
     return { success: true };
   } catch (err) {
-    return { success: false, error: errorMessage(err) || 'Connection failed' };
+    return { success: false, error: errorMessage(err) };
   }
 }
 
