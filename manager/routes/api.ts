@@ -21,6 +21,7 @@ import { parseTimeToSeconds, formatHumanTime } from '../lib/helpers';
 import { asyncHandler } from '../lib/asyncHandler';
 import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters, ReleaseConfig } from '../config';
 import { log } from '../lib/logger';
+import { errorDetails, errorMessage } from '../lib/errors';
 import { createClusterCache } from '../lib/cache';
 import type { JobInfo, PollingInfo } from '../lib/state/types';
 import { sleep } from '../lib/time';
@@ -187,7 +188,7 @@ async function ensureTunnelStarted(
     await stateManager.updateSession(user, hpc, ide, { tunnelProcess });
     return { ok: true };
   } catch (error) {
-    return { ok: false, message: (error as Error).message };
+    return { ok: false, message: errorMessage(error) };
   }
 }
 
@@ -414,7 +415,7 @@ function createApiRouter(stateManager: StateManager): Router {
 
       res.json({ activePorts });
     } catch (e) {
-      log.debugFor('api', 'dev-servers check failed', { error: (e as Error).message });
+      log.debugFor('api', 'dev-servers check failed', errorDetails(e));
       res.json({ activePorts: [] });
     }
   });
@@ -564,8 +565,8 @@ function createApiRouter(stateManager: StateManager): Router {
         cacheTtl: Math.floor(STATUS_CACHE_TTL / 1000),
       });
     } catch (e) {
-      log.error('Failed to fetch cluster status', { error: (e as Error).message });
-      res.status(500).json({ error: (e as Error).message });
+      log.error('Failed to fetch cluster status', errorDetails(e));
+      res.status(500).json({ error: errorMessage(e) });
     }
   });
 
@@ -592,7 +593,7 @@ function createApiRouter(stateManager: StateManager): Router {
     try {
       stateManager.acquireLock(lockName);
     } catch (e) {
-      return res.status(429).json({ error: (e as Error).message });
+      return res.status(429).json({ error: errorMessage(e) });
     }
 
     try {
@@ -634,7 +635,7 @@ function createApiRouter(stateManager: StateManager): Router {
         validateSbatchInputs(cpus, mem, time, hpc);
       } catch (e) {
         stateManager.releaseLock(lockName);
-        return res.status(400).json({ error: (e as Error).message });
+        return res.status(400).json({ error: errorMessage(e) });
       }
 
       await stateManager.updateSession(user, hpc, ide, {
@@ -702,7 +703,7 @@ function createApiRouter(stateManager: StateManager): Router {
       try {
         clusterStatus = await fetchClusterStatus(stateManager);
       } catch (e) {
-        log.error('Failed to refresh cluster status after launch', { error: (e as Error).message });
+        log.error('Failed to refresh cluster status after launch', errorDetails(e));
       }
 
       res.json({
@@ -715,17 +716,17 @@ function createApiRouter(stateManager: StateManager): Router {
       });
 
     } catch (error) {
-      log.error('Launch error', { hpc, ide, error: (error as Error).message });
+      log.error('Launch error', { hpc, ide, ...errorDetails(error) });
       const session = stateManager.getSession(user, hpc, ide);
       if (session) {
         await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
-          error: (error as Error).message,
+          error: errorMessage(error),
         });
       }
 
       if (!res.headersSent) {
-        res.status(500).json({ error: (error as Error).message });
+        res.status(500).json({ error: errorMessage(error) });
       }
     } finally {
       stateManager.releaseLock(lockName);
@@ -825,7 +826,7 @@ function createApiRouter(stateManager: StateManager): Router {
     try {
       stateManager.acquireLock(lockName);
     } catch (e) {
-      return sendError((e as Error).message);
+      return sendError(errorMessage(e));
     }
 
     try {
@@ -889,7 +890,7 @@ function createApiRouter(stateManager: StateManager): Router {
         validateSbatchInputs(cpus, mem, time, hpc, gpu);
       } catch (e) {
         stateManager.releaseLock(lockName);
-        return sendError((e as Error).message);
+        return sendError(errorMessage(e));
       }
 
       await stateManager.updateSession(user, hpc, ide, {
@@ -1079,15 +1080,15 @@ function createApiRouter(stateManager: StateManager): Router {
       });
 
     } catch (error) {
-      log.error('Launch stream error', { hpc, ide, error: (error as Error).message });
+      log.error('Launch stream error', { hpc, ide, ...errorDetails(error) });
       const session = stateManager.getSession(user, hpc, ide);
       if (session) {
         await stateManager.updateSession(user, hpc, ide, {
           status: 'idle',
-          error: (error as Error).message,
+          error: errorMessage(error),
         });
       }
-      sendError((error as Error).message);
+      sendError(errorMessage(error));
     } finally {
       stateManager.releaseLock(lockName);
     }
@@ -1131,8 +1132,8 @@ function createApiRouter(stateManager: StateManager): Router {
       log.api(`Switched to ${hpc} ${ide}`, { hpc, ide });
       res.json({ status: 'switched', hpc, ide });
     } catch (error) {
-      log.error('Switch error', { hpc, ide, error: (error as Error).message });
-      res.status(500).json({ error: (error as Error).message });
+      log.error('Switch error', { hpc, ide, ...errorDetails(error) });
+      res.status(500).json({ error: errorMessage(error) });
     }
   });
 
@@ -1177,7 +1178,7 @@ function createApiRouter(stateManager: StateManager): Router {
           jobCancelled = true;
         }
       } catch (e) {
-        log.error('Failed to cancel job', { hpc, ide, error: (e as Error).message });
+        log.error('Failed to cancel job', { hpc, ide, ...errorDetails(e) });
       }
     } else {
       log.audit('Session stopped', { user, hpc, ide, jobId: session?.jobId, cancelled: false });
@@ -1196,7 +1197,7 @@ function createApiRouter(stateManager: StateManager): Router {
         await sleep(SLURM_CANCEL_DELAY_MS);
         clusterStatus = await fetchClusterStatus(stateManager);
       } catch (e) {
-        log.error('Failed to refresh cluster status after cancel', { error: (e as Error).message });
+        log.error('Failed to refresh cluster status after cancel', errorDetails(e));
       }
     }
 
@@ -1288,8 +1289,8 @@ function createApiRouter(stateManager: StateManager): Router {
       });
 
     } catch (error) {
-      log.error('Stop stream error', { hpc, ide, error: (error as Error).message });
-      sendError((error as Error).message);
+      log.error('Stop stream error', { hpc, ide, ...errorDetails(error) });
+      sendError(errorMessage(error));
     }
   });
 

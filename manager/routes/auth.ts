@@ -22,6 +22,7 @@ const router = express.Router();
 router.use(express.json());
 
 import { log } from '../lib/logger';
+import { errorMessage } from '../lib/errors';
 import { config } from '../config';
 import { errorLogger } from '../services/ErrorLogger';
 
@@ -227,7 +228,7 @@ async function testSshConnection(cluster: string, username: string | null = null
     await hpcService.sshExec('echo "Connection successful"');
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message || 'Connection failed' };
+    return { success: false, error: errorMessage(err) || 'Connection failed' };
   }
 }
 

@@ -8,6 +8,7 @@ import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { log } from '../lib/logger';
+import { errorDetails } from '../lib/errors';
 import type { ClusterHealthState } from '../lib/state/types';
 
 const fsPromises = fs.promises;
@@ -58,7 +59,7 @@ async function loadIcons(): Promise<void> {
     icons = JSON.parse(content);
     log.info('Loaded help icons', { count: Object.keys(icons).length });
   } catch (err) {
-    log.warn('Failed to load help icons:', (err as Error).message);
+    log.warn('Failed to load help icons:', errorDetails(err));
     icons = {};
   }
 }
@@ -238,7 +239,7 @@ async function searchHelpContent(query: string): Promise<SearchResult[]> {
       }
     } catch (err) {
       // Skip sections that can't be loaded
-      log.warn(`Failed to search section ${section.id}:`, (err as Error).message);
+      log.warn(`Failed to search section ${section.id}:`, errorDetails(err));
     }
   }
 

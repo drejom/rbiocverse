@@ -9,6 +9,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { log } from '../lib/logger';
+import { errorMessage } from '../lib/errors';
 import { requireAuth } from './auth';
 import { requireAdmin } from '../lib/auth/admin';
 import * as dbUsers from '../lib/db/users';
@@ -341,7 +342,7 @@ router.post('/users/bulk',
           results.failed.push({ username, error: 'Unknown action' });
         }
       } catch (err) {
-        results.failed.push({ username, error: (err as Error).message });
+        results.failed.push({ username, error: errorMessage(err) });
       }
     }
 

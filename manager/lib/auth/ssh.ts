@@ -15,6 +15,7 @@ import crypto from 'crypto';
 import { promisify } from 'util';
 import sshpk from 'sshpk';
 import { log } from '../logger';
+import { errorDetails } from '../errors';
 
 const generateKeyPairAsync = promisify(crypto.generateKeyPair);
 const scryptAsync = promisify(crypto.scrypt) as (
@@ -150,7 +151,7 @@ async function decryptWithServerKey(encrypted: string | null): Promise<string | 
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (err) {
-    log.error('Failed to decrypt with server key (v3)', { error: (err as Error).message });
+    log.error('Failed to decrypt with server key (v3)', errorDetails(err));
     return null;
   }
 }
@@ -219,7 +220,7 @@ async function decryptPrivateKey(encrypted: string | null, password: string | nu
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (err) {
-      log.error('Failed to decrypt private key (v2)', { error: (err as Error).message });
+      log.error('Failed to decrypt private key (v2)', errorDetails(err));
       return null;
     }
   }
@@ -252,7 +253,7 @@ function parsePrivateKeyPem(privateKeyPem: string): { type: string; key: sshpk.P
 
     return { type: keyType, key };
   } catch (err) {
-    log.error('Failed to parse private key', { error: (err as Error).message });
+    log.error('Failed to parse private key', errorDetails(err));
     return null;
   }
 }
@@ -274,7 +275,7 @@ function extractPublicKeyFromPrivate(privateKeyPem: string, username: string): s
     pubKey.comment = `rbiocverse-${username}`;
     return pubKey.toString('ssh');
   } catch (err) {
-    log.error('Failed to extract public key', { error: (err as Error).message });
+    log.error('Failed to extract public key', errorDetails(err));
     return null;
   }
 }
@@ -293,7 +294,7 @@ function normalizePrivateKeyPem(privateKeyPem: string): string | null {
     // Export as PKCS8 PEM (standard format)
     return parsed.key.toString('pkcs8');
   } catch (err) {
-    log.error('Failed to normalize private key', { error: (err as Error).message });
+    log.error('Failed to normalize private key', errorDetails(err));
     return null;
   }
 }

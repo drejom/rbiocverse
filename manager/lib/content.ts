@@ -8,6 +8,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { log } from './logger';
+import { errorDetails } from './errors';
 
 interface SectionInfo {
   id: string;
@@ -82,7 +83,7 @@ class ContentManager {
       this.icons = JSON.parse(content);
       return this.icons!;
     } catch (err) {
-      log.warn('Failed to load icons:', (err as Error).message);
+      log.warn('Failed to load icons:', errorDetails(err));
       this.icons = {};
       return {};
     }
@@ -216,7 +217,7 @@ class ContentManager {
           }
         }
       } catch (err) {
-        log.warn(`Failed to search section ${section.id}:`, (err as Error).message);
+        log.warn(`Failed to search section ${section.id}:`, errorDetails(err));
       }
     }
 
