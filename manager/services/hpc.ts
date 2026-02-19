@@ -957,26 +957,8 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none" && \
 ${fairshareCmd}echo "done"
 `;
 
-    try {
-      const output = await this.sshExec(cmd);
-      return this.parseClusterHealth(output);
-    } catch (e) {
-      log.warn('Failed to get cluster health', { cluster: this.clusterName, error: (e as Error).message });
-      return {
-        online: false,
-        cpus: null,
-        memory: null,
-        nodes: null,
-        gpus: null,
-        partitions: null,
-        runningJobs: 0,
-        pendingJobs: 0,
-        fairshare: null,
-        lastChecked: Date.now(),
-        consecutiveFailures: 0,
-        error: (e as Error).message,
-      };
-    }
+    const output = await this.sshExec(cmd);
+    return this.parseClusterHealth(output);
   }
 
   /**
