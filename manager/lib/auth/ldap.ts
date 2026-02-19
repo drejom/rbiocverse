@@ -21,7 +21,7 @@ function domainToBaseDn(domain: string): string {
 
 export async function authenticate(username: string, password: string): Promise<AuthResult> {
   const ldapUrlEnv = process.env.LDAP_URL;
-  const ldapDomain = process.env.LDAP_DOMAIN || 'coh.org';
+  const ldapDomain = process.env.LDAP_DOMAIN;
 
   // Dev/test mode: LDAP_URL unset → compare against TEST_* env vars only
   if (!ldapUrlEnv) {
@@ -47,6 +47,10 @@ export async function authenticate(username: string, password: string): Promise<
     return { success: true, fullName: process.env.TEST_FULLNAME || username };
   }
 
+  if (!ldapDomain) {
+    throw new Error('LDAP authentication enabled but LDAP_DOMAIN is not configured');
+  }
+
   // Production mode: try each DC in sequence (comma-separated LDAP_URL)
   const ldapUrls = ldapUrlEnv.split(',').map(u => u.trim()).filter(Boolean);
   const baseDn = domainToBaseDn(ldapDomain);
@@ -65,10 +69,9 @@ export async function authenticate(username: string, password: string): Promise<
       });
 
       const entry = searchEntries[0];
-      const fullName =
-        (entry?.displayName as string) ||
-        (entry?.cn as string) ||
-        username;
+      const displayName = Array.isArray(entry?.displayName) ? entry.displayName[0] : entry?.displayName;
+      const cn = Array.isArray(entry?.cn) ? entry.cn[0] : entry?.cn;
+      const fullName = (displayName as string) || (cn as string) || username;
 
       log.debug('LDAP auth success', { username, fullName, dc: url });
       return { success: true, fullName };

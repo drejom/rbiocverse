@@ -309,6 +309,7 @@ router.post('/login', async (req: Request, res: Response) => {
         user.fullName = authResult.fullName;
         setUser(username, user);
       }
+      dbUsers.updateLastLogin(username);
     }
 
     // Generate token

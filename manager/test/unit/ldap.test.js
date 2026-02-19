@@ -102,6 +102,18 @@ describe('LDAP authenticate()', () => {
       delete process.env.TEST_USERNAME;
     });
 
+    it('throws when LDAP_URL is set but LDAP_DOMAIN is missing', async () => {
+      delete process.env.LDAP_DOMAIN;
+      let thrown = null;
+      try {
+        await authenticate('alice', 'password');
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).to.be.instanceOf(Error);
+      expect(thrown.message).to.include('LDAP_DOMAIN is not configured');
+    });
+
     it('returns success with displayName from search result', async () => {
       const mockClient = makeMockClient({
         searchEntries: [{ displayName: 'Display Name' }],
@@ -128,6 +140,16 @@ describe('LDAP authenticate()', () => {
 
       const result = await authenticate('alice', 'password');
       expect(result).to.deep.equal({ success: true, fullName: 'alice' });
+    });
+
+    it('returns success with first element when displayName is an array', async () => {
+      const mockClient = makeMockClient({
+        searchEntries: [{ displayName: ['Array Name', 'Second'] }],
+      });
+      sinon.stub(ldapts, 'Client').callsFake(() => mockClient);
+
+      const result = await authenticate('alice', 'password');
+      expect(result).to.deep.equal({ success: true, fullName: 'Array Name' });
     });
 
     it('returns failure on InvalidCredentialsError', async () => {
