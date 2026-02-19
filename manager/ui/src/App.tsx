@@ -22,6 +22,7 @@ import AppFooter from './components/AppFooter';
 import './styles/index.css';
 import './styles/themes.css';
 import type { ClusterName } from './types';
+import log from './lib/logger';
 
 // Fallback timeout for stop operation (SLURM scancel + tunnel cleanup)
 const STOP_TIMEOUT_MS = 15000;
@@ -157,7 +158,7 @@ function Launcher() {
           cleanup();
         }
       } catch (e) {
-        console.error('Stop SSE parse error:', e);
+        log.error('Stop SSE parse error', { error: e });
       }
     };
 

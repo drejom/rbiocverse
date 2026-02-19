@@ -9,6 +9,7 @@ import { X, Search, LayoutDashboard, Server, Users, BarChart, Activity, LucideIc
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { useAuth } from '../contexts/AuthContext';
+import log from '../lib/logger';
 import { widgetRegistry, parseWidgets, replaceWidgetsWithPlaceholders, ParsedWidget } from './admin-widgets';
 import { buildMenuStructure, findParentId, getAllLeafSections, isItemActive, MenuItem } from '../lib/menuUtils';
 import type { ClusterHealth, ClusterHistoryPoint } from '../types';
@@ -107,7 +108,7 @@ function WidgetPortals({ widgets, containerRef, contentKey, health, history, par
       {mountPoints.map(({ widget, element }) => {
         const Component = widgetRegistry[widget.name];
         if (!Component) {
-          console.warn(`Unknown admin widget: ${widget.name}`);
+          log.warn('Unknown admin widget', { name: widget.name });
           return null;
         }
         return createPortal(
@@ -167,7 +168,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
       const data = await res.json();
       setPartitions(data.partitions || {});
     } catch (err) {
-      console.error('Failed to fetch partitions:', err);
+      log.error('Failed to fetch partitions', { error: err });
     }
   }, [getAuthHeader]);
 
@@ -182,7 +183,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
       const data = await res.json();
       setPartitions(data.partitions || {});
     } catch (err) {
-      console.error('Failed to refresh partitions:', err);
+      log.error('Failed to refresh partitions', { error: err });
     } finally {
       setIsRefreshingPartitions(false);
     }
@@ -212,7 +213,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
         }
       })
       .catch(err => {
-        console.error('Failed to load admin index:', err);
+        log.error('Failed to load admin index', { error: err });
       });
   }, [isOpen, getAuthHeader]);
 
@@ -254,7 +255,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
         setLoading(false);
       })
       .catch(err => {
-        console.error('Failed to load admin section:', err);
+        log.error('Failed to load admin section', { error: err });
         setContent('Failed to load content.');
         setWidgets([]);
         setLoading(false);
@@ -275,7 +276,7 @@ function AdminPanel({ isOpen, onClose, health = {}, history = {} }: AdminPanelPr
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch (err) {
-      console.error('Search failed:', err);
+      log.error('Search failed', { error: err });
     }
   }, [searchQuery, getAuthHeader]);
 

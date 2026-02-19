@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect, ChangeEvent, MouseEvent, DragEvent } from 'react';
 import { Copy, Download, CheckCircle, Key, XCircle, Plus, Terminal, ChevronDown, ChevronUp, Upload, FileKey } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import log from '../lib/logger';
 
 interface KeyManagementModalProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
       setCopied(label);
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
-      console.error('Copy failed:', err);
+      log.error('Copy failed', { error: err });
     }
   }, []);
 
@@ -67,7 +68,7 @@ function KeyManagementModal({ isOpen, onClose }: KeyManagementModalProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [user?.publicKey]);
+  }, [user]);
 
   // Handle generate key (no password needed - server-side encryption)
   const handleGenerateKey = async () => {

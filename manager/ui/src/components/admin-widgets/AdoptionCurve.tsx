@@ -3,6 +3,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
+import log from '../../lib/logger';
 
 interface AdoptionDataPoint {
   date: string;
@@ -40,7 +41,7 @@ export function AdoptionCurve({ getAuthHeader, version }: AdoptionCurveProps) {
           setSelectedVersion(versionList[0]);
         }
       } catch (err) {
-        console.error('Failed to fetch versions:', err);
+        log.error('Failed to fetch versions', { error: err });
       }
     };
     fetchVersions();
@@ -61,7 +62,7 @@ export function AdoptionCurve({ getAuthHeader, version }: AdoptionCurveProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch adoption curve:', err);
+      log.error('Failed to fetch adoption curve', { error: err });
     } finally {
       setLoading(false);
     }

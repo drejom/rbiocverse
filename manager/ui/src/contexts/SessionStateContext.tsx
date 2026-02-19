@@ -213,6 +213,7 @@ export function SessionStateProvider({ children }: { children: ReactNode }) {
  * Hook to access session state context
  * @throws Error if used outside SessionStateProvider
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSessionState(): SessionStateContextValue {
   const context = useContext(SessionStateContext);
   if (!context) {

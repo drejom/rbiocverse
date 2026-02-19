@@ -7,6 +7,7 @@
  */
 import { useCallback, useRef } from 'react';
 import { useSessionState, type LaunchModalState } from '../contexts/SessionStateContext';
+import log from '../lib/logger';
 import type { IdeConfig } from '../types';
 
 // Duration to display error message before auto-dismissing
@@ -217,7 +218,7 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
             break;
         }
       } catch (e) {
-        console.error('Failed to parse SSE data:', e);
+        log.error('Failed to parse SSE data', { error: e });
       }
     };
 
@@ -263,7 +264,7 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
             window.location.href = data.redirectUrl || '/code/';
             break;
 
-          case 'error':
+          case 'error': {
             closeEventSource();
             const sshErr = isSshError(data.message);
             updateLaunchModal({
@@ -276,9 +277,10 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
               setTimeout(resetModal, ERROR_DISPLAY_MS);
             }
             break;
+          }
         }
       } catch (e) {
-        console.error('Failed to parse SSE data:', e);
+        log.error('Failed to parse SSE data', { error: e });
       }
     };
 
@@ -326,7 +328,7 @@ export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
       // Clear session from context immediately so UI updates without waiting for poll
       updateSession(hpc, ide, { status: 'idle' });
     } catch (e) {
-      console.error('Stop error:', e);
+      log.error('Stop error', { error: e });
     }
 
     resetModal();

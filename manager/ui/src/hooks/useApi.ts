@@ -7,6 +7,7 @@
 
 import { useState, useCallback, type Dispatch, type SetStateAction } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import log from '../lib/logger';
 
 /**
  * API error class with structured error info
@@ -152,7 +153,7 @@ export function useFetch<T>(
       setError(message);
       // Log to console for debugging, but don't expose internals to user
       if (import.meta.env.DEV) {
-        console.error('Fetch error:', err);
+        log.error('Fetch error', { error: err });
       }
       throw err;
     } finally {

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { DateRangeSelector } from './DateRangeSelector';
+import log from '../../lib/logger';
 
 interface FeatureData {
   shiny?: { percent: number; count: number };
@@ -34,7 +35,7 @@ export function FeatureUsage({ getAuthHeader }: FeatureUsageProps) {
       const json = await res.json();
       setData(json.data || null);
     } catch (err) {
-      console.error('Failed to fetch feature usage:', err);
+      log.error('Failed to fetch feature usage', { error: err });
     } finally {
       setLoading(false);
     }
