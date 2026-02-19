@@ -1257,4 +1257,4 @@ export type {
 } from './state/types';
 
 // CommonJS compatibility for existing require() calls
-module.exports = { StateManager, POLLING_CONFIG, buildSessionKey, parseSessionKey };
+module.exports = { StateManager, POLLING_CONFIG, buildSessionKey, parseSessionKey, createIdleSession };

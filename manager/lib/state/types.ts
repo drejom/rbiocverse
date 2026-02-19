@@ -4,7 +4,7 @@
  * This module contains:
  * - Interface definitions for state management
  * - Constants for polling configuration
- * - Pure utility functions for session key handling
+ * - Utility functions for session key handling
  */
 
 import { config } from '../../config';
@@ -12,8 +12,7 @@ import type { Session } from '../db/sessions';
 import type { ClusterHealth, HealthHistoryEntry } from '../db/healthSchema';
 
 // Re-export types from db modules for convenience
-export type { Session } from '../db/sessions';
-export type { ClusterHealth, HealthHistoryEntry } from '../db/healthSchema';
+export type { Session, ClusterHealth, HealthHistoryEntry };
 
 // ============================================
 // Interfaces
@@ -166,7 +165,7 @@ export const POLLING_CONFIG = {
 } as const;
 
 // ============================================
-// Pure utility functions
+// Utility functions
 // ============================================
 
 /**

@@ -1,8 +1,8 @@
 /**
  * State management module
  *
- * Re-exports StateManager and all related types/utilities from a single entry point.
- * Import from 'lib/state' or 'lib/state/index' for the full API.
+ * Re-exports StateManager and all related types/utilities from a single entry point,
+ * providing a consolidated public API for state management.
  */
 
 // Re-export StateManager class from the main state file
