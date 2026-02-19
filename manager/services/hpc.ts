@@ -852,9 +852,9 @@ SLURM_SCRIPT`;
     }
 
     const portFiles: Record<string, string> = {
-      vscode: '~/.rbiocverse/vscode/port',
-      rstudio: '~/.rbiocverse/rstudio/port',
-      jupyter: '~/.rbiocverse/jupyter/port',
+      vscode: `${REMOTE_VSCODE_DIR}/port`,
+      rstudio: `${REMOTE_RSTUDIO_DIR}/port`,
+      jupyter: `${REMOTE_JUPYTER_DIR}/port`,
     };
 
     const portFile = portFiles[ide];
@@ -889,7 +889,7 @@ SLURM_SCRIPT`;
    *              consistency with other methods and potential future per-user support.
    */
   async getProxyPort(_user: string | null): Promise<number | null> {
-    const portFile = '~/.rbiocverse/hpc-proxy/port';
+    const portFile = `${REMOTE_PROXY_DIR}/port`;
     try {
       const output = await this.sshExec(`cat ${portFile} 2>/dev/null`);
       const port = parseInt(output.trim(), 10);
