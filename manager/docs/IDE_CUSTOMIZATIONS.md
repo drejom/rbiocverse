@@ -82,7 +82,7 @@ Set via Singularity `--env`:
 
 ### Extension Bootstrap
 
-Future: Pre-installed extensions from `/usr/local/share/vscode-extensions` in container image are copied to user's extensions dir on first run. See [vscode-rbioc#14](https://github.com/drejom/vscode-rbioc/issues/14).
+Future: Pre-installed extensions from `/usr/local/share/vscode-extensions` in container image are copied to user's extensions dir on first run. See [rbiocverse#14](https://github.com/drejom/rbiocverse/issues/14).
 
 ---
 
@@ -120,7 +120,7 @@ Set via Singularity `--env`:
 
 ## Configuration Source
 
-All settings defined in `manager/config/index.js`:
+All settings defined in `manager/config/index.ts`:
 
 - `vscodeDefaults.settings` - VS Code Machine settings
 - `vscodeDefaults.keybindings` - VS Code keybindings

@@ -154,7 +154,7 @@ RUN curl -fsSL https://pixi.sh/install.sh | PIXI_HOME=/usr/local PIXI_NO_PATH_UP
 # =============================================================================
 # Location: /usr/local/share/vscode-extensions (not /opt due to Apollo bind mounts)
 # Extensions are copied to user's ~/.vscode-server/extensions on first run
-# See: https://github.com/drejom/vscode-rbioc/issues/14
+# See: https://github.com/drejom/rbiocverse/issues/14
 #
 # The standalone VS Code CLI cannot install extensions without a full VS Code
 # installation. We download extensions directly from the VS Code Marketplace.
@@ -217,7 +217,7 @@ ENV RENV_CONFIG_REPOS_OVERRIDE="https://packagemanager.posit.co/cran/__linux__/n
 # Jupyter Configuration
 # =============================================================================
 # R kernel for Jupyter (system-wide installation)
-# See: https://github.com/drejom/vscode-rbioc/issues/15
+# See: https://github.com/drejom/rbiocverse/issues/15
 
 RUN R -e "install.packages('IRkernel', repos='https://cloud.r-project.org')" \
     && R -e "IRkernel::installspec(user = FALSE, name = 'ir')"

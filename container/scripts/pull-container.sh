@@ -1,6 +1,6 @@
 #!/bin/bash
 # pull-container.sh
-# Pull the vscode-rbioc container to both HPC clusters via SSH
+# Pull the rbiocverse container to both HPC clusters via SSH
 # Uses Bioconductor version from rbiocverse/DESCRIPTION as single source of truth
 #
 # Usage: ./scripts/pull-container.sh [--tag TAG] [--force] [--dry-run] [--cluster CLUSTER]

@@ -31,7 +31,7 @@ All notable changes to the rbiocverse package collection will be documented in t
 ### Added
 - **gnome-keyring for persistent Copilot authentication** (#17):
   - Packages: gnome-keyring, libsecret-1-0, libsecret-tools, dbus-x11
-  - Initialization handled by [HPC Code Server Manager](https://github.com/drejom/omhq-hpc-code-server-stack/issues/28)
+  - Initialization handled by [HPC Code Server Manager](https://github.com/drejom/rbiocverse/issues/28)
   - OAuth tokens persist in `~/.local/share/keyrings/` across sessions
 
 - **SoS polyglot notebooks** for multi-language workflows in JupyterLab:

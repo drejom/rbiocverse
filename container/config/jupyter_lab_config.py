@@ -1,5 +1,5 @@
 # JupyterLab configuration for HPC environment
-# See: https://github.com/drejom/vscode-rbioc/issues/15
+# See: https://github.com/drejom/rbiocverse/issues/15
 #
 # This configuration is designed for running JupyterLab behind an
 # authentication proxy (HPC Code Server Manager).

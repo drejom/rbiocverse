@@ -191,7 +191,7 @@ const vscodeDefaults: VsCodeDefaults = {
 
   },
 
-  // Pre-installed extensions baked into Singularity image (see github.com/drejom/vscode-rbioc#14)
+  // Pre-installed extensions baked into Singularity image (see github.com/drejom/rbiocverse#14)
   // Copied to user's extensions dir on first run if not present
   // Use /usr/local/share (not /opt) to avoid conflicts with Apollo's /opt bind mount
   builtinExtensionsDir: '/usr/local/share/vscode-extensions',
