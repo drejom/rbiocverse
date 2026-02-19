@@ -23,7 +23,7 @@ export type { Session, ClusterHealth, HealthHistoryEntry };
  */
 export interface HpcService {
   checkJobExists(jobId: string): Promise<boolean>;
-  getAllJobs(): Promise<Record<string, JobInfo>>;
+  getAllJobs(): Promise<Record<string, JobInfo | null>>;
   getClusterHealth(options?: { userAccount?: string | null }): Promise<ClusterHealth>;
   getUserDefaultAccount(user: string): Promise<string | null>;
 }
@@ -34,8 +34,13 @@ export interface HpcService {
 export interface JobInfo {
   jobId: string;
   state: string;
-  node?: string;
-  timeLeftSeconds?: number;
+  ide?: string;
+  node?: string | null;
+  timeLeft?: string | null;
+  timeLeftSeconds?: number | null;
+  timeLimit?: string | null;
+  cpus?: string | null;
+  memory?: string | null;
   startTime?: string | null; // For pending jobs: SLURM's estimated start time
 }
 

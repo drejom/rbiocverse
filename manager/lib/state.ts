@@ -797,13 +797,13 @@ class StateManager {
           return { hpc, jobs, error: null };
         } catch (e) {
           log.warn('Failed to fetch jobs from cluster', { hpc, error: (e as Error).message });
-          return { hpc, jobs: {} as Record<string, JobInfo>, error: (e as Error).message };
+          return { hpc, jobs: {} as Record<string, JobInfo | null>, error: (e as Error).message };
         }
       })
     );
 
     // Build a map of cluster -> ide -> jobInfo from batch results
-    const jobsByCluster: Record<string, Record<string, JobInfo>> = {};
+    const jobsByCluster: Record<string, Record<string, JobInfo | null>> = {};
     for (const { hpc, jobs } of jobResults) {
       jobsByCluster[hpc] = jobs;
     }

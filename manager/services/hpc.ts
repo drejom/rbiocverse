@@ -10,6 +10,7 @@ import * as path from 'path';
 import { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } from '../config';
 import { log } from '../lib/logger';
 import { withClusterQueue } from '../lib/ssh-queue';
+import type { JobInfo } from '../lib/state/types';
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
 let getUserPrivateKey: ((username: string) => string | null) | null = null;
@@ -29,18 +30,6 @@ const SSH_KEY_DIR = path.join(__dirname, '..', 'data', 'ssh-keys');
 // Use /tmp for short paths (Unix socket paths limited to ~104 bytes)
 const SSH_SOCKET_DIR = '/tmp/rbiocverse-ssh';
 
-interface JobInfo {
-  jobId: string;
-  ide: string;
-  state: string;
-  node: string | null;
-  timeLeft: string | null;
-  timeLeftSeconds?: number | null;
-  timeLimit: string | null;
-  cpus: string | null;
-  memory: string | null;
-  startTime: string | null;
-}
 
 interface JobSubmitResult {
   jobId: string;

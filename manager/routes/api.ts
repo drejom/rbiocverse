@@ -22,6 +22,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters, ReleaseConfig } from '../config';
 import { log } from '../lib/logger';
 import { createClusterCache } from '../lib/cache';
+import type { JobInfo } from '../lib/state/types';
 
 // Helper to safely get string from req.params (Express types it as string | string[] but it's always string for route params)
 const param = (req: Request, name: string): string => req.params[name] as string;
@@ -70,18 +71,6 @@ interface Session {
   account?: string | null;
   tunnelProcess?: unknown;
   usedDevServer?: boolean;
-}
-
-interface JobInfo {
-  jobId: string;
-  node?: string;
-  state?: string;
-  ide?: string;
-  timeLeft?: string;
-  timeLimit?: string;
-  cpus?: number;
-  memory?: string;
-  startTime?: string;
 }
 
 interface IdeConfig {
@@ -195,7 +184,7 @@ async function fetchSingleClusterStatus(clusterName: string): Promise<Record<str
   log.info(`Fetching fresh status for ${clusterName}`);
 
   const hpcService = new HpcService(clusterName);
-  const jobs = await hpcService.getAllJobs() as unknown as Record<string, JobInfo | null>;
+  const jobs = await hpcService.getAllJobs();
 
   const formatJobStatus = (job: JobInfo | null): Record<string, unknown> => {
     if (!job) return { status: 'idle' };
