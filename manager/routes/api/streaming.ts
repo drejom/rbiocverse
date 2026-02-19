@@ -11,9 +11,10 @@ import {
   startTunnelWithPortDiscovery, ensureTunnelStarted, makeTunnelOnExit, verifyJobExists,
   buildSessionKey,
 } from './helpers';
-import type { StateManager, Session, IdeConfig } from './helpers';
+import type { StateManager, IdeConfig } from './helpers';
 
 import type { ReleaseConfig } from '../../config';
+import { asyncHandler } from '../../lib/asyncHandler';
 
 /**
  * Initialize streaming router with state manager dependency
@@ -25,7 +26,7 @@ export function createStreamingRouter(stateManager: StateManager): Router {
 
   // Launch session with SSE progress streaming
   // Returns real-time progress events during job submission and startup
-  router.get('/launch/:hpc/:ide/stream', async (req: Request, res: Response) => {
+  router.get('/launch/:hpc/:ide/stream', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const hpc = param(req, 'hpc');
     const ide = param(req, 'ide');
@@ -382,11 +383,11 @@ export function createStreamingRouter(stateManager: StateManager): Router {
     } finally {
       stateManager.releaseLock(lockName);
     }
-  });
+  }));
 
   // Stop session with SSE progress streaming (indeterminate progress)
   // Due to high variance in cancel times (CV 74%), uses indeterminate animation
-  router.get('/stop/:hpc/:ide/stream', async (req: Request, res: Response) => {
+  router.get('/stop/:hpc/:ide/stream', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const hpc = param(req, 'hpc');
     const ide = param(req, 'ide');
@@ -467,7 +468,7 @@ export function createStreamingRouter(stateManager: StateManager): Router {
       log.error('Stop stream error', { hpc, ide, ...errorDetails(error) });
       sendError(errorMessage(error));
     }
-  });
+  }));
 
   return router;
 }

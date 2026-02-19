@@ -12,13 +12,13 @@ import {
   startTunnelWithPortDiscovery, ensureTunnelStarted, makeTunnelOnExit, verifyJobExists,
   buildSessionKey, parseSessionKey,
 } from './helpers';
-import type { StateManager, Session, IdeConfig } from './helpers';
+import type { StateManager } from './helpers';
 
 export function createSessionsRouter(stateManager: StateManager): Router {
   const router = express.Router();
 
   // Launch session for a specific IDE
-  router.post('/launch', async (req: Request, res: Response) => {
+  router.post('/launch', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const {
       hpc = config.defaultHpc,
@@ -88,7 +88,7 @@ export function createSessionsRouter(stateManager: StateManager): Router {
       await stateManager.updateSession(user, hpc, ide, {
         status: 'starting',
         error: null,
-        cpus: cpus,
+        cpus: parseInt(String(cpus), 10),
         memory: mem,
         walltime: time,
       });
@@ -96,7 +96,7 @@ export function createSessionsRouter(stateManager: StateManager): Router {
       const hpcService = new HpcService(hpc, user);
 
       // Use local variables to collect job data (avoid mutating session directly)
-      let jobId: string, token: string | undefined, node: string;
+      let jobId: string, token: string | undefined;
 
       // Check for existing job for this IDE
       const jobInfo = await hpcService.getJobInfo(ide);
@@ -116,7 +116,6 @@ export function createSessionsRouter(stateManager: StateManager): Router {
         log.job(`Submitted`, { hpc, ide, jobId });
       } else {
         jobId = jobInfo.jobId;
-        node = jobInfo.node!;
         log.job(`Found existing job`, { hpc, ide, jobId });
       }
 
@@ -126,7 +125,7 @@ export function createSessionsRouter(stateManager: StateManager): Router {
       if (waitResult.pending) {
         throw new Error('Timeout waiting for node assignment');
       }
-      node = waitResult.node!;
+      const node = waitResult.node!;
       log.job(`Running on node`, { hpc, ide, node });
 
       // Start tunnel - it will verify IDE is responding before returning
@@ -142,6 +141,7 @@ export function createSessionsRouter(stateManager: StateManager): Router {
         startedAt: new Date().toISOString(),
       });
       await stateManager.setActiveSession(user, hpc, ide);
+      log.audit('Session started', { user, hpc, ide, jobId, node });
 
       // Invalidate cache for this cluster and fetch fresh status after successful launch
       // This ensures ALL users (multi-user environment) see the new job on their next poll
@@ -178,10 +178,10 @@ export function createSessionsRouter(stateManager: StateManager): Router {
     } finally {
       stateManager.releaseLock(lockName);
     }
-  });
+  }));
 
   // Switch active session (connect to different HPC/IDE)
-  router.post('/switch/:hpc/:ide', async (req: Request, res: Response) => {
+  router.post('/switch/:hpc/:ide', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const hpc = param(req, 'hpc');
     const ide = param(req, 'ide');
@@ -221,11 +221,11 @@ export function createSessionsRouter(stateManager: StateManager): Router {
       log.error('Switch error', { hpc, ide, ...errorDetails(error) });
       res.status(500).json({ error: errorMessage(error) });
     }
-  });
+  }));
 
   // Stop session for specific HPC/IDE
   // When cancelJob=true, also refreshes cluster status cache so UI sees freed slot
-  router.post('/stop/:hpc/:ide', async (req: Request, res: Response) => {
+  router.post('/stop/:hpc/:ide', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
     const { cancelJob = false } = req.body;
     const hpc = param(req, 'hpc');
@@ -293,7 +293,7 @@ export function createSessionsRouter(stateManager: StateManager): Router {
       ide,
       clusterStatus,  // Include fresh status if job was cancelled
     });
-  });
+  }));
 
   /**
    * POST /api/stop-all/:hpc

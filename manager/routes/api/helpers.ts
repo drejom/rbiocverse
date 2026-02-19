@@ -7,9 +7,9 @@ import type { Request } from 'express';
 import HpcService from '../../services/hpc';
 import TunnelService from '../../services/tunnel';
 import { parseTimeToSeconds, formatHumanTime } from '../../lib/helpers';
-import { config, ides, ReleaseConfig } from '../../config';
+import { config, ides, IdeConfig, ReleaseConfig } from '../../config';
 import { log } from '../../lib/logger';
-import { errorMessage, errorDetails } from '../../lib/errors';
+import { errorMessage } from '../../lib/errors';
 import { createClusterCache } from '../../lib/cache';
 import type { JobInfo, PollingInfo } from '../../lib/state/types';
 
@@ -57,12 +57,6 @@ export interface Session {
   account?: string | null;
   tunnelProcess?: unknown;
   usedDevServer?: boolean;
-}
-
-export interface IdeConfig {
-  name: string;
-  icon?: string;
-  proxyPath?: string;
 }
 
 /**
@@ -164,10 +158,13 @@ export async function ensureTunnelStarted(
   user: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (session.tunnelProcess) return { ok: true };
+  if (!session.node) {
+    return { ok: false, message: 'Cannot start tunnel: session has no compute node assigned' };
+  }
   try {
     const tunnelProcess = await startTunnelWithPortDiscovery(
       hpc,
-      session.node!,
+      session.node,
       ide,
       makeTunnelOnExit(stateManager, user, hpc, ide),
       user,
@@ -328,4 +325,5 @@ export function parseSessionKey(key: string): { user: string; hpc: string; ide: 
 // Re-export PollingInfo type used in StateManager interface
 export type { PollingInfo } from '../../lib/state/types';
 // Re-export ReleaseConfig for consumers
+export type { IdeConfig };
 export type { ReleaseConfig };

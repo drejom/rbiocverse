@@ -3,13 +3,14 @@ import HpcService from '../../services/hpc';
 import { config, ides, gpuConfig, releases, defaultReleaseVersion, partitionLimits, clusters } from '../../config';
 import { log } from '../../lib/logger';
 import { errorMessage, errorDetails } from '../../lib/errors';
-import type { PollingInfo } from '../../lib/state/types';
+
 import {
-  param, getRequestUser, statusCache, STATUS_CACHE_TTL,
-  fetchSingleClusterStatus, fetchClusterStatus,
+  getRequestUser, statusCache, STATUS_CACHE_TTL,
+  fetchSingleClusterStatus,
   parseSessionKey,
 } from './helpers';
 import type { StateManager, IdeConfig } from './helpers';
+import { asyncHandler } from '../../lib/asyncHandler';
 
 export function createStatusRouter(stateManager: StateManager): Router {
   const router = express.Router();
@@ -55,7 +56,7 @@ export function createStatusRouter(stateManager: StateManager): Router {
 
   // Check dev server ports - returns list of active ports
   // Scans ports from config.additionalPorts (default: 5500, 3838)
-  router.get('/dev-servers', async (req: Request, res: Response) => {
+  router.get('/dev-servers', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
 
     // Only check if there's an active VS Code session
@@ -91,12 +92,12 @@ export function createStatusRouter(stateManager: StateManager): Router {
       log.debugFor('api', 'dev-servers check failed', errorDetails(e));
       res.json({ activePorts: [] });
     }
-  });
+  }));
 
   // Get session status
   // Returns cached state from StateManager background polling
   // No SSH calls - instant response from cached data
-  router.get('/status', async (req: Request, res: Response) => {
+  router.get('/status', asyncHandler(async (req: Request, res: Response) => {
     const user = getRequestUser(req);
 
     // Backend polling keeps state fresh automatically
@@ -120,12 +121,12 @@ export function createStatusRouter(stateManager: StateManager): Router {
         intervalMs: pollingInfo.jobPolling.currentInterval,
       },
     });
-  });
+  }));
 
   // Get job status for both clusters (checks SLURM directly)
   // Cached to reduce SSH load - use ?refresh=true to force update
   // Returns jobs grouped by cluster then IDE
-  router.get('/cluster-status', async (req: Request, res: Response) => {
+  router.get('/cluster-status', asyncHandler(async (req: Request, res: Response) => {
     const forceRefresh = req.query.refresh === 'true';
     const hasLimits = req.query.hasLimits === 'true';  // Client has partition limits
 
@@ -233,7 +234,7 @@ export function createStatusRouter(stateManager: StateManager): Router {
       log.error('Failed to fetch cluster status', errorDetails(e));
       res.status(500).json({ error: errorMessage(e) });
     }
-  });
+  }));
 
   return router;
 }
