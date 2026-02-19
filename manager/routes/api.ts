@@ -525,6 +525,9 @@ function createApiRouter(stateManager: StateManager): Router {
             gpu: session?.gpu || null,
             // Use session's estimatedStartTime if available, fallback to SLURM's startTime
             estimatedStartTime: session?.estimatedStartTime || job.startTime || null,
+            // Fall back to session-stored values if squeue returns null (e.g. pending jobs)
+            cpus: job.cpus ?? session?.cpus ?? null,
+            memory: job.memory ?? session?.memory ?? null,
           };
         }
         return enriched;
