@@ -35,13 +35,13 @@ export interface JobInfo {
   jobId: string;
   state: string;
   ide?: string;
-  node?: string | null;
-  timeLeft?: string | null;
+  node: string | null;
+  timeLeft: string | null;
   timeLeftSeconds?: number | null;
-  timeLimit?: string | null;
-  cpus?: string | null;
-  memory?: string | null;
-  startTime?: string | null; // For pending jobs: SLURM's estimated start time
+  timeLimit: string | null;
+  cpus: string | null;
+  memory: string | null;
+  startTime: string | null; // For pending jobs: SLURM's estimated start time
 }
 
 /**
