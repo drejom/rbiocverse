@@ -12,7 +12,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
-import { LockError, errorDetails } from './errors';
+import { LockError, errorDetails, errorMessage } from './errors';
 import { log } from './logger';
 import { clusters, config } from '../config';
 import { MS_PER_MINUTE, MS_PER_HOUR } from './time';
@@ -795,7 +795,7 @@ class StateManager {
           return { hpc, jobs, error: null };
         } catch (e) {
           log.warn('Failed to fetch jobs from cluster', { hpc, ...errorDetails(e) });
-          return { hpc, jobs: {} as Record<string, JobInfo | null>, error: e instanceof Error ? e.message : String(e) };
+          return { hpc, jobs: {} as Record<string, JobInfo | null>, error: errorMessage(e) };
         }
       })
     );
