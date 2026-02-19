@@ -34,6 +34,7 @@
     "find-process": "^2.0.0",
     "http-proxy": "^1.18.1",
     "joi": "^17.13.3",
+    "ldapts": "^8.1.6",
     "nodemailer": "^8.0.1",
     "sshpk": "^1.18.0",
     "winston": "^3.19.0"
