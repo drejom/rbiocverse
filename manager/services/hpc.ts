@@ -11,6 +11,7 @@ import { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, get
 import { log } from '../lib/logger';
 import { withClusterQueue } from '../lib/ssh-queue';
 import type { JobInfo } from '../lib/state/types';
+import { sleep, MS_PER_MINUTE } from '../lib/time';
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
 let getUserPrivateKey: ((username: string) => string | null) | null = null;
@@ -247,7 +248,7 @@ class HpcService {
     return new Promise((resolve, reject) => {
       const child = exec(
         sshCmd,
-        { timeout: 60000 },
+        { timeout: MS_PER_MINUTE },
         (error, stdout, stderr) => {
           // Filter out OpenSSH post-quantum warnings
           const filteredStderr = stderr
@@ -790,7 +791,7 @@ SLURM_SCRIPT`;
         return { node: jobInfo.node };
       }
 
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
       attempts++;
     }
 

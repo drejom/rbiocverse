@@ -15,6 +15,7 @@ import path from 'path';
 import { LockError } from './errors';
 import { log } from './logger';
 import { clusters, config } from '../config';
+import { MS_PER_MINUTE, MS_PER_HOUR } from './time';
 import { initializeDb, getDb } from './db';
 import * as dbSessions from './db/sessions';
 import * as dbHealth from './db/health';
@@ -771,7 +772,7 @@ class StateManager {
     if (!this.pollingStopped) {
       const { INTERVAL_MS } = POLLING_CONFIG.HEALTH_POLLING;
       this.healthPollTimer = setTimeout(() => this.healthPoll(), INTERVAL_MS);
-      log.debugFor('state', `Next health poll in ${Math.round(INTERVAL_MS / 60000)} min`);
+      log.debugFor('state', `Next health poll in ${Math.round(INTERVAL_MS / MS_PER_MINUTE)} min`);
     }
   }
 
@@ -1023,7 +1024,7 @@ class StateManager {
           // Throttle rollover to avoid repeated file I/O (at most once per hour)
           // Skip if using SQLite (history is in database)
           if (!this.useSqlite) {
-            const ROLLOVER_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+            const ROLLOVER_MIN_INTERVAL_MS = MS_PER_HOUR;
             const lastRolloverAt = this.state.clusterHealth![hpc].lastRolloverAt || 0;
             if (now - lastRolloverAt >= ROLLOVER_MIN_INTERVAL_MS) {
               await this.rolloverHealthHistory(hpc);
