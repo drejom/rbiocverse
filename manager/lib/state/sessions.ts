@@ -5,6 +5,7 @@
 
 import { config } from '../../config';
 import { log } from '../logger';
+import { errorDetails } from '../errors';
 import * as dbSessions from '../db/sessions';
 import { buildSessionKey, parseSessionKey, createIdleSession } from './types';
 import type { AppState, ActiveSession, Session, ClearSessionOptions } from './types';
@@ -116,7 +117,7 @@ export class SessionManager {
         dbSessions.archiveSession(session, sessionKey, endReason, errorMessage);
         dbSessions.deleteActiveSession(sessionKey, { archive: false });
       } catch (err) {
-        log.error('Failed to archive session to history', { sessionKey, ...{ detail: String(err) } });
+        log.error('Failed to archive session to history', { sessionKey, ...errorDetails(err) });
       }
     }
 

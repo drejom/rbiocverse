@@ -23,6 +23,7 @@ export class JobPoller {
     private clearActiveSessionIfMatches: (user: string | null, hpc: string, ide: string) => void,
     private save: () => Promise<void>,
     private getOnSessionCleared: () => ((user: string, hpc: string, ide: string) => void) | null,
+    private clearSession: (user: string, hpc: string, ide: string, options?: { endReason?: string }) => Promise<void>,
   ) {}
 
   /**
@@ -248,12 +249,7 @@ export class JobPoller {
 
       if (!jobInfo || jobInfo.jobId !== session.jobId) {
         log.state(`Job ${session.jobId} no longer in squeue`, { sessionKey });
-        this.clearActiveSessionIfMatches(user, hpc, ide);
-        this.state.sessions[sessionKey] = null;
-
-        const cb = this.getOnSessionCleared();
-        if (cb) cb(user, hpc, ide);
-
+        await this.clearSession(user, hpc, ide, { endReason: 'completed' });
         significantChange = true;
         continue;
       }

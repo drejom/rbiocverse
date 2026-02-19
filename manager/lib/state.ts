@@ -94,6 +94,7 @@ class StateManager {
       (user, hpc, ide) => this.sessionManager.clearActiveSessionIfMatches(user, hpc, ide),
       () => this.save(),
       () => this.onSessionCleared,
+      (user, hpc, ide, options) => this.sessionManager.clearSession(user, hpc, ide, options),
     );
 
     this.healthPoller = new ClusterHealthPoller(
@@ -310,11 +311,7 @@ class StateManager {
         const exists = await this.checkJobExists(hpc, session.jobId);
         if (!exists) {
           log.state(`Job ${session.jobId} no longer exists, clearing session`, { sessionKey });
-          this.sessionManager.clearActiveSessionIfMatches(user, hpc, ide);
-          delete this.state.sessions[sessionKey];
-          if (this.onSessionCleared) {
-            this.onSessionCleared(user, hpc, ide);
-          }
+          await this.sessionManager.clearSession(user, hpc, ide, { endReason: 'reconciled' });
         }
       }
     }
