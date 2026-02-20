@@ -1,0 +1,301 @@
+{
+  "project": "drejom/rbiocverse",
+  "version": "1.0.0",
+  "description": "Generated from GitHub issues",
+  "stories": [
+    {
+      "id": "ISSUE-106",
+      "title": "feat(admin): DB backup endpoint and admin UI button",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Add backup helper to `manager/lib/db.ts` — dump all tables except `active_sessions` to a timestamped file in `backups/`",
+        "[ ] Add `POST /api/admin/backup` route in `manager/routes/admin.ts` returning `{ path, size, tables }`",
+        "[ ] Add backup button to admin UI with success/error feedback showing output path",
+        "[ ] Add `manager/data/backups/` to `.gitignore`",
+        "[ ] Verify dump restores cleanly: `sqlite3 restore.db < backup.sql`",
+        "[ ] Run `npm run typecheck` and `cd ui && npm run typecheck` — both pass"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 106
+    },
+    {
+      "id": "ISSUE-105",
+      "title": "feat(admin): replace Shiny/Live Server usage plot with Dev Server usage plot",
+      "priority": 5,
+      "blocked": true,
+      "depends_on": [
+        "ISSUE-62"
+      ],
+      "checklist": [
+        "[ ] Finalise `getFeatureUsage()` response shape in `manager/lib/db/analytics.ts` to return `{ devServer: { count, percent }, vscodeTotal }`",
+        "[ ] Update `FeatureUsage.tsx` to render a single Dev Server bar using the new response shape; update chart title and labels",
+        "[ ] Update `GET /api/stats/usage` in `manager/routes/stats.ts` to expose `devServerPercent` instead of `shinyPercent`/`liveServerPercent`",
+        "[ ] Run `npm run typecheck` (backend) and `cd ui && npm run typecheck` (frontend) — both must pass",
+        "[ ] Rebuild frontend: `cd manager/ui && npm run build`",
+        "[ ] Visually verify the plot renders correctly in the admin panel"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 105
+    },
+    {
+      "id": "ISSUE-104",
+      "title": "refactor: per-session dynamic tunnel ports and proxy registry (single-user groundwork for #94)",
+      "priority": 1,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[x] Create `manager/lib/ports.ts` with `allocateLocalPort()` and `PortRegistry` Map",
+        "[ ] Refactor `TunnelService.start()` to call `allocateLocalPort()` and store `sessionKey→localPort` in registry",
+        "[ ] Remove `stopByIde()` from `tunnel.ts`; replace with `stop(sessionKey)` scoped cleanup",
+        "[ ] Replace proxy singletons in `server.ts` with `ProxyRegistry` Map and `createSessionProxy`/`destroySessionProxy` helpers",
+        "[ ] Update request routing middleware in `server.ts` to resolve proxy from `ProxyRegistry` by session key",
+        "[ ] Run `npm run typecheck` and `npm run lint` (backend + frontend); fix any errors",
+        "[ ] Manual smoke test: launch VS Code session, confirm proxy still works; relaunch same IDE, confirm no eviction of prior tunnel"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 104
+    },
+    {
+      "id": "ISSUE-102",
+      "title": "chore: remove legacy file-based state persistence (ENABLE_STATE_PERSISTENCE / STATE_FILE)",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Remove `this.stateFile`, `this.enablePersistence` fields and `ENABLE_STATE_PERSISTENCE`/`STATE_FILE` env var reads from `lib/state.ts`",
+        "[ ] Remove the `if (this.enablePersistence)` seed block from `StateManager.load()` in `lib/state.ts`",
+        "[ ] Remove the `if (!this.enablePersistence) return` guard and file-write block from `StateManager.save()` in `lib/state.ts`",
+        "[ ] Remove `stateFile` argument passed to `ClusterHealthPoller` and clean up any use of it in `lib/state/clusterHealth.ts`",
+        "[ ] Remove `STATE_FILE` and `ENABLE_STATE_PERSISTENCE` env vars from `docker-compose.yml`",
+        "[ ] Remove references to both vars from `SECRETS.md` and `manager/docs/ARCHITECTURE.md`",
+        "[ ] Run `npm run typecheck` and `npm run lint` (both backend and frontend) and confirm no remaining references to `ENABLE_STATE_PERSISTENCE` or `STATE_FILE` in non-test code"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 102
+    },
+    {
+      "id": "ISSUE-96",
+      "title": "chore: remove deprecated pythonEnv export from config/index.ts",
+      "priority": 10,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Confirm no files import/require `pythonEnv` from `config/index.ts` (search codebase)",
+        "[ ] Remove the `pythonEnv` const declaration (lines 504–509 of `manager/config/index.ts`)",
+        "[ ] Remove `pythonEnv` from the `export {}` block (line 520)",
+        "[ ] Remove `pythonEnv` from the `module.exports` block (line 539)",
+        "[ ] Run `npm run typecheck` and `npm test` from `manager/` and confirm both pass"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 96
+    },
+    {
+      "id": "ISSUE-98",
+      "title": "chore: extract idle session cleanup out of server.ts into its own module",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Create `manager/lib/idleSessionCleaner.ts` with a class/function that accepts `StateManager`, an `HpcService` factory, `timeoutMs`, and an optional interval (default 60s)",
+        "[ ] Use existing `parseSessionKey` from `lib/state/types.ts` instead of the inline `split('-')` logic",
+        "[ ] Move the `setInterval` logic verbatim (then refactor) into the new module; expose `start()` / `stop()` methods",
+        "[ ] Replace `server.ts:701-748` with a single instantiation + `start()` call",
+        "[ ] Write a unit test (`lib/idleSessionCleaner.test.ts`) using mocked `StateManager` and `HpcService` covering: idle session cancelled, active session skipped, parse failure skipped",
+        "[ ] Run `npm run typecheck && (cd ui && npm run typecheck) && npm test` to verify no regressions"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 98
+    },
+    {
+      "id": "ISSUE-94",
+      "title": "feat: per-session dynamic tunnel ports for multi-user IDE support",
+      "priority": 1,
+      "blocked": true,
+      "depends_on": [
+        "ISSUE-87",
+        "ISSUE-104"
+      ],
+      "checklist": [
+        "[ ] Add `allocateLocalPort()` utility in `manager/lib/` that binds a TCP server to port 0, captures the OS-assigned port, closes it, and returns the port (with a `PortRegistry` Map to track session→port)",
+        "[ ] Refactor `TunnelService.start()` to allocate a free local port per session key instead of using the fixed IDE config port; store `sessionKey→localPort` in the registry",
+        "[ ] Replace the 4 hardcoded proxy singletons in `server.ts` with a `ProxyRegistry` Map; add `createSessionProxy(sessionKey, localPort)` and `destroySessionProxy(sessionKey)` functions",
+        "[ ] Remove `stopByIde()` from `tunnel.ts`; replace with `stop(sessionKey)` that tears down only that session's tunnel and proxy, leaving all other sessions unaffected",
+        "[ ] Update request routing middleware in `server.ts` to resolve `sessionKey` from the authenticated request (user + cluster + IDE) and forward to the correct proxy from `ProxyRegistry`",
+        "[ ] Wire `getRequestUser()` in `helpers.ts` to return `req.session?.user` once #87 lands (currently the stub returns `config.hpcUser`)",
+        "[ ] Verify: start two concurrent VS Code sessions under different users and confirm each receives its own isolated traffic with no eviction side-effects"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 94
+    },
+    {
+      "id": "ISSUE-93",
+      "title": "chore: drive cluster names from config in validation — remove hardcoded lists",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Import `clusters` from `../config/index.js` (or `../config`) at the top of `manager/lib/validation.ts`",
+        "[ ] Replace `const validHpcs = ['gemini', 'apollo']` in `validateHpcName()` (line 373) with `const validHpcs = Object.keys(clusters)`",
+        "[ ] Replace `.valid('gemini', 'apollo')` in the Joi `launchSession` schema (line 68) with `.valid(...Object.keys(clusters))`",
+        "[ ] Run `npm run typecheck` from `manager/` — confirm zero errors",
+        "[ ] Run `npm test` from `manager/` — confirm all tests pass"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 93
+    },
+    {
+      "id": "ISSUE-95",
+      "title": "chore: remove stale types/index.ts — conflicts with active type definitions",
+      "priority": 10,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Confirm `grep -r \"types/index\" manager/` returns no imports",
+        "[ ] Delete `manager/types/index.ts`",
+        "[ ] Run `npm run typecheck` from `manager/` and confirm it passes"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 95
+    },
+    {
+      "id": "ISSUE-92",
+      "title": "chore: add test coverage for auth subsystem (token, ssh, session-keys)",
+      "priority": 3,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Add unit tests for `lib/auth/token.ts` in `test/unit/token.test.js`: `generateToken`, `verifyToken`, expired token returns null, invalid signature returns null, timing-safe comparison, null/missing input handling",
+        "[ ] Add unit tests for `lib/auth/session-keys.ts` in `test/unit/session-keys.test.js`: `setSessionKey`, `getSessionKey`, expired key cleanup on get, `clearSessionKey`, `clearExpiredKeys` (multi-entry), `hasSessionKey`, `getActiveSessionCount`",
+        "[ ] Verify `test/unit/ssh.test.js` passes (tests exist but are not yet in coverage report)",
+        "[ ] Run `npm run test:coverage` from `manager/` and confirm report shows current paths (not old `truenas_upgrade/repos/...`)",
+        "[ ] Confirm auth subsystem reaches ≥80% line coverage; add additional cases if below threshold"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 92
+    },
+    {
+      "id": "ISSUE-88",
+      "title": "security: pin SSH known host keys — remove StrictHostKeyChecking=no",
+      "priority": 1,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Create `lib/ssh-utils.ts` with: `getSshArgs(keyFilePath, knownHostsPath)` returning SSH option array; `resolveKeyFile(username | null)` (extracts `_getSshKeyOptions` + `getKeyFilePath` from `hpc.ts`); `resolveKnownHostsFile()` (reads `app_state.known_hosts`, writes to `/tmp/rbiocverse-known-hosts`, returns path)",
+        "[ ] Refactor `hpc.ts` to use `lib/ssh-utils.ts` — remove private `_getSshKeyOptions` and `getKeyFilePath`; replace `StrictHostKeyChecking=no` with result of `getSshArgs()`; log warning if known_hosts not yet enrolled",
+        "[ ] Fix `tunnel.ts` to use `lib/ssh-utils.ts` — add key resolution (currently passes no `-i` at all, silently relies on SSH mount); replace `StrictHostKeyChecking=no` with `getSshArgs()` result",
+        "[ ] Add `lib/db/settings.ts` with `getKnownHosts() / setKnownHosts()` backed by `app_state` table (no encryption needed — public keys)",
+        "[ ] Add admin API endpoint `POST /api/admin/ssh/scan-hosts` (behind `requireAdmin` middleware): runs `ssh-keyscan` for all configured cluster hostnames, stores result via `setKnownHosts()`, returns the scanned content",
+        "[ ] Add \"Scan Host Keys\" button to admin panel UI that calls the endpoint and confirms success",
+        "[ ] Remove `SSH_MOUNT_PATH` volume from `docker-compose.yml` (or move to a clearly-labelled legacy/optional comment); update env example files to remove SSH mount references and document that keys are now DB-managed",
+        "[ ] Test: fresh container with no SSH mount, admin enrolls key + scans hosts → SSH exec and tunnel both work; verify connection fails with wrong host key"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 88
+    },
+    {
+      "id": "ISSUE-87",
+      "title": "refactor: fix circular dependency between hpc.ts and routes/auth.ts",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Create `lib/auth/keys.ts` with `getUserPrivateKey`, `getAdminPrivateKey`, and `clearAdminKeyCache` (move from `routes/auth.ts`; imports from `lib/auth/session-keys`, `lib/auth/ssh`, `lib/auth/admin`, `lib/db/users`)",
+        "[ ] Update `services/hpc.ts`: replace `loadAuthModule()` lazy-require with static `import { getUserPrivateKey, getAdminPrivateKey } from '../lib/auth/keys'`",
+        "[ ] Update `routes/auth.ts`: remove the three moved functions, import them from `lib/auth/keys`",
+        "[ ] Update `routes/auth.ts`: replace `require('../services/hpc')` in `testSshConnection` with a static `import { HpcService } from '../services/hpc'` at the top of the file",
+        "[ ] Update `lib/auth/index.ts` to re-export `getUserPrivateKey`, `getAdminPrivateKey`, `clearAdminKeyCache` from `keys.ts` if it serves as a barrel",
+        "[ ] Run `npm run typecheck` and `(cd ui && npm run typecheck)` — confirm no new `any` errors"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 87
+    },
+    {
+      "id": "ISSUE-89",
+      "title": "security: wire requireAuth middleware onto all session API routes",
+      "priority": 1,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Import `requireAuth` from `routes/auth` into `routes/api/index.ts` and wire it onto the API router before the session/streaming sub-routers (mirrors how `routes/admin.ts` does it at line 35)",
+        "[ ] Extend the `Request` type in `routes/api/helpers.ts` (or a shared type file) so `req.user` is visible to session route handlers — import the `AuthenticatedRequest` interface or replicate the `user?` extension",
+        "[ ] Update `getRequestUser()` in `routes/api/helpers.ts:69` to return `(req as AuthenticatedRequest).user?.username ?? config.hpcUser` (fallback keeps single-user deployments without JWT_SECRET working if needed, or remove fallback to hard-fail)",
+        "[ ] Decide and document the single-user / no-auth fallback policy: either keep `config.hpcUser` fallback (silent degradation) or remove it and require a valid token always — add a comment or env var (`AUTH_REQUIRED=true`) making the policy explicit",
+        "[ ] Add tests for unauthenticated requests to `/api/launch`, `/api/stop/:hpc/:ide`, `/api/switch/:hpc/:ide`, `/api/stop-all/:hpc` returning 401",
+        "[ ] Run full CI check sequence: `npm run typecheck`, `cd ui && npm run typecheck`, `npm run lint`, `cd ui && npm run lint`, `cd ui && npm run build`, `npm test`"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 89
+    },
+    {
+      "id": "ISSUE-62",
+      "title": "Chore: Remove v0.1.0 database migration code",
+      "priority": 10,
+      "blocked": true,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Confirm `used_dev_server` column exists on cgt.coh.org analytics table",
+        "[ ] Confirm any other production deployments (dokploy, etc.) have also run the migration",
+        "[ ] Remove the migration block at `lib/db.ts:225` (the TODO block adding the column)",
+        "[ ] Run `npm run typecheck` to verify no broken references",
+        "[ ] Smoke-test analytics recording still works after removal",
+        "[ ] Update schema docs/comments if `used_dev_server` is documented anywhere"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 62
+    },
+    {
+      "id": "ISSUE-50",
+      "title": "cgt deployment",
+      "priority": 5,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Update `docker-compose.yml` to support joining the `nginx` external Docker network (alongside default)",
+        "[ ] Create `/opt/stacks/rbiocverse/` Dockge stack with `.env.cgt` (NETWORK_NAME=nginx, LDAP_URL, JWT_SECRET, SSH_MOUNT_PATH set, no public port binding needed)",
+        "[ ] Add `app.set('trust proxy', 1)` to Express server for correct HTTPS/IP detection behind nginx",
+        "[ ] Update nginx config: replace `location /` static block with proxy_pass to `http://rbiocverse-app:3000/` with WebSocket support",
+        "[ ] Reload nginx container and deploy rbiocverse stack via Dockge",
+        "[ ] Verify all existing subpaths (`/data/`, `/sp/`, `/jupyter`, `/kaddis/`, etc.) still function",
+        "[ ] End-to-end test: HTTPS login, LDAP auth, launch HPC session (pending cert renewal)"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 50
+    },
+    {
+      "id": "ISSUE-30",
+      "title": "rstudio global options reveiw",
+      "priority": 100,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[ ] Cross-reference candidate options against RStudio user-prefs schema to confirm valid key names and value types",
+        "[ ] Extend `RStudioDefaults` interface in `manager/config/index.ts` with new property types",
+        "[ ] Add editor quality-of-life options: `highlight_selected_line`, `show_margin`, `margin_column: 100`, `syntax_color_console`, `scroll_past_end_of_document`",
+        "[ ] Add diagnostics options: `check_arguments_to_r_function_calls`, `warn_if_no_such_variable_in_scope`",
+        "[ ] Add completion/nav options: `insert_spaces_around_equals`, `show_function_signature_tooltips`, `doc_outline_show`, `show_hidden_files`, `help_font_size_points: 12`",
+        "[ ] Run `npm run typecheck` and `cd ui && npm run typecheck` — no errors",
+        "[ ] Update `manager/docs/IDE_CUSTOMIZATIONS.md` to document the new defaults and note Copilot unavailability in RStudio OSS"
+      ],
+      "passes": false,
+      "category": "github",
+      "_issue_number": 30
+    }
+  ]
+}
