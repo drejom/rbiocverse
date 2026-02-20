@@ -252,12 +252,13 @@ class TunnelService {
     const localPort = await ports.allocateLocalPort();
     const remotePort = options.remotePort || ideConfig.port;
 
-    // Stop any existing tunnel using this port (same IDE type, any cluster)
-    // This prevents "Address in use" errors when switching between clusters
-    const stoppedTunnel = this.stopByIde(ide);
-
-    // Brief delay for OS to release the port after tunnel termination
+    // Stop any existing tunnel for this session (same user-hpc-ide).
+    // With dynamic port allocation, each session gets a unique port.
+    // We only need to stop if restarting this exact session.
+    const stoppedTunnel = this.tunnels.has(sessionKey);
     if (stoppedTunnel) {
+      this.stop(sessionKey);
+      // Brief delay for OS to release the port after tunnel termination
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
@@ -401,9 +402,33 @@ class TunnelService {
   }
 
   /**
-   * Stop tunnel for a user's HPC-IDE session
+   * Stop tunnel for a user's HPC-IDE session.
+   * Overload 1: Stop by session key (domeally-gemini-vscode)
+   * Overload 2: Stop by hpcName/ide/user parameters
    */
-  stop(hpcName: string, ide: string | null = null, user: string | null = null): void {
+  stop(sessionKey: string): void;
+  stop(hpcName: string, ide?: string, user?: string): void;
+  stop(sessionKeyOrHpcName: string, ide?: string, user?: string): void {
+    // Check if this is the overload(sessionKey) call:
+    // If the second argument is null and ide is null, treat first arg as sessionKey
+    // Otherwise treat first arg as hpcName (to maintain existing behavior)
+    const isSessionKeyOverload = (ide === null && user === null);
+
+    if (isSessionKeyOverload) {
+      // sessionKey overload
+      const sessionKey = sessionKeyOrHpcName;
+      const tunnel = this.tunnels.get(sessionKey);
+      if (tunnel) {
+        log.tunnel(`Stopping tunnel`, { sessionKey });
+        tunnel.kill();
+        this.tunnels.delete(sessionKey);
+        ports.PortRegistry.delete(sessionKey);
+      }
+      return;
+    }
+
+    // hpcName/ide/user overload (existing behavior)
+    const hpcName = sessionKeyOrHpcName;
     const effectiveUser = user || config.hpcUser;
     if (ide) {
       // Stop specific IDE tunnel
@@ -458,24 +483,6 @@ class TunnelService {
       return `SSH connection failed (code 255). ${stderrMsg || 'Check your network and SSH configuration.'}`;
     }
     return `Tunnel failed with exit code ${exitCode}. ${stderrMsg || ''}`.trim();
-  }
-
-  /**
-   * Stop all tunnels for a specific IDE type (across all clusters)
-   * Used to free the local port before starting a new tunnel
-   */
-  stopByIde(ide: string): boolean {
-    let stopped = false;
-    for (const [key, tunnel] of this.tunnels.entries()) {
-      if (key.endsWith(`-${ide}`)) {
-        log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
-        tunnel.kill();
-        this.tunnels.delete(key);
-        ports.PortRegistry.delete(key);
-        stopped = true;
-      }
-    }
-    return stopped;
   }
 
   /**
