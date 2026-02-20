@@ -9,6 +9,7 @@ import * as http from 'http';
 import findProcess from 'find-process';
 import { config, clusters, ides } from '../config';
 import { log } from '../lib/logger';
+import * as ports from '../lib/ports';
 
 interface TunnelStartOptions {
   remotePort?: number;
@@ -246,9 +247,9 @@ class TunnelService {
 
     const user = options.user || config.hpcUser;
     const sessionKey = this.getSessionKey(user, hpcName, ide);
-    // Use dynamic remote port if provided, otherwise default port
-    // Local port always uses default (UI expects fixed ports)
-    const localPort = ideConfig.port;
+    // Allocate a free ephemeral local port for this tunnel session.
+    // The port is stored in PortRegistry so the proxy layer can resolve it by sessionKey.
+    const localPort = await ports.allocateLocalPort();
     const remotePort = options.remotePort || ideConfig.port;
 
     // Stop any existing tunnel using this port (same IDE type, any cluster)
@@ -346,11 +347,19 @@ class TunnelService {
     tunnel.on('error', (err: Error) => {
       log.error('Tunnel spawn error', { hpc: hpcName, ide, error: err.message });
       this.tunnels.delete(sessionKey);
+      // Guard: only delete if this tunnel's port is still the registered one.
+      // Prevents a stale exit from clobbering a newly-registered replacement port.
+      if (ports.PortRegistry.get(sessionKey) === localPort) {
+        ports.PortRegistry.delete(sessionKey);
+      }
     });
 
     tunnel.on('exit', (code: number | null) => {
       log.tunnel(`Exited`, { hpc: hpcName, ide, code });
       this.tunnels.delete(sessionKey);
+      if (ports.PortRegistry.get(sessionKey) === localPort) {
+        ports.PortRegistry.delete(sessionKey);
+      }
       if (onExit) {
         onExit(code);
       }
@@ -373,6 +382,7 @@ class TunnelService {
       if (portOpen) {
         log.tunnel(`Established on port ${localPort}`, { hpc: hpcName, ide });
         this.tunnels.set(sessionKey, tunnel);
+        ports.PortRegistry.set(sessionKey, localPort);
 
         // Wait for IDE to actually be ready (responds to HTTP)
         // This prevents ECONNRESET errors when IDE is still starting
@@ -403,6 +413,7 @@ class TunnelService {
         log.tunnel(`Stopping tunnel`, { user: effectiveUser, hpc: hpcName, ide });
         tunnel.kill();
         this.tunnels.delete(sessionKey);
+        ports.PortRegistry.delete(sessionKey);
       }
     } else {
       // Stop all tunnels for this user on this HPC
@@ -412,6 +423,7 @@ class TunnelService {
           log.tunnel(`Stopping tunnel`, { key });
           tunnel.kill();
           this.tunnels.delete(key);
+          ports.PortRegistry.delete(key);
         }
       }
     }
@@ -459,6 +471,7 @@ class TunnelService {
         log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
         tunnel.kill();
         this.tunnels.delete(key);
+        ports.PortRegistry.delete(key);
         stopped = true;
       }
     }
@@ -485,8 +498,9 @@ class TunnelService {
    * Stop all tunnels
    */
   stopAll(): void {
-    for (const tunnel of this.tunnels.values()) {
+    for (const [key, tunnel] of this.tunnels.entries()) {
       tunnel.kill();
+      ports.PortRegistry.delete(key);
     }
     this.tunnels.clear();
   }
