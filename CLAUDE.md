@@ -92,25 +92,33 @@ npm test
 
 ### Playwright Browser Tests
 
-Manual browser automation scripts for testing the UI:
+**USE THE PLAYWRIGHT SKILL** (`/playwright-skill`) for all browser automation.
 
+**USE THE HELPER SCRIPTS** in `manager/scripts/playwright/`:
+- `helpers.js` - Reusable functions: `login()`, `selectCluster()`, `selectIde()`, `clickLaunch()`, `monitorLaunchModal()`
+- `login-test.js` - Example: login and verify
+- `launch-quick.js` - Example: full launch flow
+- `launch-pending.js` - Example: launch with queue monitoring
+
+**Credentials** are in `manager/scripts/.env.dev` (gitignored). Load them before running tests.
+
+**DO NOT hardcode credentials** - always read from env vars or `.env.dev`.
+
+**Setup** (run once per worktree):
 ```bash
-# Setup (one-time)
 npm install playwright
 npx playwright install chromium
-
-# Run tests (from repo root)
-node manager/scripts/playwright/login-test.js
-node manager/scripts/playwright/launch-quick.js
-node manager/scripts/playwright/launch-pending.js
 ```
 
-Configure via environment variables:
-```bash
-TEST_URL=http://localhost:3000 TEST_USERNAME=user TEST_PASSWORD=pass node manager/scripts/playwright/login-test.js
+**Example** using helpers:
+```javascript
+const { login, selectCluster, selectIde, clickLaunch } = require('./helpers');
+// ...
+await login(page, process.env.TEST_USERNAME, process.env.TEST_PASSWORD);
+await selectCluster(page, 'Gemini');
+await selectIde(page, 'VS Code');
+await clickLaunch(page);
 ```
-
-See `manager/scripts/playwright/README.md` for details and `helpers.js` for reusable functions.
 
 ### Container Build
 
