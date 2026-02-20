@@ -61,7 +61,7 @@ const app = express();
 
 // Prevent caching issues - VS Code uses service workers that can cache stale paths
 // Safari is particularly aggressive about caching, so we use multiple headers
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -133,7 +133,7 @@ const vscodeProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-vscodeProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+vscodeProxy.on('error', (err: Error, _req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   log.proxyError('VS Code proxy error', { error: err.message });
   if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
@@ -274,12 +274,12 @@ rstudioProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.Serve
 });
 
 // Log all proxy events for debugging (enable with DEBUG_COMPONENTS=rstudio)
-rstudioProxy.on('start', ((req: http.IncomingMessage, res: http.ServerResponse, target: HttpProxy.ProxyTargetUrl) => {
+rstudioProxy.on('start', ((req: http.IncomingMessage, _res: http.ServerResponse, target: HttpProxy.ProxyTargetUrl) => {
   const targetString = typeof target === 'string' ? target : (target && 'href' in target ? (target as { href: string | null }).href : JSON.stringify(target));
   log.debugFor('rstudio', 'proxy start', { url: req.url, target: targetString });
 }) as HttpProxy.StartCallback);
 
-rstudioProxy.on('end', (req: http.IncomingMessage, res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
+rstudioProxy.on('end', (req: http.IncomingMessage, _res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
   log.debugFor('rstudio', 'proxy end', { url: req.url, status: proxyRes?.statusCode });
 });
 
@@ -413,7 +413,7 @@ const jupyterProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-jupyterProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+jupyterProxy.on('error', (err: Error, _req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
   log.proxyError('JupyterLab proxy error', { error: err.message });
   if (res instanceof http.ServerResponse && !res.headersSent) {
     res.writeHead(502, { 'Content-Type': 'text/html' });
@@ -512,13 +512,13 @@ function hasRunningSession(): boolean {
 }
 
 // Landing page - always serve React launcher (no auto-redirect)
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   log.ui('Serving launcher page');
   res.sendFile(path.join(__dirname, 'ui', 'dist', 'index.html'));
 });
 
 // Serve the menu iframe content
-app.get('/hpc-menu-frame', (req: Request, res: Response) => {
+app.get('/hpc-menu-frame', (_req: Request, res: Response) => {
   log.ui('Serving floating menu iframe');
   res.sendFile(path.join(__dirname, 'public', 'menu-frame.html'));
 });
@@ -624,7 +624,7 @@ app.use('/port', (req: Request, res: Response) => {
 });
 
 // Global error handler - catches HpcError and returns structured JSON
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HpcError) {
     log.error(`${err.name}: ${err.message}`, err.details);
     return res.status(err.code).json(err.toJSON());

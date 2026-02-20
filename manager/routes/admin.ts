@@ -75,7 +75,7 @@ function setStateManager(sm: StateManager): void {
  * GET /api/admin
  * Returns the admin content index
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const index = await contentManager.loadIndex();
   res.json(index);
 }));
@@ -99,7 +99,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/admin/index
  * Returns the admin content index (same as /)
  */
-router.get('/index', asyncHandler(async (req: Request, res: Response) => {
+router.get('/index', asyncHandler(async (_req: Request, res: Response) => {
   const index = await contentManager.loadIndex();
   res.json(index);
 }));
@@ -144,7 +144,7 @@ interface User {
  * GET /api/admin/users
  * List all users
  */
-router.get('/users', asyncHandler(async (req: Request, res: Response) => {
+router.get('/users', asyncHandler(async (_req: Request, res: Response) => {
   const users = dbUsers.getAllUsers() as Map<string, User>;
   const userList: Array<{
     username: string;
@@ -365,7 +365,7 @@ router.post('/users/bulk',
  * GET /api/admin/partitions
  * Get all partition limits with full details
  */
-router.get('/partitions', asyncHandler(async (req: Request, res: Response) => {
+router.get('/partitions', asyncHandler(async (_req: Request, res: Response) => {
   log.debug('GET /api/admin/partitions called');
   const allPartitions = partitions.getAllPartitions();
   const lastUpdated = partitions.getLastUpdated();
@@ -414,7 +414,7 @@ router.post('/partitions/refresh', asyncHandler(async (req: AuthenticatedRequest
  * GET /api/admin/reports/usage
  * Get usage statistics
  */
-router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) => {
+router.get('/reports/usage', asyncHandler(async (_req: Request, res: Response) => {
   const users = dbUsers.getAllUsers() as Map<string, User>;
 
   // Basic stats
@@ -450,7 +450,7 @@ router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/admin/reports/clusters
  * Get cluster health summary
  */
-router.get('/reports/clusters', asyncHandler(async (req: Request, res: Response) => {
+router.get('/reports/clusters', asyncHandler(async (_req: Request, res: Response) => {
   if (!stateManager) {
     return res.status(503).json({ error: 'State manager not available' });
   }

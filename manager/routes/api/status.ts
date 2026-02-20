@@ -47,7 +47,7 @@ export function createStatusRouter(stateManager: StateManager): Router {
   }
 
   // Health check - returns 503 if state manager not ready
-  router.get('/health', (req: Request, res: Response) => {
+  router.get('/health', (_req: Request, res: Response) => {
     if (!stateManager.isReady()) {
       return res.status(503).json({ status: 'starting', ready: false });
     }
