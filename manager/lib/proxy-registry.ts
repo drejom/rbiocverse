@@ -14,6 +14,7 @@ import type { ProxyTargetUrl, StartCallback } from 'http-proxy';
 import { PortRegistry } from './ports';
 import { getCookieToken, isVscodeRootPath } from './proxy-helpers';
 import { log } from './logger';
+import { config } from '../config';
 
 // Activity update callback type
 type OnActivityCallback = () => void;
@@ -392,7 +393,14 @@ function createPortProxy(sessionKey: string, localPort: number): Server {
  * @throws If session key not found in PortRegistry
  */
 export function createSessionProxy(sessionKey: string, ide: 'vscode' | 'rstudio' | 'jupyter' | 'port'): Server {
-  const localPort = PortRegistry.get(sessionKey);
+  // The 'port' proxy targets the fixed hpc-proxy local port (config.hpcProxyLocalPort,
+  // default 9000). It is forwarded as an extra SSH -L when VS Code launches with
+  // options.proxyPort set. No PortRegistry entry is created for it, so we must not
+  // look one up.
+  const localPort = ide === 'port'
+    ? config.hpcProxyLocalPort
+    : PortRegistry.get(sessionKey);
+
   if (localPort === undefined) {
     throw new Error(`No port registered for session key: ${sessionKey}. Has the tunnel been started?`);
   }

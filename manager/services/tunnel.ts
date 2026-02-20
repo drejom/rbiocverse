@@ -10,6 +10,7 @@ import findProcess from 'find-process';
 import { config, clusters, ides } from '../config';
 import { log } from '../lib/logger';
 import * as ports from '../lib/ports';
+import { destroySessionProxy, destroyAllProxies } from '../lib/proxy-registry';
 
 interface TunnelStartOptions {
   remotePort?: number;
@@ -409,10 +410,12 @@ class TunnelService {
   stop(sessionKey: string): void;
   stop(hpcName: string, ide?: string, user?: string): void;
   stop(sessionKeyOrHpcName: string, ide?: string, user?: string): void {
-    // Check if this is the overload(sessionKey) call:
-    // When called as stop(sessionKey), ide and user are undefined (not null).
-    // When called as stop(hpcName, ide?, user?), ide may be a string or undefined.
-    const isSessionKeyOverload = (ide === undefined && user === undefined);
+    // Distinguish stop(sessionKey) from stop(hpcName, ide?, user?):
+    // If ide is not provided AND the arg is a known tunnel key, treat as sessionKey.
+    // stop('gemini') with no ide would have ide===undefined too, but 'gemini' alone
+    // is never a valid sessionKey (format: user-hpc-ide), so the tunnels.has() check
+    // is unambiguous.
+    const isSessionKeyOverload = (ide === undefined && this.tunnels.has(sessionKeyOrHpcName));
 
     if (isSessionKeyOverload) {
       // sessionKey overload
@@ -423,6 +426,7 @@ class TunnelService {
         tunnel.kill();
         this.tunnels.delete(sessionKey);
         ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
       }
       return;
     }
@@ -439,6 +443,7 @@ class TunnelService {
         tunnel.kill();
         this.tunnels.delete(sessionKey);
         ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
       }
     } else {
       // Stop all tunnels for this user on this HPC
@@ -449,6 +454,7 @@ class TunnelService {
           tunnel.kill();
           this.tunnels.delete(key);
           ports.PortRegistry.delete(key);
+          destroySessionProxy(key);
         }
       }
     }
@@ -510,6 +516,7 @@ class TunnelService {
       ports.PortRegistry.delete(key);
     }
     this.tunnels.clear();
+    destroyAllProxies();
   }
 }
 
