@@ -79,7 +79,7 @@ export const tunnelService = new TunnelService();
 // Client uses time-aware adaptive polling (15s-1hr) with exponential backoff
 // This ensures multi-user environments see updates immediately via cache invalidation
 // while dramatically reducing SSH load for stable long-running jobs (6-24+ hours)
-export const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL || '1800000'); // 30 minutes default
+export const STATUS_CACHE_TTL = parseInt(process.env.STATUS_CACHE_TTL || '1800000', 10); // 30 minutes default
 
 // Timing constants for launch/stop operations
 export const SLURM_CANCEL_DELAY_MS = 1000;    // Wait for SLURM to process cancellation

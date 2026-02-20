@@ -263,7 +263,7 @@ export function parseMemToMB(mem: string): number {
   const match = mem.match(/^(\d+)([gGmM])$/);
   if (!match) return 0;
   const [, value, unit] = match;
-  return unit.toLowerCase() === 'g' ? parseInt(value) * 1024 : parseInt(value);
+  return parseInt(value, 10) * (unit.toLowerCase() === 'g' ? 1024 : 1);
 }
 
 /**
@@ -328,8 +328,9 @@ export function validateSbatchInputs(
   hpc: string,
   gpu: string = ''
 ): void {
+  const cpuVal = parseInt(cpus, 10);
   // CPUs: must be integer 1-128
-  if (!/^\d+$/.test(cpus) || parseInt(cpus) < 1 || parseInt(cpus) > 128) {
+  if (!/^\d+$/.test(cpus) || cpuVal < 1 || cpuVal > 128) {
     throw new Error('Invalid CPU value: must be integer 1-128');
   }
 
@@ -346,7 +347,6 @@ export function validateSbatchInputs(
   // Validate against partition limits
   const limits = getPartitionLimits(hpc, gpu);
   if (limits) {
-    const cpuVal = parseInt(cpus);
     const memMB = parseMemToMB(mem);
     const timeSecs = parseTimeToSeconds(time);
     const maxTimeSecs = parseTimeToSeconds(limits.maxTime);
