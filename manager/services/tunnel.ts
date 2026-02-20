@@ -410,9 +410,9 @@ class TunnelService {
   stop(hpcName: string, ide?: string, user?: string): void;
   stop(sessionKeyOrHpcName: string, ide?: string, user?: string): void {
     // Check if this is the overload(sessionKey) call:
-    // If the second argument is null and ide is null, treat first arg as sessionKey
-    // Otherwise treat first arg as hpcName (to maintain existing behavior)
-    const isSessionKeyOverload = (ide === null && user === null);
+    // When called as stop(sessionKey), ide and user are undefined (not null).
+    // When called as stop(hpcName, ide?, user?), ide may be a string or undefined.
+    const isSessionKeyOverload = (ide === undefined && user === undefined);
 
     if (isSessionKeyOverload) {
       // sessionKey overload

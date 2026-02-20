@@ -22,16 +22,30 @@ describe('ports', () => {
 
     it('should return a port that is actually free (bindable)', async () => {
       const { allocateLocalPort } = loadPorts();
-      const port = await allocateLocalPort();
+      const maxAttempts = 3;
 
-      // Verify the port is free by binding to it ourselves
-      await new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.on('error', reject);
-        server.listen(port, '127.0.0.1', () => {
-          server.close(resolve);
-        });
-      });
+      // allocateLocalPort() does not reserve the port (TOCTOU window), so another
+      // process could claim it between allocation and our bind attempt.
+      // Retry a few times on EADDRINUSE to reduce flakiness on busy CI hosts.
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const port = await allocateLocalPort();
+
+        try {
+          await new Promise((resolve, reject) => {
+            const server = net.createServer();
+            server.on('error', reject);
+            server.listen(port, '127.0.0.1', () => {
+              server.close(resolve);
+            });
+          });
+          return; // Successfully bound; test passes
+        } catch (err) {
+          if (err && err.code === 'EADDRINUSE' && attempt < maxAttempts) {
+            continue; // Port was claimed between allocation and bind; retry
+          }
+          throw err;
+        }
+      }
     });
 
     it('should return unique ports across multiple concurrent calls', async () => {

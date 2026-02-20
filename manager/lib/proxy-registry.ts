@@ -261,8 +261,9 @@ function createRstudioProxy(sessionKey: string, localPort: number): Server {
     }
 
     if (location) {
+      const localLoopbackPattern = new RegExp(`^https?://127\\.0\\.0\\.1:${localPort}`);
       let rewritten = location
-        .replace(/^https?:\/\/127\.0\.0\.1:8787/, '/rstudio-direct')
+        .replace(localLoopbackPattern, '/rstudio-direct')
         .replace(/^https?:\/\/[^/]+\/rstudio-direct/, '/rstudio-direct');
 
       if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
@@ -445,7 +446,7 @@ export function getProxy(sessionKey: string): Server | undefined {
       oldPort: sessionProxy.port,
       newPort: currentPort,
     });
-    ProxyRegistry.delete(sessionKey);
+    destroySessionProxy(sessionKey);
     return undefined;
   }
 
