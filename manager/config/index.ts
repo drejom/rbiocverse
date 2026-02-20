@@ -105,7 +105,7 @@ function parseAdditionalPorts(envValue: string | undefined, defaultValue = '5500
     if (envValue === '') return [];
     return envValue
       .split(',')
-      .map(p => parseInt(p.trim()))
+      .map(p => parseInt(p.trim(), 10))
       .filter(p => !isNaN(p) && p > 0 && p < 65536);
   }
   // Default to Live Server port
