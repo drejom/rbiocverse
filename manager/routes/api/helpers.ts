@@ -294,36 +294,10 @@ export async function fetchClusterStatus(stateManager: StateManager): Promise<Re
   };
 }
 
-/**
- * Build session key (user-hpc-ide format)
- * @param user - Username
- * @param hpc - HPC cluster name
- * @param ide - IDE type
- * @returns Session key string
- */
-export function buildSessionKey(user: string, hpc: string, ide: string): string {
-  const effectiveUser = user || config.hpcUser;
-  return `${effectiveUser}-${hpc}-${ide}`;
-}
-
-/**
- * Parse session key (user-hpc-ide format)
- * @param key - Session key string
- * @returns Parsed user, hpc, ide or null if invalid
- */
-export function parseSessionKey(key: string): { user: string; hpc: string; ide: string } | null {
-  const parts = key.split('-');
-  if (parts.length >= 3) {
-    const ide = parts.pop()!;
-    const hpc = parts.pop()!;
-    const user = parts.join('-');
-    return { user, hpc, ide };
-  }
-  return null;
-}
-
 // Re-export PollingInfo type used in StateManager interface
 export type { PollingInfo } from '../../lib/state/types';
+// Re-export session key utilities from canonical location
+export { buildSessionKey, parseSessionKey } from '../../lib/state/types';
 // Re-export ReleaseConfig for consumers
 export type { IdeConfig };
 export type { ReleaseConfig };
