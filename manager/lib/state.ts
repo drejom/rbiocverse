@@ -91,9 +91,7 @@ class StateManager {
       this.state,
       () => this.hpcServiceFactory,
       () => this.pollingStopped,
-      (user, hpc, ide) => this.sessionManager.clearActiveSessionIfMatches(user, hpc, ide),
       () => this.save(),
-      () => this.onSessionCleared,
       (user, hpc, ide, options) => this.sessionManager.clearSession(user, hpc, ide, options),
     );
 

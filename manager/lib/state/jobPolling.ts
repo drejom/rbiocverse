@@ -20,9 +20,7 @@ export class JobPoller {
     private state: AppState,
     private getHpcServiceFactory: () => HpcServiceFactory | null,
     private isPollingStopped: () => boolean,
-    private clearActiveSessionIfMatches: (user: string | null, hpc: string, ide: string) => void,
     private save: () => Promise<void>,
-    private getOnSessionCleared: () => ((user: string, hpc: string, ide: string) => void) | null,
     private clearSession: (user: string, hpc: string, ide: string, options?: { endReason?: string }) => Promise<void>,
   ) {}
 

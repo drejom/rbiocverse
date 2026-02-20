@@ -39,7 +39,6 @@ class AdminNotifier {
   private smtpUser: string | undefined;
   private smtpPass: string | undefined;
   private fromAddress: string;
-  private lastDigestTime: Date | null = null;
   private transporter: Transporter | null = null;
 
   constructor(config: AdminNotifierConfig = {}) {
@@ -196,7 +195,6 @@ class AdminNotifier {
         text: body,
       });
       log.info('Admin email sent', { to: this.adminEmail, subject });
-      this.lastDigestTime = new Date();
       return true;
     } catch (err) {
       log.error('Failed to send admin email', { to: this.adminEmail, subject, ...errorDetails(err) });

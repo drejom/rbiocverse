@@ -30,7 +30,6 @@ interface SearchResult {
 
 interface ContentManagerOptions {
   cacheTTL?: number;
-  watchFiles?: boolean;
 }
 
 interface SearchOptions {
@@ -41,7 +40,6 @@ interface SearchOptions {
 class ContentManager {
   private contentDir: string;
   private cacheTTL: number;
-  private watchFiles: boolean;
 
   // Cache storage
   private indexCache: ContentIndex | null = null;
@@ -61,7 +59,6 @@ class ContentManager {
   constructor(contentDir: string, options: ContentManagerOptions = {}) {
     this.contentDir = contentDir;
     this.cacheTTL = options.cacheTTL ?? 300000; // 5 minutes default
-    this.watchFiles = options.watchFiles ?? false;
   }
 
   /**
@@ -159,7 +156,7 @@ class ContentManager {
 
     const icons = await this.getIcons();
 
-    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (match, iconName: string, sizeStr?: string) => {
+    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (_match, iconName: string, sizeStr?: string) => {
       const size = sizeStr || '20';
       const svg = icons[iconName];
       if (svg) {

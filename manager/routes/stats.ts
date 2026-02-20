@@ -73,7 +73,7 @@ interface PartitionLimits {
  *
  * Returns current cluster status without sensitive data.
  */
-router.get('/clusters', asyncHandler(async (req: Request, res: Response) => {
+router.get('/clusters', asyncHandler(async (_req: Request, res: Response) => {
   if (!stateManager) {
     return res.status(503).json({ error: 'Stats service not available' });
   }
@@ -179,7 +179,7 @@ router.get('/usage', asyncHandler(async (req: Request, res: Response) => {
  * Help content can use {{variableName}} syntax.
  * These variables are computed from recent data.
  */
-router.get('/variables', asyncHandler(async (req: Request, res: Response) => {
+router.get('/variables', asyncHandler(async (_req: Request, res: Response) => {
   const days = 7; // Week of data for averages
 
   const capacity = analytics.getCapacityMetrics(days) as {
@@ -304,7 +304,7 @@ function transformPartitionForApi(limits: PartitionLimits): Record<string, unkno
  *
  * Returns dynamic partition data for resource validation.
  */
-router.get('/partitions', asyncHandler(async (req: Request, res: Response) => {
+router.get('/partitions', asyncHandler(async (_req: Request, res: Response) => {
   const allPartitions = partitions.getAllPartitions() as Record<string, Record<string, PartitionLimits>>;
   const lastUpdated = partitions.getLastUpdated();
 
