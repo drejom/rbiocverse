@@ -9,11 +9,10 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
-import path from 'path';
 import httpProxy from 'http-proxy';
-import type * as HttpProxy from 'http-proxy';
+import path from 'path';
 import { StateManager } from './lib/state';
-import { config, ides } from './config';
+import { config } from './config';
 import HpcService from './services/hpc';
 import createApiRouter from './routes/api';
 import authRouter from './routes/auth';
@@ -23,16 +22,11 @@ import statsRouter from './routes/stats';
 import clientErrorsRouter from './routes/client-errors';
 import { HpcError } from './lib/errors';
 import { log } from './lib/logger';
-import { getCookieToken, isVscodeRootPath } from './lib/proxy-helpers';
 import * as partitionService from './lib/partitions';
+import * as proxyRegistry from './lib/proxy-registry';
 
-// Types
-interface IdeConfig {
-  port: number;
-  name: string;
-  icon?: string;
-  proxyPath?: string;
-}
+// Type alias for the proxy server instance
+type Server = ReturnType<typeof httpProxy.createProxyServer>;
 
 interface Session {
   status?: string;
@@ -97,6 +91,10 @@ function getSessionToken(ide: string): string | null {
   return state.sessions[sessionKey]?.token || null;
 }
 
+// Register session token and activity callbacks with ProxyRegistry
+proxyRegistry.setGetSessionToken(getSessionToken);
+proxyRegistry.setOnActivity(updateActivity);
+
 // Mount auth routes (before general /api to avoid conflicts)
 app.use('/api/auth', authRouter);
 
@@ -126,389 +124,42 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Assets are built to /assets/ by Vite
 app.use('/assets', express.static(path.join(__dirname, 'ui', 'dist', 'assets')));
 
-// Proxy for forwarding to VS Code when tunnel is active
-const vscodeProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: `http://127.0.0.1:${(ides.vscode as IdeConfig).port}`,
-  changeOrigin: true,
-});
-
-vscodeProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  log.proxyError('VS Code proxy error', { error: err.message });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>VS Code not available</h1><p><a href="/">Back to launcher</a></p>');
-  }
-});
-
-// Log VS Code proxy events for debugging (enable with DEBUG_COMPONENTS=vscode)
-// Rewrite path and inject connection token for VS Code authentication
-vscodeProxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
-  // VS Code serve-web 1.107+ auth flow:
-  // 1. Token must be passed at root path: /?tkn=TOKEN
-  // 2. Server sets vscode-tkn cookie and redirects to --server-base-path
-  // 3. Subsequent requests use cookie for auth
-  //
-  // Important: We must verify the cookie token matches our session token.
-  // Stale cookies from previous sessions cause 403 errors because VS Code
-  // validates the token against its current session.
-  const cookieToken = getCookieToken(req.headers.cookie || '');
-  const sessionToken = getSessionToken('vscode');
-  const hasValidCookie = cookieToken && sessionToken && cookieToken === sessionToken;
-
-  const originalUrl = (req as Request).originalUrl || req.url || '';
-
-  // Determine the target path
-  let targetPath: string;
-  if (originalUrl.startsWith('/vscode-direct')) {
-    targetPath = originalUrl;
-  } else if (originalUrl.startsWith('/code')) {
-    targetPath = originalUrl.replace(/^\/code/, '/vscode-direct');
-  } else {
-    targetPath = originalUrl;
-  }
-
-  // Re-authenticate if:
-  // 1. No cookie at all, or
-  // 2. Cookie token doesn't match session token (stale cookie from old session)
-  const isRootPath = isVscodeRootPath(targetPath);
-  if (!hasValidCookie && sessionToken && isRootPath) {
-    // Initial page load or stale cookie - use root auth flow to get fresh cookie
-    proxyReq.path = `/?tkn=${sessionToken}`;
-    log.debugFor('vscode', 'auth via root path', {
-      originalUrl,
-      reason: cookieToken ? 'stale cookie' : 'no cookie',
-    });
-  } else {
-    // Cookie matches session token, or sub-resource request
-    proxyReq.path = targetPath;
-  }
-
-  log.debugFor('vscode', 'proxyReq', {
-    method: req.method,
-    url: req.url,
-    path: proxyReq.path,
-    hasValidCookie,
-    hasCookie: !!cookieToken,
-    hasSessionToken: !!sessionToken,
-    isRootPath,
-  });
-});
-
-vscodeProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingMessage, res: http.ServerResponse) => {
-  // On 403 Forbidden with stale cookie, intercept and redirect to re-authenticate
-  // This handles the case where browser sends stale cookie from previous session
-  if (proxyRes.statusCode === 403) {
-    const cookieToken = getCookieToken(req.headers.cookie || '');
-    if (cookieToken) {
-      log.warn('VS Code 403 with stale cookie, redirecting to re-auth', { url: req.url });
-      // Consume the original response to prevent it being sent
-      proxyRes.resume();
-      // Clear stale cookies and redirect to root for fresh auth
-      res.setHeader('Set-Cookie', [
-        'vscode-tkn=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-        'vscode-secret-key-path=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-        'vscode-cli-secret-half=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-      ]);
-      res.writeHead(302, { Location: '/code/' });
-      res.end();
-      return;
-    }
-  }
-
-  // Rewrite Set-Cookie headers to work through proxy
-  // VS Code sets cookies for the backend domain, but browser accesses via proxy domain
-  // We need to strip domain/path restrictions so cookies work through proxy
-  const setCookies = proxyRes.headers['set-cookie'];
-  if (setCookies && proxyRes.statusCode !== 403) {
-    proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
-      // Remove Domain= attribute (let browser use current domain)
-      // Change Path= to / so cookies work for all proxy paths
-      return cookie
-        .replace(/;\s*Domain=[^;]*/gi, '')
-        .replace(/;\s*Path=[^;]*/gi, '; Path=/');
-    });
-    log.debugFor('vscode', 'rewrote cookies', { original: setCookies, rewritten: proxyRes.headers['set-cookie'] });
-  }
-
-  // Rewrite Location headers to point back through proxy
-  const location = proxyRes.headers['location'];
-  if (location) {
-    log.debugFor('vscode', 'redirect location', { location, originalUrl: (req as Request).originalUrl });
-  }
-
-  log.debugFor('vscode', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
-  updateActivity();
-});
-
-vscodeProxy.on('open', () => {
-  log.debugFor('vscode', 'proxy socket opened');
-  updateActivity();
-});
-
-vscodeProxy.on('close', () => {
-  log.debugFor('vscode', 'proxy connection closed');
-});
-
-// Proxy for forwarding to RStudio when tunnel is active
-// proxyTimeout: 5 minutes for long-polling (RStudio uses HTTP long-poll for updates)
-// timeout: 5 minutes for connection timeout
-const rstudioProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: `http://127.0.0.1:${(ides.rstudio as IdeConfig).port}`,
-  changeOrigin: true,
-  proxyTimeout: 5 * 60 * 1000,  // 5 minutes for long-polling
-  timeout: 5 * 60 * 1000,       // 5 minutes connection timeout
-  // Fix "Parse Error: Data after Connection: close" with RStudio
-  // rserver sends Connection: close but http-proxy keeps connection open
-  agent: new http.Agent({ keepAlive: false }),
-});
-
-rstudioProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  const code = 'code' in err ? (err as { code: string }).code : undefined;
-  log.proxyError('RStudio proxy error', { error: err.message, code, url: req?.url, stack: err.stack });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>RStudio not available</h1><p><a href="/">Back to launcher</a></p>');
-  }
-});
-
-// Log all proxy events for debugging (enable with DEBUG_COMPONENTS=rstudio)
-rstudioProxy.on('start', ((req: http.IncomingMessage, res: http.ServerResponse, target: HttpProxy.ProxyTargetUrl) => {
-  const targetString = typeof target === 'string' ? target : (target && 'href' in target ? (target as { href: string | null }).href : JSON.stringify(target));
-  log.debugFor('rstudio', 'proxy start', { url: req.url, target: targetString });
-}) as HttpProxy.StartCallback);
-
-rstudioProxy.on('end', (req: http.IncomingMessage, res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
-  log.debugFor('rstudio', 'proxy end', { url: req.url, status: proxyRes?.statusCode });
-});
-
-// Log when proxy successfully connects to target
-rstudioProxy.on('open', () => {
-  log.debugFor('rstudio', 'proxy socket opened');
-  updateActivity();
-});
-
-rstudioProxy.on('close', () => {
-  log.debugFor('rstudio', 'proxy connection closed');
-});
-
-// Log proxy requests for debugging
-rstudioProxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
-  proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
-  log.debugFor('rstudio', 'proxyReq', {
-    method: req.method,
-    url: req.url,
-    cookies: req.headers.cookie || 'none',
-  });
-});
-
-// Rewrite RStudio redirects and fix cookie/header attributes for iframe embedding
-// Handle absolute URLs, root-relative redirects, and cookie path/secure issues
-rstudioProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingMessage) => {
-  const status = proxyRes.statusCode;
-  const location = proxyRes.headers['location'];
-  const setCookies = proxyRes.headers['set-cookie'];
-
-  // Remove X-Frame-Options header - RStudio sets 'deny' which blocks iframe embedding
-  // Our wrapper loads RStudio in an iframe, so we must strip this header
-  delete proxyRes.headers['x-frame-options'];
-
-  // Debug: log ALL responses to diagnose proxy issues
-  const isRpc = req.url?.includes('/rpc/');
-  log.debugFor('rstudio', 'proxyRes', {
-    status,
-    url: req.url,
-    location: location || 'none',
-    setCookies: setCookies ? 'yes' : 'none',
-    contentLength: proxyRes.headers['content-length'] || 'unknown',
-  });
-
-  // For RPC calls, log when data starts flowing
-  if (isRpc) {
-    let dataSize = 0;
-    proxyRes.on('data', (chunk: Buffer) => {
-      dataSize += chunk.length;
-      if (dataSize <= chunk.length) { // First chunk
-        log.debugFor('rstudio', 'RPC data start', { url: req.url, firstChunkSize: chunk.length });
-      }
-    });
-    proxyRes.on('end', () => {
-      log.debugFor('rstudio', 'RPC data end', { url: req.url, totalSize: dataSize });
-    });
-    proxyRes.on('error', (err: Error) => {
-      log.error(`RStudio RPC stream error`, { url: req.url, error: err.message });
-    });
-  }
-
-  // Rewrite Set-Cookie headers for iframe compatibility
-  // RStudio is loaded in an iframe, which requires SameSite=None; Secure for cookies
-  // to be sent in cross-context requests (even same-origin iframes in some browsers)
-  if (setCookies && Array.isArray(setCookies)) {
-    proxyRes.headers['set-cookie'] = setCookies.map(cookie => {
-      let modified = cookie;
-
-      // DO NOT modify cookie values - RStudio signs them with HMAC and any
-      // modification (like URL-encoding pipes) will cause signature validation
-      // to fail, resulting in redirect loops.
-
-      // Keep path=/rstudio-direct - RStudio validates cookies match www-root-path
-      // Changing to path=/ breaks rsession spawning (rserver rejects mismatched cookies)
-      // NO trailing slash for RFC 6265 compliance
-      modified = modified.replace(/path=\/rstudio-direct\/?/i, 'path=/rstudio-direct');
-
-      // For iframe compatibility: SameSite=None requires Secure flag
-      // Remove any existing SameSite directive first
-      modified = modified.replace(/;\s*samesite=[^;]*/gi, '');
-
-      // Ensure Secure flag is present (required for SameSite=None)
-      if (!/;\s*secure/i.test(modified)) {
-        modified = modified + '; Secure';
-      }
-
-      // Add SameSite=None for iframe cookie support
-      modified = modified + '; SameSite=None';
-
-      if (modified !== cookie) {
-        log.debugFor('rstudio', `Cookie rewritten: ${cookie} -> ${modified}`);
-      }
-      return modified;
-    });
-  }
-
-  if (location) {
-    let rewritten = location;
-
-    // Rewrite absolute URLs pointing to the internal RStudio port
-    rewritten = rewritten.replace(
-      /^https?:\/\/127\.0\.0\.1:8787/,
-      '/rstudio-direct'
-    );
-
-    // Rewrite absolute URLs pointing to external host (RStudio generates these)
-    // e.g., https://hpc.omeally.com:443/rstudio-direct/ -> /rstudio-direct/
-    rewritten = rewritten.replace(
-      /^https?:\/\/[^/]+\/rstudio-direct/,
-      '/rstudio-direct'
-    );
-
-    // Rewrite root-relative redirects (e.g., "/" or "/auth-sign-in")
-    // that aren't already prefixed with our proxy path
-    if (rewritten.startsWith('/') && !rewritten.startsWith('/rstudio-direct')) {
-      rewritten = '/rstudio-direct' + rewritten;
-    }
-
-    if (rewritten !== location) {
-      proxyRes.headers['location'] = rewritten;
-      log.debugFor('rstudio', `redirect rewritten: ${location} -> ${rewritten}`);
-    }
-  }
-  updateActivity();
-});
-
-// Proxy for JupyterLab (port 8888)
-const jupyterProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: `http://127.0.0.1:${(ides.jupyter as IdeConfig).port}`,
-  changeOrigin: true,
-});
-
-jupyterProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  log.proxyError('JupyterLab proxy error', { error: err.message });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/html' });
-    res.end('<h1>JupyterLab not available</h1><p><a href="/">Back to launcher</a></p>');
-  }
-});
-
-// Log Jupyter proxy events for debugging (enable with DEBUG_COMPONENTS=jupyter)
-// Rewrite path and inject authentication token for JupyterLab
-jupyterProxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
-  const originalUrl = (req as Request).originalUrl || req.url || '';
-
-  // Jupyter expects all requests at /jupyter-direct (--ServerApp.base_url)
-  // Requests from /jupyter/* need to be rewritten to /jupyter-direct/*
-  // Requests from /jupyter-direct/* already have correct path in originalUrl
-  if (originalUrl.startsWith('/jupyter-direct')) {
-    proxyReq.path = originalUrl;
-  } else if (originalUrl.startsWith('/jupyter')) {
-    // Rewrite /jupyter/foo -> /jupyter-direct/foo
-    proxyReq.path = originalUrl.replace(/^\/jupyter/, '/jupyter-direct');
-  }
-
-  // JupyterLab uses query param ?token=TOKEN for authentication
-  // Inject token if we have one and it's not already in the URL
-  const token = getSessionToken('jupyter');
-  const hasTokenInUrl = proxyReq.path.includes('token=');
-  if (token && !hasTokenInUrl) {
-    const separator = proxyReq.path.includes('?') ? '&' : '?';
-    proxyReq.path = `${proxyReq.path}${separator}token=${token}`;
-  }
-
-  log.debugFor('jupyter', 'proxyReq', {
-    method: req.method,
-    url: req.url,
-    path: proxyReq.path,
-    hasSessionToken: !!token,
-    tokenInjected: !!(token && !hasTokenInUrl),
-  });
-});
-
-jupyterProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingMessage) => {
-  log.debugFor('jupyter', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
-  updateActivity();
-});
-
-jupyterProxy.on('open', () => {
-  updateActivity();
-  log.debugFor('jupyter', 'proxy socket opened');
-});
-
-jupyterProxy.on('close', () => {
-  log.debugFor('jupyter', 'proxy connection closed');
-});
-
-// Proxy for hpc-proxy port routing (dev servers via /port/:port/*)
-// Routes /port/:port/* requests to hpc-proxy which forwards to localhost:port on HPC node
-const portProxy = httpProxy.createProxyServer({
-  ws: true,
-  target: `http://127.0.0.1:${config.hpcProxyLocalPort}`,
-  changeOrigin: true,
-});
-
-portProxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
-  log.debugFor('port-proxy', 'proxy error', { error: err.message, url: req.url });
-  if (res instanceof http.ServerResponse && !res.headersSent) {
-    res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('Dev server unavailable. Is it running?');
-  }
-});
-
-portProxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
-  log.debugFor('port-proxy', 'proxyReq', {
-    method: req.method,
-    url: req.url,
-    path: proxyReq.path,
-  });
-});
-
-portProxy.on('proxyRes', (proxyRes: http.IncomingMessage, req: http.IncomingMessage) => {
-  log.debugFor('port-proxy', 'proxyRes', { status: proxyRes.statusCode, url: req.url });
-  updateActivity();
-});
-
-portProxy.on('open', () => {
-  updateActivity();
-  log.debugFor('port-proxy', 'proxy socket opened');
-});
-
-portProxy.on('close', () => {
-  log.debugFor('port-proxy', 'proxy connection closed');
-});
-
 // Check if any session is running
 function hasRunningSession(): boolean {
   return Object.values(state.sessions).some(s => s && s.status === 'running');
+}
+
+/**
+ * Get or create a proxy for the active session's IDE
+ * Creates a proxy instance if one doesn't exist for the session,
+ * or returns the existing proxy from ProxyRegistry.
+ */
+function getSessionProxy(ide: 'vscode' | 'rstudio' | 'jupyter' | 'port'): Server | undefined {
+  const { activeSession } = state;
+  if (!activeSession) {
+    return undefined;
+  }
+
+  const sessionKey = `${activeSession.user}-${activeSession.hpc}-${ide}`;
+
+  // Try to get existing proxy
+  let proxy = proxyRegistry.getProxy(sessionKey);
+  if (proxy) {
+    return proxy;
+  }
+
+  // Create new proxy for this session
+  try {
+    proxy = proxyRegistry.createSessionProxy(sessionKey, ide);
+    return proxy;
+  } catch (err) {
+    log.warn('Failed to create session proxy', {
+      sessionKey,
+      ide,
+      error: (err as Error).message,
+    });
+    return undefined;
+  }
 }
 
 // Landing page - always serve React launcher (no auto-redirect)
@@ -529,7 +180,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     if (!hasRunningSession()) {
       return res.redirect('/');
     }
-    return vscodeProxy.web(req, res);
+    const proxy = getSessionProxy('vscode');
+    if (proxy) {
+      return proxy.web(req, res);
+    }
+    return res.redirect('/');
   }
   next();
 });
@@ -546,7 +201,12 @@ app.use('/code', (req: Request, res: Response) => {
   }
 
   // All other /code/* paths proxy directly
-  vscodeProxy.web(req, res);
+  const proxy = getSessionProxy('vscode');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // Direct proxy to VS Code (used by wrapper iframe)
@@ -554,7 +214,12 @@ app.use('/vscode-direct', (req: Request, res: Response) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
-  vscodeProxy.web(req, res);
+  const proxy = getSessionProxy('vscode');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // RStudio proxy - serves at /rstudio/
@@ -569,7 +234,12 @@ app.use('/rstudio', (req: Request, res: Response) => {
   }
 
   // All other /rstudio/* paths proxy directly
-  rstudioProxy.web(req, res);
+  const proxy = getSessionProxy('rstudio');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // Direct proxy to RStudio (used by wrapper iframe)
@@ -583,7 +253,12 @@ app.use('/rstudio-direct', (req: Request, res: Response) => {
     log.debugFor('rstudio', 'No session, redirecting to /');
     return res.redirect('/');
   }
-  rstudioProxy.web(req, res);
+  const proxy = getSessionProxy('rstudio');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // JupyterLab proxy - serves at /jupyter/
@@ -598,7 +273,12 @@ app.use('/jupyter', (req: Request, res: Response) => {
   }
 
   // All other /jupyter/* paths proxy directly
-  jupyterProxy.web(req, res);
+  const proxy = getSessionProxy('jupyter');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // Direct proxy to JupyterLab (used by wrapper iframe)
@@ -607,7 +287,12 @@ app.use('/jupyter-direct', (req: Request, res: Response) => {
   if (!hasRunningSession()) {
     return res.redirect('/');
   }
-  jupyterProxy.web(req, res);
+  const proxy = getSessionProxy('jupyter');
+  if (proxy) {
+    proxy.web(req, res);
+  } else {
+    res.redirect('/');
+  }
 });
 
 // Route /port/:port/* through hpc-proxy for dev server access
@@ -617,10 +302,15 @@ app.use('/port', (req: Request, res: Response) => {
     log.debugFor('port-proxy', 'rejected - no running session');
     return res.redirect('/');
   }
+  const proxy = getSessionProxy('port');
+  if (!proxy) {
+    res.redirect('/');
+    return;
+  }
   // Preserve full path - Express strips /port prefix, but hpc-proxy needs it
   req.url = req.originalUrl;
   log.debugFor('port-proxy', `${req.method} ${req.originalUrl}`);
-  portProxy.web(req, res);
+  proxy.web(req, res);
 });
 
 // Global error handler - catches HpcError and returns structured JSON
@@ -663,37 +353,47 @@ stateManager.load().then(async () => {
   // Handle WebSocket upgrades for VS Code, RStudio, JupyterLab, Live Server, Shiny, and port proxy
   server.on('upgrade', (req: http.IncomingMessage, socket: import('stream').Duplex, head: Buffer) => {
     log.proxy(`WebSocket upgrade: ${req.url}`);
-    if (hasRunningSession()) {
-      // Port proxy WebSocket (dev servers on custom ports)
-      if (req.url?.startsWith('/port/')) {
-        log.debugFor('port-proxy', `WebSocket upgrade: ${req.url}`);
-        portProxy.ws(req, socket, head);
-      }
-      // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
-      else if (req.url?.startsWith('/jupyter')) {
-        log.debugFor('jupyter', `WebSocket upgrade: ${req.url}`);
-        jupyterProxy.ws(req, socket, head);
-      }
-      // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
-      else if (req.url?.startsWith('/rstudio')) {
-        log.debugFor('rstudio', `WebSocket upgrade: ${req.url}`);
-        rstudioProxy.ws(req, socket, head);
-      }
-      // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
-      else if (req.url?.startsWith('/code') ||
-          req.url?.startsWith('/vscode-direct') ||
-          req.url?.startsWith('/stable-') ||
-          req.url?.startsWith('/vscode-') ||
-          req.url?.startsWith('/oss-dev') ||
-          req.url === '/' ||
-          req.url?.startsWith('/?')) {
-        vscodeProxy.ws(req, socket, head);
-      } else {
-        log.proxy(`WebSocket rejected: ${req.url}`);
-        socket.destroy();
-      }
-    } else {
+    if (!hasRunningSession()) {
       log.proxy('WebSocket rejected: no session');
+      socket.destroy();
+      return;
+    }
+
+    let proxy: Server | undefined;
+    let ide: string | undefined;
+
+    // Port proxy WebSocket (dev servers on custom ports)
+    if (req.url?.startsWith('/port/')) {
+      proxy = getSessionProxy('port');
+      ide = 'port';
+    }
+    // JupyterLab WebSocket (both /jupyter and /jupyter-direct paths)
+    else if (req.url?.startsWith('/jupyter')) {
+      proxy = getSessionProxy('jupyter');
+      ide = 'jupyter';
+    }
+    // RStudio WebSocket (both /rstudio and /rstudio-direct paths)
+    else if (req.url?.startsWith('/rstudio')) {
+      proxy = getSessionProxy('rstudio');
+      ide = 'rstudio';
+    }
+    // VS Code WebSocket for /vscode-direct, /stable-, /vscode-, /oss-dev paths
+    else if (req.url?.startsWith('/code') ||
+        req.url?.startsWith('/vscode-direct') ||
+        req.url?.startsWith('/stable-') ||
+        req.url?.startsWith('/vscode-') ||
+        req.url?.startsWith('/oss-dev') ||
+        req.url === '/' ||
+        req.url?.startsWith('/?')) {
+      proxy = getSessionProxy('vscode');
+      ide = 'vscode';
+    }
+
+    if (proxy && ide) {
+      log.debugFor(ide, `WebSocket upgrade: ${req.url}`);
+      proxy.ws(req, socket, head);
+    } else {
+      log.proxy(`WebSocket rejected: ${req.url}`);
       socket.destroy();
     }
   });
