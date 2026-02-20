@@ -34,6 +34,7 @@
     "find-process": "^2.0.0",
     "http-proxy": "^1.18.1",
     "joi": "^17.13.3",
+    "playwright": "^1.58.2",
     "sshpk": "^1.18.0",
     "winston": "^3.19.0"
   },
