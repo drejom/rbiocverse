@@ -82,6 +82,35 @@ npm test
 npm run test:coverage
 ```
 
+### Playwright Browser Tests
+
+**USE THE PLAYWRIGHT SKILL** (`/playwright-skill`) for all browser automation.
+
+**USE THE HELPER SCRIPTS** in `manager/scripts/playwright/`:
+- `helpers.js` - Reusable functions: `login()`, `selectCluster()`, `selectIde()`, `clickLaunch()`, `monitorLaunchModal()`
+- `login-test.js` - Example: login and verify
+- `launch-quick.js` - Example: full launch flow
+- `launch-pending.js` - Example: launch with queue monitoring
+
+**Credentials** are in `manager/scripts/.env.dev` (gitignored). Load them before running tests.
+
+**DO NOT hardcode credentials** - always read from env vars or `.env.dev`.
+
+**Setup** (run once per worktree):
+```bash
+npm install playwright
+npx playwright install chromium
+```
+
+**Example** using helpers:
+```javascript
+const { login, selectCluster, selectIde, clickLaunch } = require('./helpers');
+// ...
+await login(page, process.env.TEST_USERNAME, process.env.TEST_PASSWORD);
+await selectCluster(page, 'Gemini');
+await selectIde(page, 'VS Code');
+await clickLaunch(page);
+```
 ### Container Build
 
 ```bash
