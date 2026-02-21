@@ -348,31 +348,39 @@ class TunnelService {
 
     tunnel.on('error', (err: Error) => {
       log.error('Tunnel spawn error', { hpc: hpcName, ide, error: err.message });
-      this.tunnels.delete(sessionKey);
-      // Guard: only delete if this tunnel's port is still the registered one.
-      // Prevents a stale exit from clobbering a newly-registered replacement port.
-      if (ports.PortRegistry.get(sessionKey) === localPort) {
-        ports.PortRegistry.delete(sessionKey);
-        destroySessionProxy(sessionKey);
-      }
-      if (ide === 'vscode') {
-        const portSessionKey = this.getSessionKey(user, hpcName, 'port');
-        ports.PortRegistry.delete(portSessionKey);
-        destroySessionProxy(portSessionKey);
+      // Identity check: only clean up if this tunnel is still the active one.
+      // Prevents a stale exit from clobbering a newer replacement session.
+      if (this.tunnels.get(sessionKey) === tunnel) {
+        this.tunnels.delete(sessionKey);
+        // Guard: only delete if this tunnel's port is still the registered one.
+        // Prevents a stale exit from clobbering a newly-registered replacement port.
+        if (ports.PortRegistry.get(sessionKey) === localPort) {
+          ports.PortRegistry.delete(sessionKey);
+          destroySessionProxy(sessionKey);
+        }
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
       }
     });
 
     tunnel.on('exit', (code: number | null) => {
       log.tunnel(`Exited`, { hpc: hpcName, ide, code });
-      this.tunnels.delete(sessionKey);
-      if (ports.PortRegistry.get(sessionKey) === localPort) {
-        ports.PortRegistry.delete(sessionKey);
-        destroySessionProxy(sessionKey);
-      }
-      if (ide === 'vscode') {
-        const portSessionKey = this.getSessionKey(user, hpcName, 'port');
-        ports.PortRegistry.delete(portSessionKey);
-        destroySessionProxy(portSessionKey);
+      // Identity check: only clean up if this tunnel is still the active one.
+      // Prevents a stale exit from clobbering a newer replacement session.
+      if (this.tunnels.get(sessionKey) === tunnel) {
+        this.tunnels.delete(sessionKey);
+        if (ports.PortRegistry.get(sessionKey) === localPort) {
+          ports.PortRegistry.delete(sessionKey);
+          destroySessionProxy(sessionKey);
+        }
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
       }
       if (onExit) {
         onExit(code);

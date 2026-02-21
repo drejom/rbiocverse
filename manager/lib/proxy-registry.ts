@@ -73,6 +73,20 @@ export function setOnActivity(fn: OnActivityCallback): void {
 }
 
 /**
+ * Attach common open/close event handlers shared by all proxy types
+ */
+function attachCommonHandlers(proxy: Server, component: string, sessionKey: string): void {
+  proxy.on('open', () => {
+    log.debugFor(component, 'proxy socket opened', { sessionKey });
+    onActivity();
+  });
+
+  proxy.on('close', () => {
+    log.debugFor(component, 'proxy connection closed', { sessionKey });
+  });
+}
+
+/**
  * Create a VS Code proxy for a session
  */
 function createVsCodeProxy(sessionKey: string, localPort: number): Server {
@@ -159,14 +173,7 @@ function createVsCodeProxy(sessionKey: string, localPort: number): Server {
     onActivity();
   });
 
-  proxy.on('open', () => {
-    log.debugFor('vscode', 'proxy socket opened', { sessionKey });
-    onActivity();
-  });
-
-  proxy.on('close', () => {
-    log.debugFor('vscode', 'proxy connection closed', { sessionKey });
-  });
+  attachCommonHandlers(proxy, 'vscode', sessionKey);
 
   return proxy;
 }
@@ -204,14 +211,7 @@ function createRstudioProxy(sessionKey: string, localPort: number): Server {
     log.debugFor('rstudio', 'proxy end', { sessionKey, url: req.url, status: proxyRes?.statusCode });
   });
 
-  proxy.on('open', () => {
-    log.debugFor('rstudio', 'proxy socket opened', { sessionKey });
-    onActivity();
-  });
-
-  proxy.on('close', () => {
-    log.debugFor('rstudio', 'proxy connection closed', { sessionKey });
-  });
+  attachCommonHandlers(proxy, 'rstudio', sessionKey);
 
   proxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
     proxyReq.setHeader('X-RStudio-Root-Path', '/rstudio-direct');
@@ -334,14 +334,7 @@ function createJupyterProxy(sessionKey: string, localPort: number): Server {
     onActivity();
   });
 
-  proxy.on('open', () => {
-    log.debugFor('jupyter', 'proxy socket opened', { sessionKey });
-    onActivity();
-  });
-
-  proxy.on('close', () => {
-    log.debugFor('jupyter', 'proxy connection closed', { sessionKey });
-  });
+  attachCommonHandlers(proxy, 'jupyter', sessionKey);
 
   return proxy;
 }
@@ -378,14 +371,7 @@ function createPortProxy(sessionKey: string, localPort: number): Server {
     onActivity();
   });
 
-  proxy.on('open', () => {
-    log.debugFor('port-proxy', 'proxy socket opened', { sessionKey });
-    onActivity();
-  });
-
-  proxy.on('close', () => {
-    log.debugFor('port-proxy', 'proxy connection closed', { sessionKey });
-  });
+  attachCommonHandlers(proxy, 'port-proxy', sessionKey);
 
   return proxy;
 }
@@ -400,8 +386,8 @@ function createPortProxy(sessionKey: string, localPort: number): Server {
 export function createSessionProxy(sessionKey: string, ide: 'vscode' | 'rstudio' | 'jupyter' | 'port'): Server {
   // The 'port' proxy targets the fixed hpc-proxy local port (config.hpcProxyLocalPort,
   // default 9000). It is forwarded as an extra SSH -L when VS Code launches with
-  // options.proxyPort set. No PortRegistry entry is created for it, so we must not
-  // look one up.
+  // options.proxyPort set. For creation we use this fixed local port directly,
+  // rather than looking it up from PortRegistry.
   const localPort = ide === 'port'
     ? config.hpcProxyLocalPort
     : PortRegistry.get(sessionKey);
@@ -451,12 +437,16 @@ export function getProxy(sessionKey: string): Server | undefined {
     return undefined;
   }
 
+  const { ide, port: cachedPort } = sessionProxy;
+
   // Verify the proxy still targets the correct port
   // If the port changed (tunnel restarted), return undefined to force recreation
-  const currentPort = PortRegistry.get(sessionKey);
-  if (currentPort !== sessionProxy.port) {
+  // 'port' proxies target config.hpcProxyLocalPort (a fixed value), not PortRegistry
+  const currentPort =
+    ide === 'port' ? config.hpcProxyLocalPort : PortRegistry.get(sessionKey);
+  if (currentPort !== cachedPort) {
     log.debugFor('proxy', `Port changed for ${sessionKey}, proxy stale`, {
-      oldPort: sessionProxy.port,
+      oldPort: cachedPort,
       newPort: currentPort,
     });
     destroySessionProxy(sessionKey);

@@ -313,7 +313,7 @@ describe('TunnelService', () => {
       tunnelService.stop('gemini', 'vscode');
 
       expect(mockTunnelProcess.kill).to.have.been.called;
-      expect(tunnelService.tunnels.has('gemini-vscode')).to.be.false;
+      expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.false;
     });
 
     it('should handle stopping non-existent tunnel', () => {
