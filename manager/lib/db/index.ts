@@ -8,6 +8,7 @@ import * as users from './users';
 import * as sessions from './sessions';
 import * as health from './health';
 import * as analytics from './analytics';
+import * as settings from './settings';
 
 export {
   // Core database operations
@@ -18,6 +19,7 @@ export {
   sessions,
   health,
   analytics,
+  settings,
 };
 
 // CommonJS compatibility for existing require() calls
@@ -30,4 +32,5 @@ module.exports = {
   sessions,
   health,
   analytics,
+  settings,
 };

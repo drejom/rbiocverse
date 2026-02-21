@@ -36,8 +36,10 @@ services:
       - JWT_SECRET=${JWT_SECRET}
 
     volumes:
-      # SSH keys mount - path varies by environment
-      - ${SSH_MOUNT_PATH:-/mnt/ssd/docker/hpc-ssh}:/home/apps/.ssh:ro
+      # SSH keys are now DB-managed via admin panel (Admin > Scan Host Keys).
+      # SSH_MOUNT_PATH volume is no longer required for new deployments.
+      # If migrating from an existing setup, you may keep it temporarily for compatibility.
+      # - ${SSH_MOUNT_PATH:-/mnt/ssd/docker/hpc-ssh}:/home/apps/.ssh:ro
       # Persistent state storage
       - ${DATA_PATH:-data}:/data
 

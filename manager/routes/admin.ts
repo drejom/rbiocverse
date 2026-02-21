@@ -22,6 +22,10 @@ import asyncHandler from '../lib/asyncHandler';
 import ContentManager from '../lib/content';
 import type { ClusterHealthState } from '../lib/state/types';
 import { schemas, validate, parseQueryInt, parseQueryParams, queryString } from '../lib/validation';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import * as dbSettings from '../lib/db/settings';
+import { clusters } from '../config';
 
 // Helper to safely get string from req.params (always string in Express, but TS types are broad)
 const param = (req: Request, name: string): string => req.params[name] as string;
@@ -707,6 +711,55 @@ router.get('/analytics/sessions', asyncHandler(async (req: Request, res: Respons
     pagination: { limit, offset, total },
     filters: { days, user, hpc, ide },
     generatedAt: new Date().toISOString(),
+  });
+}));
+
+// =============================================================================
+// SSH Key Management Routes
+// =============================================================================
+
+/**
+ * POST /api/admin/ssh/scan-hosts
+ * Runs ssh-keyscan for all configured cluster hosts and stores result in DB.
+ * After enrollment, StrictHostKeyChecking=yes is used for all SSH connections.
+ */
+router.post('/ssh/scan-hosts', asyncHandler(async (_req: Request, res: Response) => {
+  const execFileAsync = promisify(execFile);
+  const hostnames = Object.values(clusters).map(c => c.host);
+
+  let scannedKeys = '';
+  const errors: string[] = [];
+
+  for (const host of hostnames) {
+    try {
+      const { stdout } = await execFileAsync('ssh-keyscan', ['-T', '10', host]);
+      if (stdout.trim()) {
+        scannedKeys += stdout;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('ssh-keyscan failed for host', { host, error: msg });
+      errors.push(`${host}: ${msg}`);
+    }
+  }
+
+  if (!scannedKeys.trim()) {
+    return res.status(502).json({
+      error: 'No host keys could be scanned',
+      hosts: hostnames,
+      errors,
+    });
+  }
+
+  dbSettings.setKnownHosts(scannedKeys);
+  log.info('SSH known hosts updated', { hosts: hostnames, keyLines: scannedKeys.trim().split('\n').length });
+
+  res.json({
+    ok: true,
+    hosts: hostnames,
+    keyLines: scannedKeys.trim().split('\n').length,
+    content: scannedKeys,
+    ...(errors.length > 0 ? { errors } : {}),
   });
 }));
 
