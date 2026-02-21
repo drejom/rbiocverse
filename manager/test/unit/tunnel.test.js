@@ -11,6 +11,7 @@ describe('TunnelService', () => {
   let spawnStub;
   let mockTunnelProcess;
   let TunnelService;
+  let portsModule;
 
   beforeEach(() => {
     // Clear require cache to allow fresh stub
@@ -28,6 +29,11 @@ describe('TunnelService', () => {
     const findProcess = require('find-process');
     sinon.stub(findProcess, 'default').callsFake(() => Promise.resolve([]));
 
+    // Stub allocateLocalPort to return a fixed port so tests are deterministic.
+    // Must be done before requiring TunnelService so the stub is in place when start() runs.
+    portsModule = require('../../lib/ports');
+    sinon.stub(portsModule, 'allocateLocalPort').resolves(9001);
+
     // Now require TunnelService - it will use the stubbed spawn/execSync
     TunnelService = require('../../services/tunnel');
     tunnelService = new TunnelService();
@@ -39,6 +45,8 @@ describe('TunnelService', () => {
     if (tunnelService) {
       tunnelService.stopAll();
     }
+    // Clear PortRegistry singleton between tests to prevent state leakage
+    portsModule.PortRegistry.clear();
   });
 
   describe('Constructor', () => {
@@ -135,6 +143,33 @@ describe('TunnelService', () => {
       // Map key should be 'user-hpc-ide' format (user defaults to config.hpcUser)
       expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.true;
       expect(tunnelService.tunnels.get('domeally-gemini-vscode')).to.equal(mockTunnelProcess);
+    });
+
+    it('should store sessionKey→localPort in PortRegistry after tunnel establishes', async function() {
+      this.timeout(5000);
+
+      sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
+
+      await tunnelService.start('gemini', 'node01', 'vscode');
+
+      // PortRegistry should map the session key to the allocated port (9001 from stub)
+      expect(portsModule.PortRegistry.get('domeally-gemini-vscode')).to.equal(9001);
+    });
+
+    it('should remove PortRegistry entry when tunnel exits', async function() {
+      this.timeout(5000);
+
+      sinon.stub(tunnelService, 'checkPort').resolves(true);
+      sinon.stub(tunnelService, 'checkIdeReady').resolves(true);
+
+      await tunnelService.start('gemini', 'node01', 'vscode');
+      expect(portsModule.PortRegistry.has('domeally-gemini-vscode')).to.be.true;
+
+      // Simulate tunnel exit
+      mockTunnelProcess.emit('exit', 0);
+
+      expect(portsModule.PortRegistry.has('domeally-gemini-vscode')).to.be.false;
     });
 
     it('should throw error if tunnel process exits early', async function() {
@@ -248,8 +283,8 @@ describe('TunnelService', () => {
 
       await tunnelService.start('gemini', 'node01', 'vscode');
 
-      // Verify forceReleasePort was called with the IDE port (8000 for VS Code)
-      expect(forceReleaseStub).to.have.been.calledWith(8000);
+      // Verify forceReleasePort was called with the dynamically allocated port (9001 from stub)
+      expect(forceReleaseStub).to.have.been.calledWith(9001);
     });
 
     it('should use correct port for RStudio', async function() {
@@ -278,7 +313,7 @@ describe('TunnelService', () => {
       tunnelService.stop('gemini', 'vscode');
 
       expect(mockTunnelProcess.kill).to.have.been.called;
-      expect(tunnelService.tunnels.has('gemini-vscode')).to.be.false;
+      expect(tunnelService.tunnels.has('domeally-gemini-vscode')).to.be.false;
     });
 
     it('should handle stopping non-existent tunnel', () => {

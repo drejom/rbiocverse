@@ -67,6 +67,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "mocha": "^12.0.0-beta-5",
+    "playwright": "^1.58.2",
     "prettier": "^3.8.1",
     "puppeteer": "^24.34.0",
     "sinon": "^21.0.1",

@@ -1,0 +1,26 @@
+{
+  "project": "drejom/rbiocverse",
+  "version": "1.0.0",
+  "description": "Generated from GitHub issues",
+  "stories": [
+    {
+      "id": "ISSUE-104",
+      "title": "refactor: per-session dynamic tunnel ports and proxy registry (single-user groundwork for #94)",
+      "priority": 1,
+      "blocked": false,
+      "depends_on": [],
+      "checklist": [
+        "[x] Create `manager/lib/ports.ts` with `allocateLocalPort()` and `PortRegistry` Map",
+        "[x] Refactor `TunnelService.start()` to call `allocateLocalPort()` and store `sessionKey→localPort` in registry",
+        "[x] Remove `stopByIde()` from `tunnel.ts`; replace with `stop(sessionKey)` scoped cleanup",
+        "[x] Replace proxy singletons in `server.ts` with `ProxyRegistry` Map and `createSessionProxy`/`destroySessionProxy` helpers",
+        "[x] Update request routing middleware in `server.ts` to resolve proxy from `ProxyRegistry` by session key",
+        "[x] Run `npm run typecheck` and `npm run lint` (backend + frontend); fix any errors",
+        "[x] Manual smoke test: launch VS Code session, confirm proxy still works; relaunch same IDE, confirm no eviction of prior tunnel"
+      ],
+      "passes": true,
+      "category": "github",
+      "_issue_number": 104
+    }
+  ]
+}

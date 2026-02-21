@@ -5,8 +5,13 @@
 const { chromium } = require('playwright');
 
 const TARGET_URL = process.env.TEST_URL || 'http://localhost:3000';
-const USERNAME = process.env.TEST_USERNAME || 'testuser';
-const PASSWORD = process.env.TEST_PASSWORD || 'testpass';
+const USERNAME = process.env.TEST_USERNAME;
+const PASSWORD = process.env.TEST_PASSWORD;
+
+if (!USERNAME || !PASSWORD) {
+  console.error('TEST_USERNAME and TEST_PASSWORD must be set');
+  process.exit(1);
+}
 
 (async () => {
   const browser = await chromium.launch({ headless: false, slowMo: 50 });

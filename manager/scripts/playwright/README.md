@@ -29,9 +29,19 @@ node scripts/playwright/launch-pending.js
 
 ## Configuration
 
-Edit the constants at the top of each script:
-- `TARGET_URL` - Manager URL (default: http://localhost:3000)
-- `USERNAME` / `PASSWORD` - Test credentials
+Set environment variables before running (credentials are required; scripts will fail fast if missing):
+
+```bash
+export TEST_USERNAME=youruser
+export TEST_PASSWORD=yourpass
+export TEST_URL=http://localhost:3000   # optional, defaults to http://localhost:3000
+```
+
+Or source from the dev env file:
+
+```bash
+source manager/scripts/.env.dev
+```
 
 ## Tips
 

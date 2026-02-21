@@ -9,6 +9,8 @@ import * as http from 'http';
 import findProcess from 'find-process';
 import { config, clusters, ides } from '../config';
 import { log } from '../lib/logger';
+import * as ports from '../lib/ports';
+import { destroySessionProxy, destroyAllProxies } from '../lib/proxy-registry';
 import { sleep } from '../lib/time';
 
 interface TunnelStartOptions {
@@ -247,17 +249,18 @@ class TunnelService {
 
     const user = options.user || config.hpcUser;
     const sessionKey = this.getSessionKey(user, hpcName, ide);
-    // Use dynamic remote port if provided, otherwise default port
-    // Local port always uses default (UI expects fixed ports)
-    const localPort = ideConfig.port;
+    // Allocate a free ephemeral local port for this tunnel session.
+    // The port is stored in PortRegistry so the proxy layer can resolve it by sessionKey.
+    const localPort = await ports.allocateLocalPort();
     const remotePort = options.remotePort || ideConfig.port;
 
-    // Stop any existing tunnel using this port (same IDE type, any cluster)
-    // This prevents "Address in use" errors when switching between clusters
-    const stoppedTunnel = this.stopByIde(ide);
-
-    // Brief delay for OS to release the port after tunnel termination
+    // Stop any existing tunnel for this session (same user-hpc-ide).
+    // With dynamic port allocation, each session gets a unique port.
+    // We only need to stop if restarting this exact session.
+    const stoppedTunnel = this.tunnels.has(sessionKey);
     if (stoppedTunnel) {
+      this.stop(sessionKey);
+      // Brief delay for OS to release the port after tunnel termination
       await sleep(100);
     }
 
@@ -346,12 +349,40 @@ class TunnelService {
 
     tunnel.on('error', (err: Error) => {
       log.error('Tunnel spawn error', { hpc: hpcName, ide, error: err.message });
-      this.tunnels.delete(sessionKey);
+      // Identity check: only clean up if this tunnel is still the active one.
+      // Prevents a stale exit from clobbering a newer replacement session.
+      if (this.tunnels.get(sessionKey) === tunnel) {
+        this.tunnels.delete(sessionKey);
+        // Guard: only delete if this tunnel's port is still the registered one.
+        // Prevents a stale exit from clobbering a newly-registered replacement port.
+        if (ports.PortRegistry.get(sessionKey) === localPort) {
+          ports.PortRegistry.delete(sessionKey);
+          destroySessionProxy(sessionKey);
+        }
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
+      }
     });
 
     tunnel.on('exit', (code: number | null) => {
       log.tunnel(`Exited`, { hpc: hpcName, ide, code });
-      this.tunnels.delete(sessionKey);
+      // Identity check: only clean up if this tunnel is still the active one.
+      // Prevents a stale exit from clobbering a newer replacement session.
+      if (this.tunnels.get(sessionKey) === tunnel) {
+        this.tunnels.delete(sessionKey);
+        if (ports.PortRegistry.get(sessionKey) === localPort) {
+          ports.PortRegistry.delete(sessionKey);
+          destroySessionProxy(sessionKey);
+        }
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
+      }
       if (onExit) {
         onExit(code);
       }
@@ -374,6 +405,11 @@ class TunnelService {
       if (portOpen) {
         log.tunnel(`Established on port ${localPort}`, { hpc: hpcName, ide });
         this.tunnels.set(sessionKey, tunnel);
+        ports.PortRegistry.set(sessionKey, localPort);
+        // Register port proxy entry so getProxy() stale-check resolves correctly
+        if (ide === 'vscode' && options.proxyPort) {
+          ports.PortRegistry.set(this.getSessionKey(user, hpcName, 'port'), config.hpcProxyLocalPort);
+        }
 
         // Wait for IDE to actually be ready (responds to HTTP)
         // This prevents ECONNRESET errors when IDE is still starting
@@ -392,9 +428,42 @@ class TunnelService {
   }
 
   /**
-   * Stop tunnel for a user's HPC-IDE session
+   * Stop tunnel for a user's HPC-IDE session.
+   * Overload 1: Stop by session key (domeally-gemini-vscode)
+   * Overload 2: Stop by hpcName/ide/user parameters
    */
-  stop(hpcName: string, ide: string | null = null, user: string | null = null): void {
+  stop(sessionKey: string): void;
+  stop(hpcName: string, ide?: string, user?: string): void;
+  stop(sessionKeyOrHpcName: string, ide?: string, user?: string): void {
+    // Distinguish stop(sessionKey) from stop(hpcName, ide?, user?):
+    // If ide is not provided AND the arg is a known tunnel key, treat as sessionKey.
+    // stop('gemini') with no ide would have ide===undefined too, but 'gemini' alone
+    // is never a valid sessionKey (format: user-hpc-ide), so the tunnels.has() check
+    // is unambiguous.
+    const isSessionKeyOverload = (ide === undefined && this.tunnels.has(sessionKeyOrHpcName));
+
+    if (isSessionKeyOverload) {
+      // sessionKey overload
+      const sessionKey = sessionKeyOrHpcName;
+      const tunnel = this.tunnels.get(sessionKey);
+      if (tunnel) {
+        log.tunnel(`Stopping tunnel`, { sessionKey });
+        tunnel.kill();
+        this.tunnels.delete(sessionKey);
+        ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
+        // Clean up port proxy for VS Code sessions
+        if (sessionKey.endsWith('-vscode')) {
+          const portSessionKey = sessionKey.replace(/-vscode$/, '-port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
+      }
+      return;
+    }
+
+    // hpcName/ide/user overload (existing behavior)
+    const hpcName = sessionKeyOrHpcName;
     const effectiveUser = user || config.hpcUser;
     if (ide) {
       // Stop specific IDE tunnel
@@ -404,6 +473,14 @@ class TunnelService {
         log.tunnel(`Stopping tunnel`, { user: effectiveUser, hpc: hpcName, ide });
         tunnel.kill();
         this.tunnels.delete(sessionKey);
+        ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
+        // Clean up port proxy for VS Code sessions
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(effectiveUser, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
       }
     } else {
       // Stop all tunnels for this user on this HPC
@@ -413,6 +490,14 @@ class TunnelService {
           log.tunnel(`Stopping tunnel`, { key });
           tunnel.kill();
           this.tunnels.delete(key);
+          ports.PortRegistry.delete(key);
+          destroySessionProxy(key);
+          // Clean up port proxy for VS Code sessions
+          if (key.endsWith('-vscode')) {
+            const portSessionKey = key.replace(/-vscode$/, '-port');
+            ports.PortRegistry.delete(portSessionKey);
+            destroySessionProxy(portSessionKey);
+          }
         }
       }
     }
@@ -450,23 +535,6 @@ class TunnelService {
   }
 
   /**
-   * Stop all tunnels for a specific IDE type (across all clusters)
-   * Used to free the local port before starting a new tunnel
-   */
-  stopByIde(ide: string): boolean {
-    let stopped = false;
-    for (const [key, tunnel] of this.tunnels.entries()) {
-      if (key.endsWith(`-${ide}`)) {
-        log.tunnel(`Stopping existing tunnel for port reuse`, { key, ide });
-        tunnel.kill();
-        this.tunnels.delete(key);
-        stopped = true;
-      }
-    }
-    return stopped;
-  }
-
-  /**
    * Check if tunnel exists for a user's HPC-IDE session
    */
   isActive(hpcName: string, ide = 'vscode', user: string | null = null): boolean {
@@ -486,10 +554,16 @@ class TunnelService {
    * Stop all tunnels
    */
   stopAll(): void {
-    for (const tunnel of this.tunnels.values()) {
+    for (const [key, tunnel] of this.tunnels.entries()) {
       tunnel.kill();
+      ports.PortRegistry.delete(key);
+      // Clean up port proxy PortRegistry entry for VS Code sessions
+      if (key.endsWith('-vscode')) {
+        ports.PortRegistry.delete(key.replace(/-vscode$/, '-port'));
+      }
     }
     this.tunnels.clear();
+    destroyAllProxies();
   }
 }
 
