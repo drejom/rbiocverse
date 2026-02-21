@@ -55,8 +55,8 @@ export function getKeyFilePath(username: string, privateKey: string): string {
     try {
       const existingHash = fs.readFileSync(hashPath, 'utf8').trim();
       needsWrite = (existingHash !== keyHash);
-    } catch {
-      // Ignore read errors, will rewrite
+    } catch (err) {
+      log.debug('Failed to read SSH key hash, rewriting key file', { username, hashPath, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
