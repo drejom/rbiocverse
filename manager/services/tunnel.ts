@@ -353,6 +353,12 @@ class TunnelService {
       // Prevents a stale exit from clobbering a newly-registered replacement port.
       if (ports.PortRegistry.get(sessionKey) === localPort) {
         ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
+      }
+      if (ide === 'vscode') {
+        const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+        ports.PortRegistry.delete(portSessionKey);
+        destroySessionProxy(portSessionKey);
       }
     });
 
@@ -361,6 +367,12 @@ class TunnelService {
       this.tunnels.delete(sessionKey);
       if (ports.PortRegistry.get(sessionKey) === localPort) {
         ports.PortRegistry.delete(sessionKey);
+        destroySessionProxy(sessionKey);
+      }
+      if (ide === 'vscode') {
+        const portSessionKey = this.getSessionKey(user, hpcName, 'port');
+        ports.PortRegistry.delete(portSessionKey);
+        destroySessionProxy(portSessionKey);
       }
       if (onExit) {
         onExit(code);
@@ -385,6 +397,10 @@ class TunnelService {
         log.tunnel(`Established on port ${localPort}`, { hpc: hpcName, ide });
         this.tunnels.set(sessionKey, tunnel);
         ports.PortRegistry.set(sessionKey, localPort);
+        // Register port proxy entry so getProxy() stale-check resolves correctly
+        if (ide === 'vscode' && options.proxyPort) {
+          ports.PortRegistry.set(this.getSessionKey(user, hpcName, 'port'), config.hpcProxyLocalPort);
+        }
 
         // Wait for IDE to actually be ready (responds to HTTP)
         // This prevents ECONNRESET errors when IDE is still starting
@@ -427,6 +443,12 @@ class TunnelService {
         this.tunnels.delete(sessionKey);
         ports.PortRegistry.delete(sessionKey);
         destroySessionProxy(sessionKey);
+        // Clean up port proxy for VS Code sessions
+        if (sessionKey.endsWith('-vscode')) {
+          const portSessionKey = sessionKey.replace(/-vscode$/, '-port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
       }
       return;
     }
@@ -444,6 +466,12 @@ class TunnelService {
         this.tunnels.delete(sessionKey);
         ports.PortRegistry.delete(sessionKey);
         destroySessionProxy(sessionKey);
+        // Clean up port proxy for VS Code sessions
+        if (ide === 'vscode') {
+          const portSessionKey = this.getSessionKey(effectiveUser, hpcName, 'port');
+          ports.PortRegistry.delete(portSessionKey);
+          destroySessionProxy(portSessionKey);
+        }
       }
     } else {
       // Stop all tunnels for this user on this HPC
@@ -455,6 +483,12 @@ class TunnelService {
           this.tunnels.delete(key);
           ports.PortRegistry.delete(key);
           destroySessionProxy(key);
+          // Clean up port proxy for VS Code sessions
+          if (key.endsWith('-vscode')) {
+            const portSessionKey = key.replace(/-vscode$/, '-port');
+            ports.PortRegistry.delete(portSessionKey);
+            destroySessionProxy(portSessionKey);
+          }
         }
       }
     }
@@ -514,6 +548,10 @@ class TunnelService {
     for (const [key, tunnel] of this.tunnels.entries()) {
       tunnel.kill();
       ports.PortRegistry.delete(key);
+      // Clean up port proxy PortRegistry entry for VS Code sessions
+      if (key.endsWith('-vscode')) {
+        ports.PortRegistry.delete(key.replace(/-vscode$/, '-port'));
+      }
     }
     this.tunnels.clear();
     destroyAllProxies();
