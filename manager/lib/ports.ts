@@ -29,24 +29,20 @@ export const PortRegistry: Map<string, number> = new Map();
 export function allocateLocalPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
+    server.unref(); // Don't keep the event loop alive if this is the only handle
 
-    server.on('error', (err) => {
-      reject(err);
-    });
+    server.on('error', reject);
 
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
-      if (!addr || typeof addr === 'string') {
-        server.close(() => reject(new Error('Failed to read OS-assigned port from server address')));
-        return;
-      }
-      const port = addr.port;
       server.close((err) => {
         if (err) {
-          reject(err);
-        } else {
-          resolve(port);
+          return reject(err);
         }
+        if (!addr || typeof addr === 'string') {
+          return reject(new Error('Failed to read OS-assigned port from server address'));
+        }
+        resolve(addr.port);
       });
     });
   });

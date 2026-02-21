@@ -19,6 +19,11 @@ import { config } from '../config';
 // Activity update callback type
 type OnActivityCallback = () => void;
 
+// Express adds originalUrl to requests but http.IncomingMessage doesn't declare it
+interface ProxiedRequest extends http.IncomingMessage {
+  originalUrl?: string;
+}
+
 // Type alias for the proxy server instance
 type Server = ReturnType<typeof httpProxy.createProxyServer>;
 
@@ -90,7 +95,7 @@ function createVsCodeProxy(sessionKey: string, localPort: number): Server {
     const sessionToken = getSessionToken('vscode');
     const hasValidCookie = cookieToken && sessionToken && cookieToken === sessionToken;
 
-    const originalUrl = (req as unknown as { originalUrl?: string }).originalUrl || req.url || '';
+    const originalUrl = (req as ProxiedRequest).originalUrl || req.url || '';
 
     let targetPath: string;
     if (originalUrl.startsWith('/vscode-direct')) {
@@ -300,7 +305,7 @@ function createJupyterProxy(sessionKey: string, localPort: number): Server {
   });
 
   proxy.on('proxyReq', (proxyReq: http.ClientRequest, req: http.IncomingMessage) => {
-    const originalUrl = (req as unknown as { originalUrl?: string }).originalUrl || req.url || '';
+    const originalUrl = (req as ProxiedRequest).originalUrl || req.url || '';
 
     if (originalUrl.startsWith('/jupyter-direct')) {
       proxyReq.path = originalUrl;
