@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { DateRangeSelector } from './DateRangeSelector';
+import log from '../../lib/logger';
 
 const IDE_COLORS: Record<string, string> = {
   vscode: '#007ACC',
@@ -45,7 +46,7 @@ export function IdePopularity({ getAuthHeader }: IdePopularityProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch IDE popularity:', err);
+      log.error('Failed to fetch IDE popularity', { error: err });
     } finally {
       setLoading(false);
     }

@@ -7,6 +7,8 @@ import { Play, Plug, Square, X, Cpu, MemoryStick, Package, Zap } from 'lucide-re
 import ReleaseSelector from './ReleaseSelector';
 import LaunchForm from './LaunchForm';
 import { TimePie } from './TimePie';
+import { useSessionState } from '../contexts/SessionStateContext';
+import { formatEstimatedStart } from '../lib/timeFormat';
 import type {
   ClusterName,
   ClusterConfig,
@@ -21,16 +23,54 @@ const ideIcons: Record<string, string> = {
   jupyter: 'devicon-jupyter-plain',
 };
 
-interface ExtendedIdeStatus extends IdeStatus {
-  node?: string;
-  cpus?: number | string;
-  memory?: string;
-  gpu?: string;
-  releaseVersion?: string;
-  timeLeftSeconds?: number;
-  timeLimitSeconds?: number;
-  startTime?: string;
+/**
+ * Get effective status for an IDE by merging polling and context data.
+ * Context (SSE) takes priority for non-idle states since SSE is more immediate.
+ * For idle states, we defer to polling to avoid context-cleared state
+ * incorrectly hiding a running job.
+ * DRY helper to avoid duplicating this logic throughout the component.
+ */
+function getEffectiveStatus(
+  pollingStatus: ExtendedIdeStatus | undefined,
+  contextStatus: import('../contexts/SessionStateContext').SessionState | null
+): ExtendedIdeStatus | undefined {
+  if (!pollingStatus && !contextStatus) return undefined;
+
+  // Prefer context for any non-idle state (SSE is more immediate than polling)
+  const preferContextStatus =
+    !!contextStatus && contextStatus.status !== 'idle';
+
+  if (pollingStatus) {
+    return {
+      ...pollingStatus,
+      // Context status takes priority for non-idle states
+      status: preferContextStatus ? contextStatus.status : pollingStatus.status,
+      // Always use context estimatedStartTime if available (SSE-only field)
+      estimatedStartTime: contextStatus?.estimatedStartTime ?? pollingStatus.estimatedStartTime,
+    };
+  }
+
+  // Only context available (from SSE, polling hasn't caught up yet)
+  if (contextStatus) {
+    return {
+      status: contextStatus.status,
+      jobId: contextStatus.jobId,
+      node: contextStatus.node,
+      cpus: contextStatus.cpus,
+      memory: contextStatus.memory,
+      estimatedStartTime: contextStatus.estimatedStartTime,
+      gpu: contextStatus.gpu,
+      releaseVersion: contextStatus.releaseVersion,
+      timeLeftSeconds: contextStatus.timeLeftSeconds,
+      timeLimitSeconds: contextStatus.timeLimitSeconds,
+    } as ExtendedIdeStatus;
+  }
+
+  return undefined;
 }
+
+// IdeStatus now includes all these fields directly
+type ExtendedIdeStatus = IdeStatus;
 
 interface MainPanelProps {
   cluster: ClusterName;
@@ -65,6 +105,7 @@ export function MainPanel({
   onConnect,
   onStop,
 }: MainPanelProps) {
+  const { getSession } = useSessionState();
   const { ides, releases, defaultReleaseVersion, gpuConfig, partitionLimits, defaultPartitions } = config;
 
   // Get ordered list of IDEs
@@ -105,16 +146,19 @@ export function MainPanel({
   }, [defaultReleaseVersion, selectedRelease]);
 
   // Categorize IDEs by status
+  // Check both polling and context (SSE) for status
   const idesByStatus = useMemo(() => {
     const running: string[] = [];
     const pending: string[] = [];
     const idle: string[] = [];
 
     for (const ide of ideList) {
-      const status = ideStatuses?.[ide];
-      if (status?.status === 'running') {
+      const effective = getEffectiveStatus(ideStatuses?.[ide], getSession(cluster, ide));
+      const status = effective?.status;
+
+      if (status === 'running') {
         running.push(ide);
-      } else if (status?.status === 'pending') {
+      } else if (status === 'pending') {
         pending.push(ide);
       } else {
         idle.push(ide);
@@ -122,7 +166,7 @@ export function MainPanel({
     }
 
     return { running, pending, idle };
-  }, [ideList, ideStatuses]);
+  }, [ideList, ideStatuses, cluster, getSession]);
 
   // Find which IDEs are available for the selected release
   const availableIdesForRelease = useMemo(() => {
@@ -132,7 +176,12 @@ export function MainPanel({
   }, [releases, selectedRelease]);
 
   // Get current session status for selected tab
-  const currentStatus = ideStatuses?.[selectedIdeTab];
+  // Uses helper to merge polling and context (SSE) data
+  const currentStatus = getEffectiveStatus(
+    ideStatuses?.[selectedIdeTab],
+    getSession(cluster, selectedIdeTab)
+  );
+
   const isRunning = currentStatus?.status === 'running';
   const isPending = currentStatus?.status === 'pending';
   const isIdle = !isRunning && !isPending;
@@ -185,10 +234,10 @@ export function MainPanel({
         />
         <div className="ide-tabs">
           {ideList.map((ide) => {
-            const status = ideStatuses?.[ide];
+            const effective = getEffectiveStatus(ideStatuses?.[ide], getSession(cluster, ide));
             const isActive = ide === selectedIdeTab;
-            const ideRunning = status?.status === 'running';
-            const idePending = status?.status === 'pending';
+            const ideRunning = effective?.status === 'running';
+            const idePending = effective?.status === 'pending';
             const isAvailable = availableIdesForRelease.includes(ide);
             const isDisabled = !isAvailable && !ideRunning && !idePending;
 
@@ -303,10 +352,33 @@ export function MainPanel({
               </span>
               {!isStopping && <span className="spinner" />}
             </div>
-            <div className="cluster-info" style={{ marginBottom: 12 }}>Waiting for resources...</div>
-            {currentStatus.startTime && (
-              <div className="estimated-start" style={{ marginBottom: 12 }}>Est: {currentStatus.startTime}</div>
-            )}
+            <div className="session-stats-inline">
+              <span className="stat-inline">
+                <Cpu size={14} />
+                {currentStatus.cpus ?? '?'}
+              </span>
+              <span className="stat-inline">
+                <MemoryStick size={14} />
+                {currentStatus.memory ?? '?'}
+              </span>
+              {currentStatus.releaseVersion && (
+                <span className="stat-inline">
+                  <Package size={14} />
+                  Bioc {currentStatus.releaseVersion}
+                </span>
+              )}
+              {currentStatus.gpu && (
+                <span className="stat-inline">
+                  <Zap size={14} />
+                  {currentStatus.gpu.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="estimated-start" style={{ marginBottom: 12 }}>
+              {currentStatus.estimatedStartTime
+                ? `Est: ${formatEstimatedStart(currentStatus.estimatedStartTime)}`
+                : 'Waiting for estimated start time...'}
+            </div>
             {isStopping ? (
               <div className="stop-progress">
                 <div className="stop-progress-text">Cancelling job...</div>

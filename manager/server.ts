@@ -55,7 +55,7 @@ const app = express();
 
 // Prevent caching issues - VS Code uses service workers that can cache stale paths
 // Safari is particularly aggressive about caching, so we use multiple headers
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -163,13 +163,13 @@ function getSessionProxy(ide: 'vscode' | 'rstudio' | 'jupyter' | 'port'): Server
 }
 
 // Landing page - always serve React launcher (no auto-redirect)
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   log.ui('Serving launcher page');
   res.sendFile(path.join(__dirname, 'ui', 'dist', 'index.html'));
 });
 
 // Serve the menu iframe content
-app.get('/hpc-menu-frame', (req: Request, res: Response) => {
+app.get('/hpc-menu-frame', (_req: Request, res: Response) => {
   log.ui('Serving floating menu iframe');
   res.sendFile(path.join(__dirname, 'public', 'menu-frame.html'));
 });
@@ -314,7 +314,7 @@ app.use('/port', (req: Request, res: Response) => {
 });
 
 // Global error handler - catches HpcError and returns structured JSON
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HpcError) {
     log.error(`${err.name}: ${err.message}`, err.details);
     return res.status(err.code).json(err.toJSON());

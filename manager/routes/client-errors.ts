@@ -11,6 +11,7 @@ import express, { Request, Response } from 'express';
 import { errorLogger } from '../services/ErrorLogger';
 import { verifyToken } from '../lib/auth/token';
 import { log } from '../lib/logger';
+import { errorDetails } from '../lib/errors';
 
 const router = express.Router();
 
@@ -95,7 +96,7 @@ router.post('/', async (req: Request, res: Response) => {
     log.debug('Client error logged', { level, action, user: username });
     res.json({ success: true });
   } catch (err) {
-    log.error('Failed to log client error', { error: (err as Error).message });
+    log.error('Failed to log client error', errorDetails(err));
     res.status(500).json({ error: 'Failed to log error' });
   }
 });

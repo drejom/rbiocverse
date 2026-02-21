@@ -29,8 +29,8 @@ rbiocverse/:          Metapackage manifest for R_LIBS_SITE contents
 
 | Cluster | Container Path | R Library Path | Python Library Path |
 |---------|---------------|----------------|---------------------|
-| Gemini  | `/packages/singularity/shared_cache/rbioc/vscode-rbioc_X.Y.sif` | `/packages/singularity/shared_cache/rbioc/rlibs/bioc-X.Y` | `/packages/singularity/shared_cache/rbioc/python/bioc-X.Y` |
-| Apollo  | `/opt/singularity-images/rbioc/vscode-rbioc_X.Y.sif` | `/opt/singularity-images/rbioc/rlibs/bioc-X.Y` | `/opt/singularity-images/rbioc/python/bioc-X.Y` |
+| Gemini  | `/packages/singularity/shared_cache/rbioc/rbiocverse_X.Y.sif` | `/packages/singularity/shared_cache/rbioc/rlibs/bioc-X.Y` | `/packages/singularity/shared_cache/rbioc/python/bioc-X.Y` |
+| Apollo  | `/opt/singularity-images/rbioc/rbiocverse_X.Y.sif` | `/opt/singularity-images/rbioc/rlibs/bioc-X.Y` | `/opt/singularity-images/rbioc/python/bioc-X.Y` |
 
 ## Build Commands
 
@@ -43,12 +43,12 @@ ARG BIOC_VERSION=RELEASE_3_22
 ### Local Docker Build
 ```sh
 docker buildx create --use
-docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/vscode-rbioc:latest --progress=plain . 2>&1 | tee build.log
+docker buildx build --load --platform linux/amd64 -t ghcr.io/drejom/rbiocverse:latest --progress=plain . 2>&1 | tee build.log
 ```
 
 ### Test Container
 ```sh
-docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
+docker run -it --rm ghcr.io/drejom/rbiocverse:latest /bin/bash
 ```
 
 ## Package Migration (New Bioconductor Version)

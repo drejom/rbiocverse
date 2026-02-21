@@ -68,9 +68,46 @@ interface ClusterNavItemProps {
   onClick: () => void;
 }
 
+const CLUSTER_LOCATIONS: Record<ClusterName, string> = {
+  gemini: 'Phoenix, AZ',
+  apollo: 'Rivergrade, CA',
+};
+
+function ApolloIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="apollo-sun" cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#fde047"/>
+          <stop offset="100%" stopColor="#f59e0b"/>
+        </radialGradient>
+      </defs>
+      <circle cx="50" cy="50" r="49" fill="#f59e0b" fillOpacity="0.1"/>
+      <circle cx="50" cy="50" r="43" fill="#f59e0b" fillOpacity="0.15"/>
+      <circle cx="50" cy="50" r="36" fill="url(#apollo-sun)"/>
+      <circle cx="37" cy="37" r="6" fill="white" fillOpacity="0.3"/>
+    </svg>
+  );
+}
+
+function GeminiIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="gemini-sphere" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#3b82f6"/>
+          <stop offset="100%" stopColor="#8b5cf6"/>
+        </linearGradient>
+      </defs>
+      <circle cx="50" cy="50" r="44" fill="url(#gemini-sphere)"/>
+      <circle cx="37" cy="37" r="6" fill="white" fillOpacity="0.25"/>
+    </svg>
+  );
+}
+
 function ClusterNavItem({ cluster, health, history, isActive, hasRunning, selectedGpu, onClick }: ClusterNavItemProps) {
   const displayName = cluster.charAt(0).toUpperCase() + cluster.slice(1);
-  const initial = cluster.charAt(0).toUpperCase();
+  const location = CLUSTER_LOCATIONS[cluster];
 
   // Extract health percentages - types now include fairshare and gpus
   const fairsharePercent = typeof health?.fairshare === 'number' ? Math.round(health.fairshare * 100) : 0;
@@ -121,9 +158,12 @@ function ClusterNavItem({ cluster, health, history, isActive, hasRunning, select
       aria-pressed={isActive}
       aria-label={`Select ${displayName} cluster`}
     >
-      <div className="nav-icon">{initial}</div>
+      <div className="nav-icon">
+        {cluster === 'apollo' ? <ApolloIcon /> : <GeminiIcon />}
+      </div>
       <div className="nav-content">
         <div className="nav-name">{displayName}</div>
+        <div className="nav-location">{location}</div>
       </div>
       <div className="nav-health">
         <MiniHealthBar icon={Gauge} percent={fairsharePercent} title="Priority" isFairshare />

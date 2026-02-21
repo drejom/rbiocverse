@@ -1,9 +1,14 @@
 /**
  * Custom hook for fetching and managing cluster status
  * Handles polling, caching, and state updates
+ *
+ * Also updates SessionStateContext with session data from polling,
+ * ensuring shared state stays in sync with backend.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ClusterStatus, ClusterConfig, ClusterHealth, ClusterHistoryPoint } from '../types';
+import type { ClusterStatus, ClusterConfig, ClusterHealth, ClusterHistoryPoint, IdeStatus } from '../types';
+import log from '../lib/logger';
+import { useSessionState, type SessionState } from '../contexts/SessionStateContext';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -49,6 +54,8 @@ interface ClusterStatusResponse {
 }
 
 export function useClusterStatus(): UseClusterStatusReturn {
+  const { updateSessionsFromPoll } = useSessionState();
+
   const [status, setStatus] = useState<ClusterStatus>({
     gemini: {},
     apollo: {},
@@ -112,10 +119,42 @@ export function useClusterStatus(): UseClusterStatusReturn {
       }
 
       // Update cluster status
+      const geminiStatus = (data.gemini || {}) as ClusterStatus['gemini'];
+      const apolloStatus = (data.apollo || {}) as ClusterStatus['apollo'];
+
       setStatus({
-        gemini: (data.gemini || {}) as ClusterStatus['gemini'],
-        apollo: (data.apollo || {}) as ClusterStatus['apollo'],
+        gemini: geminiStatus,
+        apollo: apolloStatus,
       });
+
+      // Update shared session state context with poll data
+      // This keeps SSE-sourced data (like estimatedStartTime) in sync with polling
+      const convertToSessionState = (ideStatus: IdeStatus): Partial<SessionState> => ({
+        status: ideStatus.status || 'idle',
+        jobId: ideStatus.jobId,
+        node: ideStatus.node,
+        cpus: ideStatus.cpus,
+        memory: ideStatus.memory,
+        gpu: ideStatus.gpu,
+        releaseVersion: ideStatus.releaseVersion,
+        estimatedStartTime: ideStatus.estimatedStartTime,
+        timeLeftSeconds: ideStatus.timeLeftSeconds,
+        timeLimitSeconds: ideStatus.timeLimitSeconds,
+        startTime: ideStatus.startTime,
+      });
+
+      // Update context for each cluster's IDEs
+      const geminiSessions: Record<string, Partial<SessionState>> = {};
+      for (const [ide, ideStatus] of Object.entries(geminiStatus)) {
+        geminiSessions[ide] = convertToSessionState(ideStatus);
+      }
+      updateSessionsFromPoll('gemini', geminiSessions);
+
+      const apolloSessions: Record<string, Partial<SessionState>> = {};
+      for (const [ide, ideStatus] of Object.entries(apolloStatus)) {
+        apolloSessions[ide] = convertToSessionState(ideStatus);
+      }
+      updateSessionsFromPoll('apollo', apolloSessions);
 
       // Update health and history
       if (data.clusterHealth) {
@@ -132,12 +171,12 @@ export function useClusterStatus(): UseClusterStatusReturn {
       setLastUpdate(new Date());
       setError(null);
     } catch (e) {
-      console.error('Status fetch error:', e);
+      log.error('Status fetch error', { error: e });
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [updateSessionsFromPoll]);
 
   // Initial fetch
   useEffect(() => {

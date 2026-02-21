@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "_versionNote": "App version comes from ../package.json (see vite.config.js)",
-  "repository": "https://github.com/drejom/omhq-hpc-code-server-stack",
+  "repository": "https://github.com/drejom/rbiocverse",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,6 +27,8 @@
     "@types/dompurify": "^3.0.5",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
     "@vitejs/plugin-react": "^5.1.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",

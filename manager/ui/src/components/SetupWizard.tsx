@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { CheckCircle, XCircle, Settings, Terminal } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, Terminal, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import KeyManagementModal from './KeyManagementModal';
 
@@ -34,7 +34,7 @@ interface SetupWizardProps {
 }
 
 function SetupWizard({ onComplete }: SetupWizardProps) {
-  const { completeSetup, user } = useAuth();
+  const { completeSetup, user, logout } = useAuth();
   const [tests, setTests] = useState<TestsState>({
     gemini: { status: 'idle', error: null },
     apollo: { status: 'idle', error: null },
@@ -275,6 +275,16 @@ function SetupWizard({ onComplete }: SetupWizardProps) {
         style={{ marginTop: 20 }}
       >
         {bothConnected ? 'Continue to Launcher' : 'Connect to both clusters to continue'}
+      </button>
+
+      {/* Logout button */}
+      <button
+        className="btn btn-outline"
+        onClick={logout}
+        style={{ marginTop: 12, width: '100%' }}
+      >
+        <LogOut size={16} style={{ marginRight: 8 }} />
+        Log out
       </button>
 
       {/* Key Management Modal */}

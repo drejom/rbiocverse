@@ -2,8 +2,11 @@
  * Loading overlay component
  * Shows launch progress with SSE streaming
  * Includes SSH error detection with option to set up keys
+ *
+ * Reads modal state from SessionStateContext (set by useLaunch).
  */
 import { ArrowLeft, X, Key } from 'lucide-react';
+import { useSessionState } from '../contexts/SessionStateContext';
 
 interface StepEstimates {
   [key: string]: number;
@@ -16,38 +19,35 @@ const STEP_ESTIMATES: StepEstimates = {
   waiting: 70,
   starting: 75,
   establishing: 100,
+  pending: 100,  // Job queued, transitioning to pending card
 };
 
 interface LoadingOverlayProps {
-  visible: boolean;
-  header?: string;
-  message?: string;
-  progress?: number;
-  step?: string;
-  error?: string | null;
-  pending?: boolean;
-  indeterminate?: boolean;
-  isSshError?: boolean;
   onBack: () => void;
   onCancel: () => void;
   onSetupKeys?: () => void;
 }
 
 export function LoadingOverlay({
-  visible,
-  header,
-  message,
-  progress,
-  step,
-  error,
-  pending,
-  indeterminate,
-  isSshError,
   onBack,
   onCancel,
   onSetupKeys,
 }: LoadingOverlayProps) {
-  if (!visible) return null;
+  const { launchModal } = useSessionState();
+
+  // Read all state from context
+  if (!launchModal?.active) return null;
+
+  const {
+    header,
+    message,
+    progress,
+    step,
+    error,
+    pending,
+    indeterminate,
+    isSshError,
+  } = launchModal;
 
   const fillWidth = `${progress || 0}%`;
   const estimateWidth = `${Math.min(100, (step && STEP_ESTIMATES[step]) || (progress || 0) + 5)}%`;

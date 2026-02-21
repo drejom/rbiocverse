@@ -8,6 +8,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { log } from './logger';
+import { errorDetails } from './errors';
 
 interface SectionInfo {
   id: string;
@@ -29,7 +30,6 @@ interface SearchResult {
 
 interface ContentManagerOptions {
   cacheTTL?: number;
-  watchFiles?: boolean;
 }
 
 interface SearchOptions {
@@ -40,7 +40,6 @@ interface SearchOptions {
 class ContentManager {
   private contentDir: string;
   private cacheTTL: number;
-  private watchFiles: boolean;
 
   // Cache storage
   private indexCache: ContentIndex | null = null;
@@ -60,7 +59,6 @@ class ContentManager {
   constructor(contentDir: string, options: ContentManagerOptions = {}) {
     this.contentDir = contentDir;
     this.cacheTTL = options.cacheTTL ?? 300000; // 5 minutes default
-    this.watchFiles = options.watchFiles ?? false;
   }
 
   /**
@@ -82,7 +80,7 @@ class ContentManager {
       this.icons = JSON.parse(content);
       return this.icons!;
     } catch (err) {
-      log.warn('Failed to load icons:', (err as Error).message);
+      log.warn('Failed to load icons:', errorDetails(err));
       this.icons = {};
       return {};
     }
@@ -158,7 +156,7 @@ class ContentManager {
 
     const icons = await this.getIcons();
 
-    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (match, iconName: string, sizeStr?: string) => {
+    return content.replace(/\{\{icon:([\w-]+)(?::(\d+))?\}\}/g, (_match, iconName: string, sizeStr?: string) => {
       const size = sizeStr || '20';
       const svg = icons[iconName];
       if (svg) {
@@ -216,7 +214,7 @@ class ContentManager {
           }
         }
       } catch (err) {
-        log.warn(`Failed to search section ${section.id}:`, (err as Error).message);
+        log.warn(`Failed to search section ${section.id}:`, errorDetails(err));
       }
     }
 

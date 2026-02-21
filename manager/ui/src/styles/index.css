@@ -1145,14 +1145,13 @@ h1 {
 }
 
 .nav-item.active .nav-icon {
-  background: linear-gradient(135deg, var(--color-success), #22c55e);
-  color: #052e16;
-  box-shadow: 3px 3px 8px rgba(74, 222, 128, 0.3), -3px -3px 6px rgba(255, 255, 255, 0.05);
+  background: var(--bg-solid);
+  box-shadow: 0 0 0 2px var(--color-success), 3px 3px 8px rgba(74, 222, 128, 0.25);
 }
 
 .nav-item.active.has-running .nav-icon {
-  background: linear-gradient(135deg, var(--color-success), #22c55e);
-  color: #052e16;
+  background: var(--bg-solid);
+  box-shadow: 0 0 0 2px var(--color-success), 3px 3px 8px rgba(74, 222, 128, 0.25);
 }
 
 .nav-content {
@@ -1163,8 +1162,13 @@ h1 {
 .nav-name {
   font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 1px;
   color: var(--text-primary);
+}
+
+.nav-location {
+  font-size: 0.65rem;
+  color: var(--text-muted);
 }
 
 .nav-health {

@@ -76,10 +76,48 @@ npm run dev     # Vite dev server with HMR
 
 ### Tests
 
+Run the full CI-equivalent check sequence from `manager/`:
+
 ```bash
 cd manager
+npm run typecheck              # backend types
+(cd ui && npm run typecheck)   # frontend types
+npm run lint                   # backend lint
+(cd ui && npm run lint)        # frontend lint
+(cd ui && npm run build)       # frontend build
 npm test
-npm run test:coverage
+```
+
+> CI runs these steps in order (see `.github/workflows/test.yml`). Always run `typecheck` + `lint` + frontend `build` before pushing, not just `npm test`.
+
+### Playwright Browser Tests
+
+**USE THE PLAYWRIGHT SKILL** (`/playwright-skill`) for all browser automation.
+
+**USE THE HELPER SCRIPTS** in `manager/scripts/playwright/`:
+- `helpers.js` - Reusable functions: `login()`, `selectCluster()`, `selectIde()`, `clickLaunch()`, `monitorLaunchModal()`
+- `login-test.js` - Example: login and verify
+- `launch-quick.js` - Example: full launch flow
+- `launch-pending.js` - Example: launch with queue monitoring
+
+**Credentials** are in `manager/scripts/.env.dev` (gitignored). Load them before running tests.
+
+**DO NOT hardcode credentials** - always read from env vars or `.env.dev`.
+
+**Setup** (run once per worktree):
+```bash
+npm install playwright
+npx playwright install chromium
+```
+
+**Example** using helpers:
+```javascript
+const { login, selectCluster, selectIde, clickLaunch } = require('./helpers');
+// ...
+await login(page, process.env.TEST_USERNAME, process.env.TEST_PASSWORD);
+await selectCluster(page, 'Gemini');
+await selectIde(page, 'VS Code');
+await clickLaunch(page);
 ```
 
 ### Playwright Browser Tests

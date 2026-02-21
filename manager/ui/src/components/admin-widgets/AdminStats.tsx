@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import { Users, Key, Server, Activity } from 'lucide-react';
+import log from '../../lib/logger';
 
 interface Stats {
   stats?: {
@@ -33,7 +34,7 @@ export function AdminStats({ getAuthHeader }: AdminStatsProps) {
         setLoading(false);
       })
       .catch(err => {
-        console.error('Failed to load stats:', err);
+        log.error('Failed to load stats', { error: err });
         setLoading(false);
       });
   }, [getAuthHeader]);

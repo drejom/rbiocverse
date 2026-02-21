@@ -16,7 +16,7 @@ sbatch /packages/singularity/shared_cache/rbioc/rbioc322.job
 
 ### Docker (Local)
 ```bash
-docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
+docker run -it --rm ghcr.io/drejom/rbiocverse:latest /bin/bash
 ```
 
 ## Quick Reference
@@ -353,7 +353,7 @@ VS Code stores OAuth tokens in the OS keyring. In headless/container environment
 
 ### How It Works
 
-The [HPC Code Server Manager](https://github.com/drejom/omhq-hpc-code-server-stack) handles keyring initialization automatically in job scripts. Your Copilot authentication persists across sessions.
+The [HPC Code Server Manager](https://github.com/drejom/rbiocverse) handles keyring initialization automatically in job scripts. Your Copilot authentication persists across sessions.
 
 ### Testing the Keyring
 

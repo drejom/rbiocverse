@@ -16,7 +16,7 @@ export function parseTimeToSeconds(timeStr: string | null | undefined): number |
   // MM:SS format (SLURM uses this when time < 1 hour)
   if (parts.length === 2) {
     const [m, s] = parts;
-    return parseInt(m) * 60 + parseInt(s);
+    return parseInt(m, 10) * 60 + parseInt(s, 10);
   }
 
   // HH:MM:SS or D-HH:MM:SS format
@@ -25,9 +25,9 @@ export function parseTimeToSeconds(timeStr: string | null | undefined): number |
     // Check for days (D-HH:MM:SS)
     if (h.includes('-')) {
       const [days, hours] = h.split('-');
-      return parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(m) * 60 + parseInt(s);
+      return parseInt(days, 10) * 86400 + parseInt(hours, 10) * 3600 + parseInt(m, 10) * 60 + parseInt(s, 10);
     }
-    return parseInt(h) * 3600 + parseInt(m) * 60 + parseInt(s);
+    return parseInt(h, 10) * 3600 + parseInt(m, 10) * 60 + parseInt(s, 10);
   }
   return null;
 }

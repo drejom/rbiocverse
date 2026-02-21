@@ -33,8 +33,8 @@ This guide covers how to maintain, update, and build the rbiocverse container.
 
 | Cluster | Container | R Library | Python Library |
 |---------|-----------|-----------|----------------|
-| Gemini | `/packages/singularity/shared_cache/rbioc/vscode-rbioc_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
-| Apollo | `/opt/singularity-images/rbioc/vscode-rbioc_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
+| Gemini | `/packages/singularity/shared_cache/rbioc/rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
+| Apollo | `/opt/singularity-images/rbioc/rbiocverse_X.Y.sif` | `.../rlibs/bioc-X.Y` | `.../python/bioc-X.Y` |
 
 ## Local Development
 
@@ -43,7 +43,7 @@ This guide covers how to maintain, update, and build the rbiocverse container.
 ```bash
 docker buildx create --use
 docker buildx build --load --platform linux/amd64 \
-    -t ghcr.io/drejom/vscode-rbioc:latest \
+    -t ghcr.io/drejom/rbiocverse:latest \
     --progress=plain . 2>&1 | tee build.log
 ```
 
@@ -51,12 +51,12 @@ docker buildx build --load --platform linux/amd64 \
 
 ```bash
 # Interactive shell
-docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
+docker run -it --rm ghcr.io/drejom/rbiocverse:latest /bin/bash
 
 # Test specific tools
-docker run --rm ghcr.io/drejom/vscode-rbioc:latest pixi --version
-docker run --rm ghcr.io/drejom/vscode-rbioc:latest R --version
-docker run --rm ghcr.io/drejom/vscode-rbioc:latest jupyter --version
+docker run --rm ghcr.io/drejom/rbiocverse:latest pixi --version
+docker run --rm ghcr.io/drejom/rbiocverse:latest R --version
+docker run --rm ghcr.io/drejom/rbiocverse:latest jupyter --version
 ```
 
 ### VSCode Devcontainer

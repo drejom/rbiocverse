@@ -10,6 +10,9 @@ import * as path from 'path';
 import { config, clusters, ides, gpuConfig, releases, defaultReleaseVersion, getReleasePaths, vscodeDefaults, rstudioDefaults, jupyterlabDefaults } from '../config';
 import { log } from '../lib/logger';
 import { withClusterQueue } from '../lib/ssh-queue';
+import type { JobInfo, HpcService as IHpcService } from '../lib/state/types';
+import type { ClusterHealth, PartitionStats } from '../lib/db/healthSchema';
+import { sleep, MS_PER_MINUTE } from '../lib/time';
 
 // Per-user SSH key support - lazy loaded to avoid circular dependency
 let getUserPrivateKey: ((username: string) => string | null) | null = null;
@@ -29,18 +32,13 @@ const SSH_KEY_DIR = path.join(__dirname, '..', 'data', 'ssh-keys');
 // Use /tmp for short paths (Unix socket paths limited to ~104 bytes)
 const SSH_SOCKET_DIR = '/tmp/rbiocverse-ssh';
 
-interface JobInfo {
-  jobId: string;
-  ide: string;
-  state: string;
-  node: string | null;
-  timeLeft: string | null;
-  timeLeftSeconds?: number | null;
-  timeLimit: string | null;
-  cpus: string | null;
-  memory: string | null;
-  startTime: string | null;
-}
+// Remote cluster dotdir layout - all IDE working dirs live under ~/.rbiocverse/
+const REMOTE_BASE = '$HOME/.rbiocverse';
+const REMOTE_VSCODE_DIR = `${REMOTE_BASE}/vscode`;
+const REMOTE_RSTUDIO_DIR = `${REMOTE_BASE}/rstudio`;
+const REMOTE_JUPYTER_DIR = `${REMOTE_BASE}/jupyter`;
+const REMOTE_PROXY_DIR = `${REMOTE_BASE}/hpc-proxy`;
+
 
 interface JobSubmitResult {
   jobId: string;
@@ -66,20 +64,6 @@ interface WaitForNodeResult {
 interface CancelJobsResult {
   cancelled: string[];
   failed: string[];
-}
-
-interface ClusterHealth {
-  online: boolean;
-  cpus?: { used: number; idle: number; total: number; percent: number };
-  memory?: { used: number; total: number; unit: string; percent: number };
-  nodes?: { idle: number; busy: number; down: number; total: number; percent?: number };
-  gpus?: Record<string, { idle: number; busy: number; total: number }> & { percent?: number } | null;
-  partitions?: Record<string, { cpus: { used: number; idle: number; total: number; percent: number } | null }> | null;
-  runningJobs?: number;
-  pendingJobs?: number;
-  fairshare?: number | null;
-  lastChecked: number;
-  error?: string;
 }
 
 interface HealthOptions {
@@ -167,7 +151,7 @@ echo "export IDE_PORT=$PORT"
   return Buffer.from(script).toString('base64');
 }
 
-class HpcService {
+class HpcService implements IHpcService {
   private clusterName: string;
   private cluster: typeof clusters[keyof typeof clusters];
   private username: string | null;
@@ -258,7 +242,7 @@ class HpcService {
     return new Promise((resolve, reject) => {
       const child = exec(
         sshCmd,
-        { timeout: 60000 },
+        { timeout: MS_PER_MINUTE },
         (error, stdout, stderr) => {
           // Filter out OpenSSH post-quantum warnings
           const filteredStderr = stderr
@@ -305,26 +289,30 @@ class HpcService {
     }
 
     try {
+      // Use pipe delimiter to handle empty fields (e.g., NodeList for pending jobs)
       const output = await this.sshExec(
-        `squeue --user=${config.hpcUser} --name=${ideConfig.jobName} --states=R,PD -h -O JobID,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null | head -1`
+        `squeue --user=${config.hpcUser} --name=${ideConfig.jobName} --states=R,PD -h -o '%i|%T|%N|%L|%l|%C|%m|%S' 2>/dev/null | head -1`
       );
 
       if (!output) return null;
 
-      const parts = output.split(/\s+/);
-      const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
-      const startTime = startTimeParts.join(' ');
+      const parts = output.split('|');
+      if (parts.length !== 8) {
+        log.warn(`Unexpected squeue output format: expected 8 fields, got ${parts.length}: "${output}"`);
+        return null;
+      }
+      const [jobId, jobState, node, timeLeft, timeLimit, cpus, memory, startTime] = parts;
 
       return {
         jobId,
         ide,
         state: jobState,
-        node: node === '(null)' ? null : node,
+        node: (!node || node === '(null)') ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
         timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
-        startTime: startTime === 'N/A' ? null : startTime,
+        startTime: (!startTime || startTime === 'N/A') ? null : startTime,
       };
     } catch {
       return null;
@@ -338,8 +326,9 @@ class HpcService {
     const effectiveUser = user || config.hpcUser;
     const jobNames = Object.values(ides).map(ide => ide.jobName).join(',');
 
+    // Use pipe delimiter to handle empty fields (e.g., NodeList for pending jobs)
     const output = await this.sshExec(
-      `squeue --user=${effectiveUser} --name=${jobNames} --states=R,PD -h -O JobID,Name,State,NodeList,TimeLeft,TimeLimit,NumCPUs,MinMemory,StartTime 2>/dev/null`
+      `squeue --user=${effectiveUser} --name=${jobNames} --states=R,PD -h -o '%i|%j|%T|%N|%L|%l|%C|%m|%S' 2>/dev/null`
     );
 
     const results: Record<string, JobInfo | null> = {};
@@ -351,9 +340,8 @@ class HpcService {
 
     const lines = output.trim().split('\n').filter(l => l.trim());
     for (const line of lines) {
-      const parts = line.split(/\s+/);
-      const [jobId, jobName, jobState, node, timeLeft, timeLimit, cpus, memory, ...startTimeParts] = parts;
-      const startTime = startTimeParts.join(' ');
+      const parts = line.split('|');
+      const [jobId, jobName, jobState, node, timeLeft, timeLimit, cpus, memory, startTime] = parts;
 
       const ide = Object.keys(ides).find(k => ides[k].jobName === jobName);
       if (!ide) continue;
@@ -366,13 +354,13 @@ class HpcService {
         jobId,
         ide,
         state: jobState,
-        node: node === '(null)' ? null : node,
+        node: (!node || node === '(null)') ? null : node,
         timeLeft: timeLeft === 'INVALID' ? null : timeLeft,
         timeLeftSeconds: parsedTimeLeft,
         timeLimit: timeLimit === 'INVALID' ? null : timeLimit,
         cpus: cpus || null,
         memory: memory || null,
-        startTime: startTime === 'N/A' ? null : startTime,
+        startTime: (!startTime || startTime === 'N/A') ? null : startTime,
       };
     }
 
@@ -388,7 +376,7 @@ class HpcService {
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
 
-    const dataDir = '$HOME/.vscode-slurm/.vscode-server';
+    const dataDir = `${REMOTE_VSCODE_DIR}/.vscode-server`;
     const machineSettingsDir = `${dataDir}/data/Machine`;
     const extensionsDir = `${dataDir}/extensions`;
     const builtinExtDir = vscodeDefaults.builtinExtensionsDir;
@@ -404,19 +392,19 @@ class HpcService {
 if [ -d ${builtinExtDir} ]; then
   for ext in ${builtinExtDir}/*; do
     name=\${ext##*/}
-    [ -d "$HOME/.vscode-slurm/.vscode-server/extensions/$name" ] || cp -r "$ext" "$HOME/.vscode-slurm/.vscode-server/extensions/"
+    [ -d "${REMOTE_VSCODE_DIR}/.vscode-server/extensions/$name" ] || cp -r "$ext" "${REMOTE_VSCODE_DIR}/.vscode-server/extensions/"
   done
 fi
 # Bootstrap keybindings (only if user hasn't customized)
-keybindingsFile="$HOME/.vscode-slurm/.vscode-server/data/User/keybindings.json"
+keybindingsFile="${REMOTE_VSCODE_DIR}/.vscode-server/data/User/keybindings.json"
 if [ ! -f "$keybindingsFile" ]; then
-  mkdir -p "$HOME/.vscode-slurm/.vscode-server/data/User"
+  mkdir -p "${REMOTE_VSCODE_DIR}/.vscode-server/data/User"
   echo ${keybindingsBase64} | base64 -d > "$keybindingsFile"
 fi
 `;
     const bootstrapBase64 = Buffer.from(bootstrapScript).toString('base64');
 
-    const portFile = '$HOME/.vscode-slurm/port';
+    const portFile = `${REMOTE_VSCODE_DIR}/port`;
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
     const tokenArg = token ? `--connection-token=${token}` : '--without-connection-token';
@@ -438,13 +426,13 @@ fi
 
     return `#!/bin/bash
 # Redirect stderr to log file immediately for debugging
-exec 2>$HOME/.vscode-slurm/job.err
+exec 2>${REMOTE_VSCODE_DIR}/job.err
 set -ex
 
 # Setup directories
 mkdir -p ${machineSettingsDir} ${extensionsDir}
-mkdir -p $HOME/.vscode-slurm/run/user/$(id -u)
-chmod 700 $HOME/.vscode-slurm/run/user/$(id -u)
+mkdir -p ${REMOTE_VSCODE_DIR}/run/user/$(id -u)
+chmod 700 ${REMOTE_VSCODE_DIR}/run/user/$(id -u)
 
 # Write Machine settings
 echo ${machineSettingsBase64} | base64 -d > ${machineSettingsDir}/settings.json
@@ -457,29 +445,29 @@ eval $(echo ${portFinderBase64} | base64 -d | sh -s)
 
 # Start hpc-proxy for dev server port routing (runs inside container)
 # Note: hpc-proxy runs in background; SLURM cleans it up when job ends
-mkdir -p $HOME/.hpc-proxy
+mkdir -p ${REMOTE_PROXY_DIR}
 ${this.cluster.singularityBin} exec ${releasePaths.singularityImage} \\
-  /usr/local/bin/hpc-proxy --port 0 --base-rewrite --verbose > $HOME/.hpc-proxy/proxy.log 2>&1 &
+  /usr/local/bin/hpc-proxy --port 0 --base-rewrite --verbose > ${REMOTE_PROXY_DIR}/proxy.log 2>&1 &
 
 # Wait for proxy to write port file (up to 5 seconds)
 for ((i=0; i<10; i++)); do
-  [ -f $HOME/.hpc-proxy/port ] && break
+  [ -f ${REMOTE_PROXY_DIR}/port ] && break
   sleep 0.5
 done
 
 # Log proxy port for debugging and create status marker
-if [ -f $HOME/.hpc-proxy/port ]; then
-  echo "hpc-proxy started on port $(cat $HOME/.hpc-proxy/port)" >> $HOME/.vscode-slurm/job.err
-  echo "ok" > $HOME/.hpc-proxy/status
+if [ -f ${REMOTE_PROXY_DIR}/port ]; then
+  echo "hpc-proxy started on port $(cat ${REMOTE_PROXY_DIR}/port)" >> ${REMOTE_VSCODE_DIR}/job.err
+  echo "ok" > ${REMOTE_PROXY_DIR}/status
 else
-  echo "WARNING: hpc-proxy failed to start - dev server routing unavailable" >> $HOME/.vscode-slurm/job.err
-  echo "failed" > $HOME/.hpc-proxy/status
+  echo "WARNING: hpc-proxy failed to start - dev server routing unavailable" >> ${REMOTE_VSCODE_DIR}/job.err
+  echo "failed" > ${REMOTE_PROXY_DIR}/status
 fi
 
 # Start VS Code server
 exec ${this.cluster.singularityBin} exec \\
   ${singularityEnvArgs} \\
-  -B $HOME/.vscode-slurm/run:/run \\
+  -B ${REMOTE_VSCODE_DIR}/run:/run \\
   -B ${this.cluster.bindPaths} \\
   ${releasePaths.singularityImage} \\
   code serve-web \\
@@ -501,7 +489,7 @@ exec ${this.cluster.singularityBin} exec \\
     const ideConfig = ides.rstudio;
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
-    const workdir = '$HOME/.rstudio-slurm/workdir';
+    const workdir = `${REMOTE_RSTUDIO_DIR}/workdir`;
 
     const dbConf = `provider=sqlite
 directory=/var/lib/rstudio-server
@@ -520,7 +508,7 @@ www-root-path=/rstudio-direct
     const biocVersion = releaseVersion;
 
     const rsessionScript = `#!/bin/sh
-exec 2>>$HOME/.rstudio-slurm/rsession.log
+exec 2>>${REMOTE_RSTUDIO_DIR}/rsession.log
 set -x
 export R_HOME=/usr/local/lib/R
 export LD_LIBRARY_PATH=/usr/local/lib/R/lib:/usr/local/lib
@@ -541,7 +529,7 @@ exec /usr/lib/rstudio-server/bin/rsession "$@"
 `;
     const rsessionBase64 = Buffer.from(rsessionScript).toString('base64');
 
-    const portFile = '$HOME/.rstudio-slurm/port';
+    const portFile = `${REMOTE_RSTUDIO_DIR}/port`;
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
     const rstudioBinds = [
@@ -563,7 +551,7 @@ exec /usr/lib/rstudio-server/bin/rsession "$@"
 
     return `#!/bin/bash
 # Redirect stderr to log file immediately for debugging
-exec 2>$HOME/.rstudio-slurm/job.err
+exec 2>${REMOTE_RSTUDIO_DIR}/job.err
 set -ex
 
 # Setup directories
@@ -605,11 +593,11 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
   buildJupyterScript(options: JupyterOptions = {}): string {
     const { gpu = 'none', token, releaseVersion = defaultReleaseVersion, cpus = 1 } = options;
     const ideConfig = ides.jupyter;
-    const workdir = '$HOME/.jupyter-slurm';
+    const workdir = REMOTE_JUPYTER_DIR;
     const releasePaths = getReleasePaths(this.clusterName, releaseVersion);
     const pythonSitePackages = releasePaths.pythonEnv || '';
 
-    const portFile = '$HOME/.jupyter-slurm/port';
+    const portFile = `${REMOTE_JUPYTER_DIR}/port`;
     const portFinderBase64 = buildPortFinderScript(ideConfig.port, portFile);
 
     const nvFlag = gpu !== 'none' ? '--nv' : '';
@@ -652,7 +640,7 @@ exec ${this.cluster.singularityBin} exec --cleanenv \\
 
     return `#!/bin/bash
 # Redirect stderr to log file immediately for debugging
-exec 2>$HOME/.jupyter-slurm/job.err
+exec 2>${REMOTE_JUPYTER_DIR}/job.err
 set -ex
 
 # Setup directories
@@ -797,7 +785,7 @@ SLURM_SCRIPT`;
         return { node: jobInfo.node };
       }
 
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
       attempts++;
     }
 
@@ -864,9 +852,9 @@ SLURM_SCRIPT`;
     }
 
     const portFiles: Record<string, string> = {
-      vscode: '~/.vscode-slurm/port',
-      rstudio: '~/.rstudio-slurm/port',
-      jupyter: '~/.jupyter-slurm/port',
+      vscode: `${REMOTE_VSCODE_DIR}/port`,
+      rstudio: `${REMOTE_RSTUDIO_DIR}/port`,
+      jupyter: `${REMOTE_JUPYTER_DIR}/port`,
     };
 
     const portFile = portFiles[ide];
@@ -897,11 +885,11 @@ SLURM_SCRIPT`;
    * Returns null if proxy is not running.
    *
    * @param _user Currently unused; the proxy port is read from the SSH user's
-   *              home directory (~/.hpc-proxy/port). Parameter kept for API
+   *              home directory (~/.rbiocverse/hpc-proxy/port). Parameter kept for API
    *              consistency with other methods and potential future per-user support.
    */
   async getProxyPort(_user: string | null): Promise<number | null> {
-    const portFile = '~/.hpc-proxy/port';
+    const portFile = `${REMOTE_PROXY_DIR}/port`;
     try {
       const output = await this.sshExec(`cat ${portFile} 2>/dev/null`);
       const port = parseInt(output.trim(), 10);
@@ -976,17 +964,8 @@ sinfo -h -o '%G %D %t' 2>/dev/null | grep -i gpu || echo "none" && \
 ${fairshareCmd}echo "done"
 `;
 
-    try {
-      const output = await this.sshExec(cmd);
-      return this.parseClusterHealth(output);
-    } catch (e) {
-      log.warn('Failed to get cluster health', { cluster: this.clusterName, error: (e as Error).message });
-      return {
-        online: false,
-        error: (e as Error).message,
-        lastChecked: Date.now(),
-      };
-    }
+    const output = await this.sshExec(cmd);
+    return this.parseClusterHealth(output);
   }
 
   /**
@@ -1026,12 +1005,12 @@ ${fairshareCmd}echo "done"
     }
 
     // Parse per-partition CPUs
-    const parseCpuString = (str: string): { used: number; idle: number; total: number; percent: number } | null => {
-      if (!str) return null;
+    const parseCpuString = (str: string): { used: number; idle: number; total: number; percent: number } | undefined => {
+      if (!str) return undefined;
       const parts = str.split('/');
-      if (parts.length !== 4) return null;
+      if (parts.length !== 4) return undefined;
       const nums = parts.map(p => Number(p.trim()));
-      if (!nums.every(Number.isFinite)) return null;
+      if (!nums.every(Number.isFinite)) return undefined;
       const [allocated, idle, , total] = nums;
       return {
         used: allocated,
@@ -1041,7 +1020,7 @@ ${fairshareCmd}echo "done"
       };
     };
 
-    const partitions: Record<string, { cpus: { used: number; idle: number; total: number; percent: number } | null }> = {};
+    const partitions: Record<string, PartitionStats> = {};
     if (sections.CPUS_GPU_A100?.[0]) {
       partitions['gpu-a100'] = { cpus: parseCpuString(sections.CPUS_GPU_A100[0]) };
     }
@@ -1168,8 +1147,10 @@ ${fairshareCmd}echo "done"
       partitions: Object.keys(partitions).length > 0 ? partitions : null,
       runningJobs,
       pendingJobs,
-      fairshare,
+      fairshare: fairshare !== null ? String(fairshare) : null,
       lastChecked: Date.now(),
+      consecutiveFailures: 0,
+      error: null,
     };
   }
 }

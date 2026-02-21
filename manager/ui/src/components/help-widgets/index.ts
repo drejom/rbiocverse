@@ -5,19 +5,14 @@
 import { ComponentType } from 'react';
 import { ClusterHealth } from './ClusterHealth';
 import type { ClusterHealth as ClusterHealthType, ClusterHistoryPoint } from '../../types';
+import type { ParsedWidget } from '../ContentPanel';
+export type { ParsedWidget };
 
 export interface WidgetProps {
   health?: Record<string, ClusterHealthType | null>;
   history?: Record<string, ClusterHistoryPoint[]>;
   cluster?: string;
   [key: string]: unknown;
-}
-
-export interface ParsedWidget {
-  id: string;
-  name: string;
-  props: Record<string, string>;
-  fullMatch: string;
 }
 
 export const widgetRegistry: Record<string, ComponentType<WidgetProps>> = {

@@ -236,6 +236,7 @@ func (p *Proxy) rewriteResponse(resp *http.Response, targetPort int, originalPat
 // basePath is the full directory path (e.g., /port/5500/docs/) for the base tag
 func (p *Proxy) rewriteHTML(resp *http.Response, prefix string, basePath string) error {
 
+
 	// Handle compressed responses
 	encoding := resp.Header.Get("Content-Encoding")
 	var reader io.Reader = resp.Body

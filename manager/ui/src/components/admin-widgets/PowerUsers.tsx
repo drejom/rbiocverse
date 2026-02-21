@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DateRangeSelector } from './DateRangeSelector';
+import log from '../../lib/logger';
 
 interface PowerUserData {
   user: string;
@@ -46,7 +47,7 @@ export function PowerUsers({ getAuthHeader }: PowerUsersProps) {
       const json = await res.json();
       setData(json.data || []);
     } catch (err) {
-      console.error('Failed to fetch power users:', err);
+      log.error('Failed to fetch power users', { error: err });
     } finally {
       setLoading(false);
     }

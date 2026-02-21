@@ -102,9 +102,17 @@ export interface IdeStatus {
   status: 'idle' | 'pending' | 'running' | 'stopping' | 'error';
   jobId?: string;
   url?: string;
+  node?: string;
+  cpus?: number | string;
+  memory?: string;
+  gpu?: string | null;
+  releaseVersion?: string | null;
   timeRemaining?: number;
+  timeLeftSeconds?: number;
+  timeLimitSeconds?: number;
   startTime?: string;
   endTime?: string;
+  estimatedStartTime?: string | null;
   error?: string;
   resources?: {
     cpus?: number;

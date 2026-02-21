@@ -9,6 +9,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { log } from '../lib/logger';
+import { errorMessage } from '../lib/errors';
 import { requireAuth } from './auth';
 import { requireAdmin } from '../lib/auth/admin';
 import * as dbUsers from '../lib/db/users';
@@ -19,6 +20,7 @@ import * as dbSessions from '../lib/db/sessions';
 import * as partitions from '../lib/partitions';
 import asyncHandler from '../lib/asyncHandler';
 import ContentManager from '../lib/content';
+import type { ClusterHealthState } from '../lib/state/types';
 import { schemas, validate, parseQueryInt, parseQueryParams, queryString } from '../lib/validation';
 
 // Helper to safely get string from req.params (always string in Express, but TS types are broad)
@@ -49,10 +51,8 @@ interface AuthenticatedRequest extends Request {
 
 // StateManager type (simplified for this module)
 interface StateManager {
-  state: {
-    sessions: Record<string, { status?: string } | null>;
-  };
-  getClusterHealth(): Record<string, unknown>;
+  getAllSessions(): Record<string, { status?: string | null } | null>;
+  getClusterHealth(): Record<string, ClusterHealthState>;
   getClusterHistory(): Record<string, unknown>;
 }
 
@@ -75,7 +75,7 @@ function setStateManager(sm: StateManager): void {
  * GET /api/admin
  * Returns the admin content index
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const index = await contentManager.loadIndex();
   res.json(index);
 }));
@@ -99,7 +99,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/admin/index
  * Returns the admin content index (same as /)
  */
-router.get('/index', asyncHandler(async (req: Request, res: Response) => {
+router.get('/index', asyncHandler(async (_req: Request, res: Response) => {
   const index = await contentManager.loadIndex();
   res.json(index);
 }));
@@ -144,7 +144,7 @@ interface User {
  * GET /api/admin/users
  * List all users
  */
-router.get('/users', asyncHandler(async (req: Request, res: Response) => {
+router.get('/users', asyncHandler(async (_req: Request, res: Response) => {
   const users = dbUsers.getAllUsers() as Map<string, User>;
   const userList: Array<{
     username: string;
@@ -342,7 +342,7 @@ router.post('/users/bulk',
           results.failed.push({ username, error: 'Unknown action' });
         }
       } catch (err) {
-        results.failed.push({ username, error: (err as Error).message });
+        results.failed.push({ username, error: errorMessage(err) });
       }
     }
 
@@ -365,7 +365,7 @@ router.post('/users/bulk',
  * GET /api/admin/partitions
  * Get all partition limits with full details
  */
-router.get('/partitions', asyncHandler(async (req: Request, res: Response) => {
+router.get('/partitions', asyncHandler(async (_req: Request, res: Response) => {
   log.debug('GET /api/admin/partitions called');
   const allPartitions = partitions.getAllPartitions();
   const lastUpdated = partitions.getLastUpdated();
@@ -414,7 +414,7 @@ router.post('/partitions/refresh', asyncHandler(async (req: AuthenticatedRequest
  * GET /api/admin/reports/usage
  * Get usage statistics
  */
-router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) => {
+router.get('/reports/usage', asyncHandler(async (_req: Request, res: Response) => {
   const users = dbUsers.getAllUsers() as Map<string, User>;
 
   // Basic stats
@@ -432,10 +432,10 @@ router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) =>
   // Session stats from state manager (if available)
   let sessionStats: { activeSessions: number; pendingSessions: number } | null = null;
   if (stateManager) {
-    const state = stateManager.state;
+    const sessions = stateManager.getAllSessions();
     sessionStats = {
-      activeSessions: Object.values(state.sessions).filter(s => s?.status === 'running').length,
-      pendingSessions: Object.values(state.sessions).filter(s => s?.status === 'pending').length,
+      activeSessions: Object.values(sessions).filter(s => s?.status === 'running').length,
+      pendingSessions: Object.values(sessions).filter(s => s?.status === 'pending').length,
     };
   }
 
@@ -450,7 +450,7 @@ router.get('/reports/usage', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/admin/reports/clusters
  * Get cluster health summary
  */
-router.get('/reports/clusters', asyncHandler(async (req: Request, res: Response) => {
+router.get('/reports/clusters', asyncHandler(async (_req: Request, res: Response) => {
   if (!stateManager) {
     return res.status(503).json({ error: 'State manager not available' });
   }

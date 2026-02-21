@@ -4,6 +4,7 @@
  */
 import { Server, Cpu, MemoryStick, Gpu, Package, Plug, Square, X } from 'lucide-react';
 import TimePie from './TimePie';
+import { formatEstimatedStart } from '../lib/timeFormat';
 import type { IdeConfig, IdeStatus } from '../types';
 
 // IDE icon mapping
@@ -128,9 +129,11 @@ export function PendingSession({ hpc, ide, status, ides, onStop, stopping }: Pen
       ) : (
         <>
           <div className="cluster-info">Waiting for resources...</div>
-          {status.startTime && (
-            <div className="estimated-start">Est: {status.startTime}</div>
-          )}
+          <div className="estimated-start">
+            {status.estimatedStartTime
+              ? `Est: ${formatEstimatedStart(status.estimatedStartTime)}`
+              : 'Waiting for start time...'}
+          </div>
           <div className="btn-group btn-group-sm">
             <button className="btn btn-danger btn-sm" onClick={() => onStop(hpc, ide)}>
               <X className="icon-sm" /> Cancel

@@ -1,9 +1,14 @@
 /**
  * Custom hook for launching and connecting to IDE sessions
  * Handles SSE streaming for progress updates
+ *
+ * Refactored to use SessionStateContext as single source of truth.
+ * SSE events update the shared context, eliminating timing hacks.
  */
-import { useState, useCallback, useRef } from 'react';
-import type { IdeConfig, LaunchState } from '../types';
+import { useCallback, useRef } from 'react';
+import { useSessionState, type LaunchModalState } from '../contexts/SessionStateContext';
+import log from '../lib/logger';
+import type { IdeConfig } from '../types';
 
 // Duration to display error message before auto-dismissing
 const ERROR_DISPLAY_MS = 5000;
@@ -28,15 +33,17 @@ interface LaunchOptions {
 }
 
 interface SseMessage {
-  type: 'progress' | 'pending-timeout' | 'complete' | 'error';
+  type: 'progress' | 'pending' | 'pending-timeout' | 'complete' | 'error';
   message?: string;
   progress?: number;
   step?: string;
   redirectUrl?: string;
+  startTime?: string;  // SLURM estimated start time for pending jobs
+  jobId?: string;
 }
 
 interface UseLaunchReturn {
-  launchState: LaunchState & { hpc: string | null; ide: string | null };
+  launchModal: LaunchModalState | null;
   launch: (hpc: string, ide: string, options: LaunchOptions) => void;
   connect: (hpc: string, ide: string) => void;
   backToMenu: () => void;
@@ -52,43 +59,36 @@ function isSshError(message: string | undefined): boolean {
   return SSH_ERROR_PATTERNS.some(pattern => lower.includes(pattern));
 }
 
-export function useLaunch(
-  ides: Record<string, IdeConfig>,
-  onRefresh?: () => void
-): UseLaunchReturn {
-  const [launchState, setLaunchState] = useState<LaunchState & { hpc: string | null; ide: string | null }>({
-    active: false,
-    hpc: null,
-    ide: null,
-    header: '',
-    message: '',
+/**
+ * Create initial modal state for a launch/connect operation
+ */
+function createInitialModalState(hpc: string, ide: string, header: string): LaunchModalState {
+  return {
+    active: true,
+    hpc,
+    ide,
+    header,
+    message: 'Connecting...',
     progress: 0,
     step: 'connecting',
     error: null,
     pending: false,
     indeterminate: false,
     isSshError: false,
-  });
+  };
+}
+
+export function useLaunch(ides: Record<string, IdeConfig>): UseLaunchReturn {
+  const {
+    launchModal,
+    setLaunchModal,
+    updateLaunchModal,
+    updateSession,
+  } = useSessionState();
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const cancelledRef = useRef(false);
   const connectRef = useRef<((hpc: string, ide: string) => void) | null>(null);
-
-  const resetState = useCallback(() => {
-    setLaunchState({
-      active: false,
-      hpc: null,
-      ide: null,
-      header: '',
-      message: '',
-      progress: 0,
-      step: 'connecting',
-      error: null,
-      pending: false,
-      indeterminate: false,
-      isSshError: false,
-    });
-  }, []);
 
   const closeEventSource = useCallback(() => {
     if (eventSourceRef.current) {
@@ -97,23 +97,15 @@ export function useLaunch(
     }
   }, []);
 
+  const resetModal = useCallback(() => {
+    setLaunchModal(null);
+  }, [setLaunchModal]);
+
   const launch = useCallback((hpc: string, ide: string, options: LaunchOptions) => {
     const ideName = ides[ide]?.name || ide;
     cancelledRef.current = false;
 
-    setLaunchState({
-      active: true,
-      hpc,
-      ide,
-      header: `Starting ${ideName}...`,
-      message: 'Connecting...',
-      progress: 0,
-      step: 'connecting',
-      error: null,
-      pending: false,
-      indeterminate: false,
-      isSshError: false,
-    });
+    setLaunchModal(createInitialModalState(hpc, ide, `Starting ${ideName}...`));
 
     // Build URL with params
     const params = new URLSearchParams({
@@ -135,81 +127,113 @@ export function useLaunch(
         const data: SseMessage = JSON.parse(event.data);
 
         switch (data.type) {
-          case 'progress':
-            setLaunchState((prev) => ({
-              ...prev,
-              message: data.message || prev.message,
-              progress: data.progress ?? prev.progress,
-              step: data.step || prev.step,
-            }));
+          case 'progress': {
+            const updates: Partial<LaunchModalState> = {
+              message: data.message || undefined,
+              step: data.step || undefined,
+            };
+            if (typeof data.progress === 'number') {
+              updates.progress = data.progress;
+            }
+            updateLaunchModal(updates);
             break;
+          }
 
+          case 'pending':
           case 'pending-timeout':
+            // Job is pending - update session state with estimatedStartTime
             closeEventSource();
-            resetState();
-            onRefresh?.();
+
+            // KEY FIX: Store estimatedStartTime and launch params in shared context immediately
+            // This ensures pending card shows correct resources even if form values change
+            updateSession(hpc, ide, {
+              status: 'pending',
+              jobId: data.jobId,
+              estimatedStartTime: data.startTime || null,
+              cpus: options.cpus,
+              memory: options.mem,
+              gpu: options.gpu || null,
+              releaseVersion: options.releaseVersion || null,
+            });
+
+            // Show pending state briefly in modal, then close
+            // No timing hack needed - session context already has the data
+            updateLaunchModal({
+              step: 'pending',
+              progress: 100,
+              message: 'Job queued - waiting for resources',
+              pending: true,
+            });
+
+            // Quick status check - if job started running, auto-connect
+            // Otherwise close modal (session card will show pending state from context)
+            setTimeout(async () => {
+              if (cancelledRef.current) return;
+              try {
+                const statusRes = await fetch('/api/cluster-status');
+                const statusData = await statusRes.json();
+                const ideStatus = statusData[hpc]?.[ide];
+
+                if (ideStatus?.status === 'running') {
+                  // Job started! Auto-connect to it
+                  resetModal();
+                  connectRef.current?.(hpc, ide);
+                } else {
+                  // Still pending - close modal, session card shows pending from context
+                  resetModal();
+                }
+              } catch {
+                // On error, just close modal
+                resetModal();
+              }
+            }, 500); // Reduced from 1500ms - just a quick check
             break;
 
           case 'complete':
             closeEventSource();
-            resetState();
+            resetModal();
             window.location.href = data.redirectUrl || '/code/';
             break;
 
           case 'error':
             closeEventSource();
             if (data.message?.includes('already')) {
-              resetState();
+              resetModal();
+              const ideName = ides[ide]?.name || ide;
               if (confirm(`${hpc} already has ${ideName} running. Connect to it?`)) {
-                // Use ref to call connect (defined after launch)
                 connectRef.current?.(hpc, ide);
               }
             } else {
               const sshErr = isSshError(data.message);
-              setLaunchState((prev) => ({
-                ...prev,
+              updateLaunchModal({
                 error: data.message || 'Unknown error',
                 header: 'Launch Failed',
                 isSshError: sshErr,
-              }));
+              });
               // Don't auto-dismiss for SSH errors - user needs to take action
               if (!sshErr) {
-                setTimeout(() => {
-                  resetState();
-                }, ERROR_DISPLAY_MS);
+                setTimeout(resetModal, ERROR_DISPLAY_MS);
               }
             }
             break;
         }
       } catch (e) {
-        console.error('Failed to parse SSE data:', e);
+        log.error('Failed to parse SSE data', { error: e });
       }
     };
 
     eventSource.onerror = () => {
       if (cancelledRef.current) return;
       closeEventSource();
-      resetState();
+      resetModal();
     };
-  }, [ides, closeEventSource, resetState, onRefresh]);
+  }, [ides, closeEventSource, resetModal, setLaunchModal, updateLaunchModal, updateSession]);
 
   const connect = useCallback((hpc: string, ide: string) => {
     const ideName = ides[ide]?.name || ide;
     cancelledRef.current = false;
 
-    setLaunchState({
-      active: true,
-      hpc,
-      ide,
-      header: `Connecting to ${ideName}...`,
-      message: 'Connecting...',
-      progress: 0,
-      step: 'connecting',
-      error: null,
-      pending: false,
-      indeterminate: false,
-      isSshError: false,
-    });
+    setLaunchModal(createInitialModalState(hpc, ide, `Connecting to ${ideName}...`));
 
     const url = `/api/launch/${hpc}/${ide}/stream`;
     const eventSource = new EventSource(url);
@@ -222,49 +246,50 @@ export function useLaunch(
         const data: SseMessage = JSON.parse(event.data);
 
         switch (data.type) {
-          case 'progress':
-            setLaunchState((prev) => ({
-              ...prev,
-              message: data.message || prev.message,
-              progress: data.progress ?? prev.progress,
-              step: data.step || prev.step,
-            }));
+          case 'progress': {
+            const updates: Partial<LaunchModalState> = {
+              message: data.message || undefined,
+              step: data.step || undefined,
+            };
+            if (typeof data.progress === 'number') {
+              updates.progress = data.progress;
+            }
+            updateLaunchModal(updates);
             break;
+          }
 
           case 'complete':
             closeEventSource();
-            resetState();
+            resetModal();
             window.location.href = data.redirectUrl || '/code/';
             break;
 
-          case 'error':
+          case 'error': {
             closeEventSource();
             const sshErr = isSshError(data.message);
-            setLaunchState((prev) => ({
-              ...prev,
+            updateLaunchModal({
               error: data.message || 'Unknown error',
               header: 'Connection Failed',
               isSshError: sshErr,
-            }));
+            });
             // Don't auto-dismiss for SSH errors - user needs to take action
             if (!sshErr) {
-              setTimeout(() => {
-                resetState();
-              }, ERROR_DISPLAY_MS);
+              setTimeout(resetModal, ERROR_DISPLAY_MS);
             }
             break;
+          }
         }
       } catch (e) {
-        console.error('Failed to parse SSE data:', e);
+        log.error('Failed to parse SSE data', { error: e });
       }
     };
 
     eventSource.onerror = () => {
       if (cancelledRef.current) return;
       closeEventSource();
-      resetState();
+      resetModal();
     };
-  }, [ides, closeEventSource, resetState]);
+  }, [ides, closeEventSource, resetModal, setLaunchModal, updateLaunchModal]);
 
   // Keep ref updated for use in launch callback
   connectRef.current = connect;
@@ -272,23 +297,21 @@ export function useLaunch(
   const backToMenu = useCallback(() => {
     cancelledRef.current = true;
     closeEventSource();
-    resetState();
-    onRefresh?.();
-  }, [closeEventSource, resetState, onRefresh]);
+    resetModal();
+  }, [closeEventSource, resetModal]);
 
   const stopLaunch = useCallback(async () => {
-    const { hpc, ide } = launchState;
-    if (!hpc || !ide) return;
+    if (!launchModal?.hpc || !launchModal?.ide) return;
+    const { hpc, ide } = launchModal;
 
     cancelledRef.current = true;
     closeEventSource();
 
-    setLaunchState((prev) => ({
-      ...prev,
+    updateLaunchModal({
       header: `Stopping ${ides[ide]?.name || ide}...`,
       message: 'Stopping job...',
       indeterminate: true,
-    }));
+    });
 
     try {
       const res = await fetch(`/api/stop/${hpc}/${ide}`, {
@@ -301,16 +324,18 @@ export function useLaunch(
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `Server returned ${res.status}`);
       }
+
+      // Clear session from context immediately so UI updates without waiting for poll
+      updateSession(hpc, ide, { status: 'idle' });
     } catch (e) {
-      console.error('Stop error:', e);
+      log.error('Stop error', { error: e });
     }
 
-    resetState();
-    onRefresh?.();
-  }, [launchState, ides, closeEventSource, resetState, onRefresh]);
+    resetModal();
+  }, [launchModal, ides, closeEventSource, resetModal, updateLaunchModal, updateSession]);
 
   return {
-    launchState,
+    launchModal,
     launch,
     connect,
     backToMenu,

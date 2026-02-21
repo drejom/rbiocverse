@@ -5,6 +5,7 @@
 
 import { getDb } from '../db';
 import { log } from '../logger';
+import { buildSessionKey, parseSessionKey } from '../state/types';
 
 // ============================================
 // Types
@@ -25,6 +26,7 @@ export interface Session {
   token: string | null;
   submittedAt: string | null;
   startedAt: string | null;
+  estimatedStartTime: string | null;  // SLURM's forecast for pending jobs
   error: string | null;
   timeLeftSeconds: number | null;
   lastActivity: string | null;
@@ -55,12 +57,6 @@ interface SessionRow {
   used_dev_server: number;
 }
 
-interface ParsedSessionKey {
-  user: string;
-  hpc: string;
-  ide: string;
-}
-
 interface DeleteOptions {
   endReason?: string;
   errorMessage?: string | null;
@@ -79,27 +75,6 @@ interface GetHistoryOptions {
 // ============================================
 // Active Sessions
 // ============================================
-
-/**
- * Build session key from components
- */
-function buildSessionKey(user: string, hpc: string, ide: string): string {
-  return `${user}-${hpc}-${ide}`;
-}
-
-/**
- * Parse session key into components
- */
-function parseSessionKey(sessionKey: string): ParsedSessionKey | null {
-  const parts = sessionKey.split('-');
-  if (parts.length >= 3) {
-    const ide = parts.pop()!;
-    const hpc = parts.pop()!;
-    const user = parts.join('-');
-    return { user, hpc, ide };
-  }
-  return null;
-}
 
 /**
  * Convert database row to session object
@@ -121,6 +96,7 @@ function rowToSession(row: SessionRow | undefined): Session | null {
     token: row.token,
     submittedAt: row.submitted_at,
     startedAt: row.started_at,
+    estimatedStartTime: null,  // Not stored in DB - refreshed from SLURM polling
     error: row.error,
     timeLeftSeconds: row.time_left_seconds,
     lastActivity: row.last_activity,

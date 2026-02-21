@@ -7,6 +7,7 @@ import { useCountdown } from './hooks/useCountdown';
 import { useLaunch } from './hooks/useLaunch';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SessionStateProvider, useSessionState } from './contexts/SessionStateContext';
 import Sidebar from './components/Sidebar';
 import MainPanel from './components/MainPanel';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -21,6 +22,7 @@ import AppFooter from './components/AppFooter';
 import './styles/index.css';
 import './styles/themes.css';
 import type { ClusterName } from './types';
+import log from './lib/logger';
 
 // Fallback timeout for stop operation (SLURM scancel + tunnel cleanup)
 const STOP_TIMEOUT_MS = 15000;
@@ -43,8 +45,10 @@ const SESSION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 function Launcher() {
   const { status, config, health, history, loading, refresh } = useClusterStatus();
   const { getCountdown } = useCountdown(status);
-  const { launchState, launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides, refresh);
+  // useLaunch now uses SessionStateContext - no longer needs onRefresh callback
+  const { launch, connect, backToMenu, stopLaunch } = useLaunch(config.ides);
   const { user, checkSession } = useAuth();
+  const { clearSession } = useSessionState();
 
   // Periodic session check for sliding token refresh
   // Ensures active users get their token refreshed before expiry
@@ -136,6 +140,8 @@ function Launcher() {
       });
       eventSource.close();
       stopEventSourcesRef.current.delete(key);
+      // Clear session from context so UI updates immediately
+      clearSession(hpc, ide);
       refresh();
     };
 
@@ -152,7 +158,7 @@ function Launcher() {
           cleanup();
         }
       } catch (e) {
-        console.error('Stop SSE parse error:', e);
+        log.error('Stop SSE parse error', { error: e });
       }
     };
 
@@ -160,7 +166,7 @@ function Launcher() {
       clearTimeout(timeout);
       cleanup();
     };
-  }, [user, config, stoppingJobs, refresh]);
+  }, [user, config, stoppingJobs, refresh, clearSession]);
 
   if (loading && !config.ides) {
     return (
@@ -239,16 +245,8 @@ function Launcher() {
         </div>
       </div>
 
+      {/* LoadingOverlay now reads from SessionStateContext */}
       <LoadingOverlay
-        visible={launchState.active}
-        header={launchState.header}
-        message={launchState.message}
-        progress={launchState.progress}
-        step={launchState.step}
-        error={launchState.error}
-        pending={launchState.pending}
-        indeterminate={launchState.indeterminate}
-        isSshError={launchState.isSshError}
         onBack={backToMenu}
         onCancel={stopLaunch}
         onSetupKeys={handleSetupKeys}
@@ -262,11 +260,27 @@ function Launcher() {
 }
 
 /**
+ * Login page wrapper - only polls cluster status when showing login
+ * This avoids duplicate polling when authenticated (Launcher has its own hook)
+ */
+function LoginWrapper() {
+  const { health, history } = useClusterStatus();
+  return <Login clusterHealth={health} clusterHistory={history} />;
+}
+
+/**
  * App wrapper - handles authentication flow
  */
 function AppContent() {
   const { isAuthenticated, needsSetup, loading } = useAuth();
-  const { health, history } = useClusterStatus();
+  const { clearAllSessions } = useSessionState();
+
+  // Clear session data when user logs out to prevent stale data persisting
+  useEffect(() => {
+    if (!isAuthenticated && !loading) {
+      clearAllSessions();
+    }
+  }, [isAuthenticated, loading, clearAllSessions]);
 
   // Show loading while checking auth
   if (loading) {
@@ -280,9 +294,9 @@ function AppContent() {
     );
   }
 
-  // Not authenticated - show login
+  // Not authenticated - show login (with its own cluster status polling)
   if (!isAuthenticated) {
-    return <Login clusterHealth={health} clusterHistory={history} />;
+    return <LoginWrapper />;
   }
 
   // First login - show setup wizard
@@ -294,7 +308,7 @@ function AppContent() {
     );
   }
 
-  // Authenticated - show main launcher
+  // Authenticated - show main launcher (has its own cluster status polling)
   return <Launcher />;
 }
 
@@ -305,8 +319,10 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppContent />
-        <AppFooter />
+        <SessionStateProvider>
+          <AppContent />
+          <AppFooter />
+        </SessionStateProvider>
       </AuthProvider>
     </ThemeProvider>
   );

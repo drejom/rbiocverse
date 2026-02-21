@@ -18,6 +18,7 @@ manager/data/*
 # Test artifacts
 manager/ui/test-results/
 manager/ui/playwright-report/
+manager/coverage/
 .claude/settings.local.json
 
 # Dev server

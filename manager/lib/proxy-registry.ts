@@ -96,7 +96,7 @@ function createVsCodeProxy(sessionKey: string, localPort: number): Server {
     changeOrigin: true,
   });
 
-  proxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+  proxy.on('error', (err: Error, _req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
     log.proxyError('VS Code proxy error', { error: err.message, sessionKey });
     if (res instanceof http.ServerResponse && !res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/html' });
@@ -200,14 +200,14 @@ function createRstudioProxy(sessionKey: string, localPort: number): Server {
     }
   });
 
-  proxy.on('start', ((req: http.IncomingMessage, res: http.ServerResponse, target: ProxyTargetUrl) => {
+  proxy.on('start', ((req: http.IncomingMessage, _res: http.ServerResponse, target: ProxyTargetUrl) => {
     const targetString = typeof target === 'string'
       ? target
       : (target && 'href' in target ? (target as { href: string | null }).href : JSON.stringify(target));
     log.debugFor('rstudio', 'proxy start', { sessionKey, url: req.url, target: targetString });
   }) as StartCallback);
 
-  proxy.on('end', (req: http.IncomingMessage, res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
+  proxy.on('end', (req: http.IncomingMessage, _res: http.ServerResponse, proxyRes: http.IncomingMessage) => {
     log.debugFor('rstudio', 'proxy end', { sessionKey, url: req.url, status: proxyRes?.statusCode });
   });
 
@@ -296,7 +296,7 @@ function createJupyterProxy(sessionKey: string, localPort: number): Server {
     changeOrigin: true,
   });
 
-  proxy.on('error', (err: Error, req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
+  proxy.on('error', (err: Error, _req: http.IncomingMessage, res: http.ServerResponse | import('net').Socket) => {
     log.proxyError('JupyterLab proxy error', { error: err.message, sessionKey });
     if (res instanceof http.ServerResponse && !res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/html' });

@@ -19,8 +19,8 @@
     "strictNullChecks": true,
     "allowJs": true,
     "checkJs": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]

@@ -1,4 +1,4 @@
-[![Build and publish Docker image](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml/badge.svg)](https://github.com/drejom/vscode-rbioc/actions/workflows/publish-to-github-package.yaml)
+[![Build and publish Docker image](https://github.com/drejom/rbiocverse/actions/workflows/build-container.yml/badge.svg)](https://github.com/drejom/rbiocverse/actions/workflows/build-container.yml)
 
 # Bioconductor Development Container
 
@@ -44,7 +44,7 @@ Pre-configured with productivity extensions:
 
 ### Docker
 ```bash
-docker run -it --rm ghcr.io/drejom/vscode-rbioc:latest /bin/bash
+docker run -it --rm ghcr.io/drejom/rbiocverse:latest /bin/bash
 ```
 
 ## Architecture
