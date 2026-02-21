@@ -1,7 +1,7 @@
 /**
  * PartitionLimits - Display SLURM partition limits for a cluster
  */
-import { Cpu, MemoryStick, Clock, Zap, Lock, RefreshCw } from 'lucide-react';
+import { Cpu, MemoryStick, Clock, Zap, Lock, RefreshCw, Shield } from 'lucide-react';
 import { formatTime } from '../../hooks/useCountdown';
 
 interface PartitionData {
@@ -20,6 +20,9 @@ interface PartitionLimitsProps {
   partitions?: Record<string, Record<string, PartitionData>>;
   onRefreshPartitions?: () => void;
   isRefreshing?: boolean;
+  onScanHostKeys?: () => void;
+  isScanningHostKeys?: boolean;
+  hostKeyScanResult?: { ok: boolean; message: string } | null;
 }
 
 /**
@@ -93,7 +96,7 @@ function formatMemoryGB(gb: number | undefined): string {
   return `${gb}G`;
 }
 
-export function PartitionLimits({ cluster, partitions = {}, onRefreshPartitions, isRefreshing }: PartitionLimitsProps) {
+export function PartitionLimits({ cluster, partitions = {}, onRefreshPartitions, isRefreshing, onScanHostKeys, isScanningHostKeys, hostKeyScanResult }: PartitionLimitsProps) {
   const clusterPartitions = cluster ? partitions[cluster] || {} : {};
 
   if (!clusterPartitions || Object.keys(clusterPartitions).length === 0) {
@@ -113,6 +116,22 @@ export function PartitionLimits({ cluster, partitions = {}, onRefreshPartitions,
           >
             <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
           </button>
+        )}
+        {onScanHostKeys && (
+          <button
+            className="admin-action-btn"
+            onClick={onScanHostKeys}
+            disabled={isScanningHostKeys}
+            title="Scan and enroll SSH host keys"
+          >
+            <Shield size={14} />
+            {isScanningHostKeys ? 'Scanning...' : 'Scan Host Keys'}
+          </button>
+        )}
+        {hostKeyScanResult && (
+          <p className={hostKeyScanResult.ok ? 'admin-action-success' : 'admin-action-error'}>
+            {hostKeyScanResult.message}
+          </p>
         )}
       </div>
       <div className="admin-partitions-grid">

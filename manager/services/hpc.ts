@@ -13,20 +13,7 @@ import { withClusterQueue } from '../lib/ssh-queue';
 import type { JobInfo, HpcService as IHpcService } from '../lib/state/types';
 import type { ClusterHealth, PartitionStats } from '../lib/db/healthSchema';
 import { sleep, MS_PER_MINUTE } from '../lib/time';
-
-// Per-user SSH key support - lazy loaded to avoid circular dependency
-let getUserPrivateKey: ((username: string) => string | null) | null = null;
-let getAdminPrivateKey: (() => Promise<string | null>) | null = null;
-function loadAuthModule(): void {
-  if (!getUserPrivateKey) {
-    const auth = require('../routes/auth');
-    getUserPrivateKey = auth.getUserPrivateKey;
-    getAdminPrivateKey = auth.getAdminPrivateKey;
-  }
-}
-
-// Directory for SSH key files (inside data volume, persisted across restarts)
-const SSH_KEY_DIR = path.join(__dirname, '..', 'data', 'ssh-keys');
+import { resolveKeyFile, getSshHostKeyArgs } from '../lib/ssh-utils';
 
 // Directory for SSH ControlMaster sockets (per-user-cluster multiplexing)
 // Use /tmp for short paths (Unix socket paths limited to ~104 bytes)
@@ -87,41 +74,6 @@ interface JupyterOptions {
   cpus?: number;
 }
 
-/**
- * Get or create a key file for a user
- * Keys are stored in data/ssh-keys/<username>.key
- */
-function getKeyFilePath(username: string, privateKey: string): string {
-  // Ensure directory exists
-  if (!fs.existsSync(SSH_KEY_DIR)) {
-    fs.mkdirSync(SSH_KEY_DIR, { mode: 0o700, recursive: true });
-  }
-
-  const keyPath = path.join(SSH_KEY_DIR, `${username}.key`);
-
-  // Write key if it doesn't exist or has changed
-  // Use hash to detect changes without reading the file
-  const keyHash = crypto.createHash('sha256').update(privateKey).digest('hex').substring(0, 8);
-  const hashPath = path.join(SSH_KEY_DIR, `${username}.hash`);
-
-  let needsWrite = true;
-  if (fs.existsSync(hashPath)) {
-    try {
-      const existingHash = fs.readFileSync(hashPath, 'utf8').trim();
-      needsWrite = (existingHash !== keyHash);
-    } catch {
-      // Ignore read errors, will rewrite
-    }
-  }
-
-  if (needsWrite) {
-    fs.writeFileSync(keyPath, privateKey, { mode: 0o600 });
-    fs.writeFileSync(hashPath, keyHash, { mode: 0o600 });
-    log.debug('Wrote SSH key file', { username, keyPath });
-  }
-
-  return keyPath;
-}
 
 /**
  * Generate a secure random token for IDE authentication
@@ -188,37 +140,6 @@ class HpcService implements IHpcService {
   }
 
   /**
-   * Get SSH key options for command execution
-   * Returns the key option flag and effective user for socket naming
-   */
-  private async _getSshKeyOptions(): Promise<{ keyOption: string; effectiveKeyUser: string }> {
-    loadAuthModule();
-
-    // Try per-user key first
-    if (this.username) {
-      const privateKey = getUserPrivateKey!(this.username);
-      if (privateKey) {
-        const keyPath = getKeyFilePath(this.username, privateKey);
-        log.debugFor('ssh', 'using per-user key', { username: this.username, keyPath });
-        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: this.username };
-      }
-    }
-
-    // Fall back to admin key
-    if (getAdminPrivateKey) {
-      const adminKey = await getAdminPrivateKey();
-      if (adminKey) {
-        const keyPath = getKeyFilePath('_admin', adminKey);
-        log.debugFor('ssh', 'using admin key fallback', { cluster: this.clusterName });
-        return { keyOption: `-i ${keyPath} `, effectiveKeyUser: '_admin' };
-      }
-    }
-
-    // No key available - throw error instead of falling back to system SSH
-    throw new Error('No SSH key configured. Please generate or import an SSH key in Key Management.');
-  }
-
-  /**
    * Execute SSH command directly (bypasses queue)
    * Internal method - use sshExec() for all external calls
    */
@@ -231,13 +152,15 @@ class HpcService implements IHpcService {
       fs.mkdirSync(SSH_SOCKET_DIR, { mode: 0o700, recursive: true });
     }
 
-    const { keyOption, effectiveKeyUser } = await this._getSshKeyOptions();
+    const { keyPath, effectiveKeyUser } = await resolveKeyFile(this.username);
+    const keyArg = keyPath ? `-i ${keyPath} ` : '';
 
     // SSH ControlMaster for connection multiplexing
     const socketPath = path.join(SSH_SOCKET_DIR, `${effectiveKeyUser}-${this.clusterName}`);
     const controlOptions = `-o ControlMaster=auto -o ControlPath=${socketPath} -o ControlPersist=30m`;
 
-    const sshCmd = `ssh ${keyOption}${controlOptions} -o StrictHostKeyChecking=no ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
+    const hostKeyOpts = getSshHostKeyArgs().join(' ');
+    const sshCmd = `ssh ${keyArg}${controlOptions} ${hostKeyOpts} ${config.hpcUser}@${this.cluster.host} 'bash -s'`;
 
     return new Promise((resolve, reject) => {
       const child = exec(

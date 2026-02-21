@@ -12,6 +12,7 @@ import { log } from '../lib/logger';
 import * as ports from '../lib/ports';
 import { destroySessionProxy, destroyAllProxies } from '../lib/proxy-registry';
 import { sleep } from '../lib/time';
+import { resolveKeyFile, getSshHostKeyArgs } from '../lib/ssh-utils';
 
 interface TunnelStartOptions {
   remotePort?: number;
@@ -311,14 +312,18 @@ class TunnelService {
     // - Tunnels are long-lived and tracked explicitly in this.tunnels
     // - Sharing a control connection could cause unexpected teardowns
     // - Our tunnel lifecycle/orphan cleanup requires dedicated processes
+    const { keyPath } = await resolveKeyFile(user);
+    const hostKeyArgs = getSshHostKeyArgs();
+
     const tunnel = spawn('ssh', [
-      '-o', 'StrictHostKeyChecking=no',
+      ...(keyPath ? ['-i', keyPath] : []),
+      ...hostKeyArgs,
       '-o', 'ServerAliveInterval=30',
       '-o', 'ExitOnForwardFailure=yes',
       '-o', 'ControlMaster=no',
       '-N',
       ...portForwards,
-      `${config.hpcUser}@${cluster.host}`
+      `${user}@${cluster.host}`
     ]);
 
     // Capture stderr for error reporting

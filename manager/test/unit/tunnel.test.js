@@ -34,6 +34,10 @@ describe('TunnelService', () => {
     portsModule = require('../../lib/ports');
     sinon.stub(portsModule, 'allocateLocalPort').resolves(9001);
 
+    // Stub resolveKeyFile in ssh-utils so tests don't require a real SSH key
+    const sshUtils = require('../../lib/ssh-utils');
+    sinon.stub(sshUtils, 'resolveKeyFile').resolves({ keyPath: '/tmp/test.key', effectiveKeyUser: 'domeally' });
+
     // Now require TunnelService - it will use the stubbed spawn/execSync
     TunnelService = require('../../services/tunnel');
     tunnelService = new TunnelService();

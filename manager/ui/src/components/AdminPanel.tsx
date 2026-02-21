@@ -52,6 +52,8 @@ interface AdminPanelProps {
 function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
   const [partitions, setPartitions] = useState<PartitionData>({});
   const [isRefreshingPartitions, setIsRefreshingPartitions] = useState(false);
+  const [isScanningHostKeys, setIsScanningHostKeys] = useState(false);
+  const [hostKeyScanResult, setHostKeyScanResult] = useState<{ ok: boolean; message: string } | null>(null);
   const { getAuthHeader } = useAuth();
 
   // Fetch partition data
@@ -87,6 +89,30 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
     }
   }, [getAuthHeader]);
 
+  const handleScanHostKeys = useCallback(async () => {
+    setIsScanningHostKeys(true);
+    setHostKeyScanResult(null);
+    try {
+      const res = await fetch('/api/admin/ssh/scan-hosts', {
+        method: 'POST',
+        headers: getAuthHeader(),
+      });
+      const data = await res.json() as { keyLines?: number; hosts?: string[]; error?: string };
+      if (!res.ok) {
+        setHostKeyScanResult({ ok: false, message: data.error ?? 'Scan failed' });
+      } else {
+        setHostKeyScanResult({
+          ok: true,
+          message: `Enrolled ${data.keyLines ?? 0} key lines for ${(data.hosts ?? []).join(', ')}`,
+        });
+      }
+    } catch (err) {
+      setHostKeyScanResult({ ok: false, message: err instanceof Error ? err.message : 'Network error' });
+    } finally {
+      setIsScanningHostKeys(false);
+    }
+  }, [getAuthHeader]);
+
   // Fetch partitions when panel opens
   useEffect(() => {
     if (isOpen) {
@@ -98,8 +124,11 @@ function AdminPanel({ isOpen, onClose, health, history }: AdminPanelProps) {
     partitions,
     onRefreshPartitions: handleRefreshPartitions,
     isRefreshing: isRefreshingPartitions,
+    onScanHostKeys: handleScanHostKeys,
+    isScanningHostKeys,
+    hostKeyScanResult,
     getAuthHeader,
-  }), [partitions, handleRefreshPartitions, isRefreshingPartitions, getAuthHeader]);
+  }), [partitions, handleRefreshPartitions, isRefreshingPartitions, handleScanHostKeys, isScanningHostKeys, hostKeyScanResult, getAuthHeader]);
 
   return (
     <ContentPanel
